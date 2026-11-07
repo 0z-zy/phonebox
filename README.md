@@ -18,7 +18,7 @@ Widgets for your PC, AI coding sessions, music, weather and anything you push to
 
 PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and an **agent** on the computer
 (Windows, Linux or macOS) that feeds it over the USB cable (or over Wi-Fi / Tailscale after pairing once). You design
-the pages in a visual editor on the PC: **47 widgets**, **18 templates**, as many pages as you like.
+the pages in a visual editor on the PC: **48 widgets**, **18 templates**, as many pages as you like.
 
 - **Your PC at a glance**: CPU, GPU, RAM, disks, network and ping; the heaviest apps, with "end one instance / end all".
 - **AI coding**: Claude and Codex quotas with a burn-rate forecast; every Claude Code / Codex session — the phone
@@ -124,7 +124,7 @@ the first page when idle, dims to a clock at night and keeps the screen on.
 | **Computer** | On air (microphone / camera / OBS) · OBS Studio (live, recording, scenes) · Device batteries (headphones, mice, keyboards) · Docker (containers, start / stop) · Metric tile · Gauge · Chart · Memory & disks · Top processes · Processes · Now playing · Volume · Shortcut grid · Big button · **Command** (PowerShell output, refreshed every N seconds) |
 | **AI & code** | AI quotas · Quota ring · AI sessions · GitHub |
 | **Personal** | **Agenda** (Google / Outlook / iCloud calendars) · Note · Checklist (resets daily) · Counter · Breathe · Quote · Title · Phone battery |
-| **Web & data** | **Home Assistant** (entities, tap to switch) · **Pushed value** · **Notifications** (both fed by [webhooks](#webhooks)) · Hacker News · Exchange rates (ECB) · Crypto prices · Image / webcam |
+| **Web & data** | **Custom HTML** (your own widget, sandboxed) · **Home Assistant** (entities, tap to switch) · **Pushed value** · **Notifications** (both fed by [webhooks](#webhooks)) · Hacker News · Exchange rates (ECB) · Crypto prices · Image / webcam |
 
 Widgets scale to the size you give them. Weather, air quality, rates, crypto and Hacker News come straight from free
 public APIs ([Open-Meteo](https://open-meteo.com), [Frankfurter](https://frankfurter.dev), [CoinGecko](https://www.coingecko.com),

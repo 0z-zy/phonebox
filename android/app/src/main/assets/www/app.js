@@ -1713,6 +1713,42 @@ W.checklist = {
 };
 
 // ---------------------------------------------------------------- phone & PC
+// Your own HTML / CSS / JavaScript in a sandboxed iframe (no access to the panel, the agent or the phone). It gets
+// the panel's data through window.phonebox: phonebox.on('state' | 'push' | 'weather' | 'work' | 'quotas', fn),
+// phonebox.data, and may ask for phonebox.run(shortcutId) or phonebox.goto(page).
+const HTML_PRELUDE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><style>:root{color-scheme:dark}html,body{margin:0;height:100%;background:transparent;color:#eef2f6;font-family:Roboto,"Segoe UI",system-ui,sans-serif;overflow:hidden}</style>
+<script>(function(){var subs={},data={};window.phonebox={data:data,
+on:function(k,f){(subs[k]=subs[k]||[]).push(f);if(data[k]!==undefined)try{f(data[k])}catch(e){console.error(e)}},
+run:function(id){parent.postMessage({phonebox:'run',id:String(id)},'*')},
+goto:function(p){parent.postMessage({phonebox:'goto',page:p},'*')}};
+addEventListener('message',function(e){var m=e.data;if(!m||m.phonebox!=='data')return;data[m.kind]=m.value;(subs[m.kind]||[]).forEach(function(f){try{f(m.value)}catch(err){console.error(err)}})});})();<\/script>`;
+const HTML_KINDS = ['state', 'push', 'weather', 'work', 'quotas'];
+
+W.html = {
+  needs: HTML_KINDS,
+  create(box, { o }) {
+    if (o.transparent) box.classList.add('bare-html');
+    const frame = h('iframe', 'html-frame');
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.srcdoc = HTML_PRELUDE + (o.html || '');
+    box.append(frame);
+    const send = (kind) => { if (D[kind] != null) try { frame.contentWindow?.postMessage({ phonebox: 'data', kind, value: D[kind] }, '*'); } catch (_) {} };
+    frame.addEventListener('load', () => HTML_KINDS.forEach(send));
+    const onMsg = (e) => {
+      if (e.source !== frame.contentWindow || !e.data) return;
+      if (e.data.phonebox === 'run' && (cfg.shortcuts || []).some((s) => s.id === e.data.id)) { haptic(); api('/run/' + encodeURIComponent(e.data.id), 'POST', 5000).catch(() => toast('The PC did not answer', 'err')); }
+      if (e.data.phonebox === 'goto') gotoPageRef(e.data.page);
+    };
+    window.addEventListener('message', onMsg);
+    return {
+      update(kind) { if (HTML_KINDS.includes(kind)) send(kind); },
+      destroy() { window.removeEventListener('message', onMsg); },
+    };
+  },
+};
+
 // Battery levels of the PC's wireless devices (agent: BatteryMonitor) and, optionally, the panel phone itself.
 const BAT_ICONS = { headphones: '🎧', mouse: '🖱️', keyboard: '⌨️', controller: '🎮', laptop: '💻', pen: '🖊️', phone: '📱', other: '🔋' };
 W.batteries = {
