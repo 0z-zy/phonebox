@@ -18,6 +18,37 @@ public static class UnixProc
         "PhoneBoxAgent", "adb", "dotnet",
     };
 
+    private record PsRow(uint Uid, string Path, string Args);
+    private static Dictionary<int, PsRow> _ps = [];
+    private static long _psAt;
+    private static readonly object PsLock = new();
+
+    /// <summary>macOS: owner, executable and arguments of every process from two <c>ps</c> calls, cached for two seconds
+    /// (one <c>ps</c> per process takes seconds with a few hundred processes).</summary>
+    private static Dictionary<int, PsRow> Ps()
+    {
+        lock (PsLock)
+        {
+            if (Environment.TickCount64 - _psAt < 2000) return _ps;
+            var map = new Dictionary<int, PsRow>();
+            var args = new Dictionary<int, string>();
+            foreach (var line in (Sh.Run("ps", "-axww", "-o", "pid=,args=") ?? "").Split('\n'))
+            {
+                var t = line.Trim(); var i = t.IndexOf(' ');
+                if (i > 0 && int.TryParse(t[..i], out var pid)) args[pid] = t[(i + 1)..].Trim();
+            }
+            foreach (var line in (Sh.Run("ps", "-axww", "-o", "pid=,uid=,comm=") ?? "").Split('\n'))
+            {
+                var f = line.Trim().Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+                if (f.Length == 3 && int.TryParse(f[0], out var pid) && uint.TryParse(f[1], out var uid))
+                    map[pid] = new PsRow(uid, f[2].Trim(), args.GetValueOrDefault(pid, ""));
+            }
+            _ps = map;
+            _psAt = Environment.TickCount64;
+            return map;
+        }
+    }
+
     /// <summary>True if the process belongs to the user running the agent (only those may be ended).</summary>
     public static bool IsOwn(int pid)
     {
@@ -27,7 +58,7 @@ public static class UnixProc
             var uidLine = status?.Split('\n').FirstOrDefault(l => l.StartsWith("Uid:"));
             return uidLine is not null && uint.TryParse(uidLine.Split('\t', ' ', StringSplitOptions.RemoveEmptyEntries)[1], out var uid) && uid == Sh.Uid;
         }
-        return uint.TryParse(Sh.Run("ps", "-o", "uid=", "-p", pid.ToString())?.Trim(), out var u) && u == Sh.Uid;
+        return Ps().TryGetValue(pid, out var row) && row.Uid == Sh.Uid;
     }
 
     public static string? ImagePath(Process p)
@@ -36,14 +67,14 @@ public static class UnixProc
         {
             try { return new FileInfo($"/proc/{p.Id}/exe").LinkTarget; } catch { return null; }
         }
-        try { return p.MainModule?.FileName; } catch { return Sh.Run("ps", "-o", "comm=", "-p", p.Id.ToString())?.Trim(); }
+        return Ps().TryGetValue(p.Id, out var row) && row.Path.Length > 0 ? row.Path : null;
     }
 
     public static string? Args(int pid)
     {
         string? cmd = OperatingSystem.IsLinux()
             ? Sh.ReadFile($"/proc/{pid}/cmdline")?.Replace('\0', ' ').Trim()
-            : Sh.Run("ps", "-o", "args=", "-p", pid.ToString())?.Trim();
+            : Ps().GetValueOrDefault(pid)?.Args;
         if (string.IsNullOrWhiteSpace(cmd)) return null;
         var i = cmd.IndexOf(' ');
         var rest = i > 0 ? cmd[(i + 1)..].Trim() : "";
