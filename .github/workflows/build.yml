@@ -26,6 +26,30 @@ jobs:
           name: phonebox-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
+  ui:
+    name: UI tests (panel and settings in a browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        working-directory: tools/ui-tests
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Run the tests against the web demo
+        working-directory: tools/ui-tests
+        run: npx playwright test
+        env:
+          CI: '1'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ui-test-report
+          path: |
+            ui-test-report/
+            tools/ui-tests/test-results/
+
   agent:
     name: Agent (${{ matrix.rid }})
     strategy:

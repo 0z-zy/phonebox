@@ -34,3 +34,9 @@ Thumbs.db
 .config/
 .local/
 config.json.bak
+
+# UI tests (tools/ui-tests)
+.ui-site/
+ui-test-report/
+tools/ui-tests/node_modules/
+tools/ui-tests/test-results/

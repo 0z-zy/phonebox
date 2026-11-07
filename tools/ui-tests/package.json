@@ -1,0 +1,11 @@
+{
+  "name": "phonebox-ui-tests",
+  "private": true,
+  "description": "Browser tests of the real panel and settings page, run against the web demo (made-up data).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
