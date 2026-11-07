@@ -20,6 +20,13 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**Calendars.** Add iCalendar feeds (Google's secret iCal address, Outlook's published calendar, iCloud, any ICS
+or `webcal://` link) in Settings › General; the new Agenda widget lists the coming days or, when small, the current or
+next event. Recurring events, time zones and moved or cancelled occurrences are handled. A rule can react to "a
+calendar event is on" (e.g. show an on-air sign during meetings). The feed addresses never leave the computer.
+
+**Unit tests** for the agent (`agent/PhoneBox.Agent.Tests`, run in CI): calendar parsing and rule time windows.
+
 **On air.** A new widget lights up while the computer's microphone or camera is in use (Windows: the same data
 as the taskbar's privacy icons; Linux: running capture streams and open video devices), or while a pushed value is on.
 Rules can react to the microphone and the camera too.

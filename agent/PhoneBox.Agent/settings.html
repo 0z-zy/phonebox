@@ -145,6 +145,9 @@ table.items td.val { font-family: Consolas, monospace; font-size: 12px; max-widt
 .rule.off { opacity: .55; }
 .rule .live { font-size: 12px; color: var(--accent); font-weight: 600; }
 .presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.cal-row { display: grid; grid-template-columns: 160px minmax(0, 1fr) 44px auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.cal-row input[type=color] { width: 44px; height: 34px; padding: 2px; }
+@media (max-width: 700px) { .cal-row { grid-template-columns: 1fr 44px auto; } .cal-row .cal-url { grid-column: 1 / -1; grid-row: 2; } }
 
 /* shortcuts */
 .deck { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -279,6 +282,15 @@ dd { margin: 0; word-break: break-all; }
             <div class="field" style="flex:1"><label>Longitude</label><input type="number" step="0.001" data-bind="weather.lon" data-type="num"></div>
           </div>
         </div>
+      </div>
+
+      <div class="card">
+        <h3>Calendars</h3>
+        <p class="hint" style="margin:0 0 12px">For the <b>Agenda</b> widget and calendar rules. Paste an iCalendar (ICS) address:
+          Google Calendar › Settings › your calendar › <i>Secret address in iCal format</i>; Outlook › Settings › Calendar › Shared calendars ›
+          <i>Publish a calendar</i> (ICS link); iCloud › share as a public calendar (<code>webcal://</code> works). The addresses stay on this computer.</p>
+        <div id="calList"></div>
+        <button class="btn sm" id="calAdd">＋ Add a calendar</button>
       </div>
 
       <div class="card">
@@ -813,6 +825,23 @@ function openTemplates(index) {
 }
 function closeModal() { $('modal').hidden = true; }
 
+// ---------------------------------------------------------------- calendars
+const CAL_COLORS = ['#60a5fa', '#f472b6', '#34d399', '#fbbf24', '#a78bfa', '#f87171'];
+function renderCalendars() {
+  cfg.calendars ??= [];
+  $('calList').replaceChildren(...cfg.calendars.map((c, i) => h('div', { class: 'cal-row' },
+    h('input', { type: 'text', value: c.name || '', placeholder: 'Name, e.g. Work', oninput: (e) => { c.name = e.target.value; changed(); } }),
+    h('input', { type: 'text', class: 'cal-url', value: c.url || '', placeholder: 'https://calendar.google.com/calendar/ical/…/basic.ics', spellcheck: 'false',
+      oninput: (e) => { c.url = e.target.value.trim(); changed(); } }),
+    h('input', { type: 'color', value: c.color || CAL_COLORS[i % CAL_COLORS.length], title: 'Colour', oninput: (e) => { c.color = e.target.value; changed(); } }),
+    h('button', { class: 'btn sm danger', onclick: () => { cfg.calendars.splice(i, 1); renderCalendars(); changed(); } }, 'Remove'))));
+}
+$('calAdd').onclick = () => {
+  cfg.calendars ??= [];
+  cfg.calendars.push({ name: '', url: '', color: CAL_COLORS[cfg.calendars.length % CAL_COLORS.length] });
+  renderCalendars(); changed();
+};
+
 // ---------------------------------------------------------------- rules
 const TRIGGERS = {
   'session-waiting': { label: 'an AI session needs me', match: 'any project (or: api|docs, codex)' },
@@ -821,6 +850,7 @@ const TRIGGERS = {
   'process-running': { label: 'an app is running', match: 'zoom|Teams|obs64' },
   'mic-in-use': { label: 'the microphone is in use', match: 'any app (or: Zoom|Teams)' },
   'camera-in-use': { label: 'the camera is in use', match: 'any app (or: Zoom|Teams)' },
+  'calendar-event': { label: 'a calendar event is on', match: 'any event (or: meeting|call)' },
   'cpu-above': { label: 'the CPU is busy', value: '% (for 15 s)', def: 85 },
   idle: { label: 'I am away from the PC', value: 'minutes', def: 5 },
   time: { label: 'it is between', match: '22:00-07:00' },
@@ -834,6 +864,7 @@ const RULE_PRESETS = [
   ['🔴 On air while the mic is on', () => (osName === 'macos'
     ? { name: 'On air', when: 'process-running', match: 'zoom.us|Microsoft Teams|FaceTime', then: 'push', key: 'onair', pushValue: 'On air', whileActive: true }
     : { name: 'On air', when: 'mic-in-use', then: 'notify', text: '{detail} is using the microphone', level: 'warn', whileActive: false })],
+  ['📆 In a meeting → on air', () => ({ name: 'In a meeting', when: 'calendar-event', then: 'push', key: 'onair', pushValue: '{detail}', whileActive: true })],
   ['🔥 CPU busy → notification', () => ({ name: 'CPU busy', when: 'cpu-above', value: 90, then: 'notify', text: '{detail} for a while', level: 'warn', whileActive: false })],
   ['🌙 Away → ambient page', () => ({ name: 'Away', when: 'idle', value: 10, then: 'goto', page: pageId('ambient', 'clock', 'calm'), whileActive: true })],
   ['🕙 Evenings → calm page', () => ({ name: 'Evenings', when: 'time', match: '22:00-07:00', then: 'goto', page: pageId('calm', 'clock', 'ambient'), whileActive: true })],
@@ -843,7 +874,7 @@ const RULE_PRESETS = [
 let activeRules = [];
 
 function renderRules() {
-  cfg.rules ??= [];
+  cfg.rules ??= []; cfg.calendars ??= [];
   $('rulePresets').replaceChildren(...RULE_PRESETS.map(([label, make]) => h('button', { class: 'btn', onclick: () => {
     cfg.rules.push({ id: '', enabled: true, ...make() });
     renderRules(); changed();
@@ -1134,7 +1165,7 @@ async function load() {
   cfg = await (await fetch('/api/settings')).json();
   cfg.pages ??= []; cfg.shortcuts ??= []; cfg.rules ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false };
   saved = JSON.stringify(cfg);
-  renderPages(); renderDeck(); renderRules(); bindForm(); changed(); loadInfo();
+  renderPages(); renderDeck(); renderRules(); renderCalendars(); bindForm(); changed(); loadInfo();
 }
 
 async function save() {
@@ -1146,7 +1177,7 @@ async function save() {
 }
 
 $('save').onclick = save;
-$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); renderRules(); bindForm(); changed(); };
+$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); renderRules(); renderCalendars(); bindForm(); changed(); };
 $('openPhone').onclick = async () => { await fetch('/api/phone/open', { method: 'POST' }); toast('Opening the panel on the phone'); };
 $('cityBtn').onclick = searchCity;
 function renderUpdate(u) {
@@ -1205,7 +1236,7 @@ $('whClear').onclick = async () => { if (!confirm('Delete all pushed values?')) 
 setInterval(loadPushed, 4000);
 $('citySearch').onkeydown = (e) => { if (e.key === 'Enter') searchCity(); };
 $('applyJson').onclick = () => {
-  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); renderRules(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
+  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); renderRules(); renderCalendars(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
   catch (e) { $('jsonErr').textContent = e.message; }
 };
 document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (!$('save').disabled) save(); } });

@@ -122,6 +122,22 @@
     };
   }
 
+  // made-up calendar around the current time: one meeting is on now
+  function calendar() {
+    const day = new Date(new Date().toDateString()).getTime(), H = 3600e3, M = 60e3, t = now();
+    const ev = (title, start, mins, cal, color, location, allDay = false) => ({ title, start, end: start + mins * M, allDay, location, calendar: cal, color });
+    const work = '#60a5fa', home = '#34d399';
+    return { updated: t - 4 * M, errors: [], events: [
+      ev('Design review', t - 20 * M, 45, 'Work', work, 'Room 4'),
+      ev('1:1 with Sam', t + 90 * M, 30, 'Work', work, null),
+      ev('Gym', day + 18.5 * H, 60, 'Personal', home, null),
+      ev('Release day', day + 24 * H, 24 * 60, 'Work', work, null, true),
+      ev('Sprint planning', day + 33.5 * H, 60, 'Work', work, 'Big room'),
+      ev('Lunch with Alex', day + 36 * H, 60, 'Personal', home, 'Noodle bar'),
+      ev('Dentist', day + 2 * 24 * H + 10 * H, 45, 'Personal', home, null),
+    ].sort((a, b) => a.start - b.start) };
+  }
+
   function quotas() {
     const n = now();
     return { providers: [
@@ -177,6 +193,7 @@
     if (path === '/api/state') return json(state(q.has('ev') ? +q.get('ev') : null));
     if (path === '/api/config') { const c = await config(); return json({ version: cfgVersion(), config: { ...c, shortcuts: c.shortcuts.map(({ id, label, icon, color }) => ({ id, label, icon, color })) } }); }
     if (path === '/api/quotas') return json(quotas());
+    if (path === '/api/calendar') return json(calendar());
     if (path === '/api/work') return json(work());
     if (path === '/api/procs') return json(procs());
     if (path === '/api/procs/detail') return json(procDetail(q.get('name')));

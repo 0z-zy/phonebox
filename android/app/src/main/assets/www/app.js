@@ -47,7 +47,7 @@ let evSeq = null;          // last agent event seen (notifications, page switche
 let pushVersion = null;
 
 /** Latest data from the agent and the web; widgets read from here. */
-const D = { state: null, quotas: null, work: null, procs: null, push: {}, weather: null, notes: store.get('notes', []) };
+const D = { state: null, quotas: null, work: null, procs: null, push: {}, weather: null, calendar: null, notes: store.get('notes', []) };
 
 const HIST = 90;
 const hist = { cpu: [], gpu: [], ram: [], vram: [], down: [], up: [], ping: [], gputemp: [], cputemp: [] };
@@ -659,7 +659,7 @@ function handleEvent(e) {
   else if (e.kind === 'notify' && e.data) handleNotify(e.data);
   else if (e.kind === 'goto' && e.data) ruleGoto(e.data);
   else if (e.kind === 'back' && e.data) { if (ruleHold && ruleHold.rule === e.data.rule) endHold(); }
-  else if (e.kind === 'refresh') { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadWeather(true); }
+  else if (e.kind === 'refresh') { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadWeather(true); loadCalendar(); }
   else if (e.kind === 'reload') location.reload();
 }
 
@@ -1706,6 +1706,78 @@ W.checklist = {
 };
 
 // ---------------------------------------------------------------- phone & PC
+// Upcoming events from the calendars set up in the agent (ICS feeds). Small: the current / next event; larger: a
+// list grouped by day, with the event that is happening now highlighted.
+W.agenda = {
+  needs: ['calendar', 'tick'],
+  create(box, { o }) {
+    const days = Math.max(1, Math.min(14, +o.days || 7));
+    const only = String(o.calendars || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    let lastKey = '';
+    const hm = (ms) => { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+    const dayKey = (ms) => new Date(ms).toDateString();
+    const dayName = (ms) => {
+      const d = new Date(ms), t = new Date();
+      const diff = Math.round((new Date(d.toDateString()) - new Date(t.toDateString())) / 864e5);
+      return diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
+    };
+    const inMin = (ms) => {
+      const m = Math.round((ms - Date.now()) / 60000);
+      return m < 1 ? 'now' : m < 60 ? `in ${m} min` : m < 24 * 60 ? `in ${Math.floor(m / 60)} h ${m % 60 ? (m % 60) + ' min' : ''}`.trim() : '';
+    };
+    const render = () => {
+      const cal = D.calendar;
+      const now = Date.now();
+      const until = new Date(new Date().toDateString()).getTime() + days * 864e5;
+      const list = (cal?.events || []).filter((e) => e.end > now && e.start < until && (!only.length || only.includes(e.calendar.toLowerCase())));
+      const small = box.clientHeight < 110;
+      const key = JSON.stringify([list.map((e) => e.start + e.title), Math.floor(now / 30000), small, box.clientHeight]);
+      if (key === lastKey) return;
+      lastKey = key;
+      box.classList.toggle('small', small);
+      if (!cal) { box.replaceChildren(h('div', 'empty', 'Loading…')); return; }
+      if (!cal.updated && !list.length) { box.replaceChildren(h('div', 'w-title', o.title || 'Agenda'), h('div', 'empty', 'Add a calendar in Settings › General')); return; }
+      const timed = list.filter((e) => !e.allDay);
+      const cur = timed.find((e) => e.start <= now);
+      const next = timed.find((e) => e.start > now);
+      if (small) {
+        const e = cur || next || list[0];
+        if (!e) { box.replaceChildren(h('div', 'ag-big-t', 'No events'), h('div', 'ag-big-s', `next ${days} days`)); return; }
+        box.style.setProperty('--c', e.color);
+        box.replaceChildren(
+          h('div', 'ag-big-s', e === cur ? `Now · until ${hm(e.end)}` : e.allDay ? dayName(e.start) + ' · all day' : `${dayName(e.start) === 'Today' ? inMin(e.start) || 'Today' : dayName(e.start)} · ${hm(e.start)}`),
+          h('div', 'ag-big-t', e.title));
+        return;
+      }
+      const rows = [];
+      let lastDay = '';
+      for (const e of list) {
+        // events that have already started (including today's all-day ones) belong to today
+        const at = e.start < now ? now : e.start;
+        const dk = dayKey(at);
+        if (dk !== lastDay) { rows.push(h('div', 'ag-day', dayName(at))); lastDay = dk; }
+        const isNow = e === cur;
+        const row = h('div', 'ag-row' + (isNow ? ' now' : ''),
+          h('span', 'ag-dot'),
+          h('span', 'ag-time', e.allDay ? 'all day' : hm(e.start)),
+          h('span', 'ag-title', e.title, o.location !== false && e.location ? h('small', null, ' · ' + e.location) : null),
+          h('span', 'ag-when', isNow ? `until ${hm(e.end)}` : e === next ? inMin(e.start) : ''));
+        row.style.setProperty('--c', e.color);
+        if (isNow) row.style.setProperty('--p', Math.min(1, (now - e.start) / Math.max(1, e.end - e.start)));
+        rows.push(row);
+      }
+      const body = h('div', 'ag-list', ...(rows.length ? rows : [h('div', 'empty', `Nothing in the next ${days} days`)]));
+      box.replaceChildren(h('div', 'w-title', o.title || 'Agenda', cal.errors?.length ? h('span', 'ag-err', ' ⚠') : null), body);
+      // drop rows that do not fit, keeping the day headers tidy
+      while (body.scrollHeight > body.clientHeight + 2 && body.childElementCount > 1) {
+        body.lastElementChild.remove();
+        if (body.lastElementChild?.classList.contains('ag-day')) body.lastElementChild.remove();
+      }
+    };
+    return { update: render };
+  },
+};
+
 // Lights up while the PC's microphone or camera is in use (agent: PrivacyMonitor) or while a pushed value is on.
 W.onair = {
   needs: ['state', 'push'],
@@ -2291,6 +2363,10 @@ async function loadConfig() {
   } catch (_) {}
 }
 
+async function loadCalendar() {
+  try { D.calendar = await api('/calendar'); emit('calendar'); } catch (_) {}
+}
+
 async function loadQuotas() {
   try { D.quotas = await api('/quotas'); emit('quotas'); } catch (_) {}
 }
@@ -2320,7 +2396,7 @@ async function loadPush() {
 
 function setOnline(on) {
   document.body.classList.toggle('offline', !on);
-  if (on && online !== true) { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadApprovals(); }
+  if (on && online !== true) { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadApprovals(); loadCalendar(); }
   const changed = online !== on;
   online = on;
   if (changed) emit('state');
@@ -2384,6 +2460,7 @@ loadWeather();
 setInterval(loadWeather, 15 * 60_000);
 setInterval(() => { if (!nightOn) emit('fast'); }, 250);
 setInterval(() => { if (online && anyNeeds('quotas')) loadQuotas(); }, 30_000);
+setInterval(() => { if (online && anyNeeds('calendar')) loadCalendar(); }, 120_000);
 setInterval(() => { if (online && anyNeeds('work') && !streaming()) loadWork(); }, 3000);
 setInterval(() => { if (online && pageOf('procs')) loadProcs(); if (online && sheet) loadSheet(); }, 2000);
 setInterval(() => { if (online) loadConfig(); }, 60_000);

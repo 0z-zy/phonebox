@@ -559,6 +559,23 @@ body.offline .offline-msg { display: flex; }
 .cl-i.done .cl-t { color: var(--muted); text-decoration: line-through; }
 
 /* ---------- battery, quota ring (dial widgets) ---------- */
+.w-agenda { padding: 9px 12px; display: flex; flex-direction: column; gap: 4px; }
+.w-agenda .w-title { color: #60a5fa; }
+.ag-err { color: #f59e0b; }
+.ag-list { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
+.ag-day { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.ag-day:first-child { margin-top: 0; }
+.ag-row { position: relative; display: grid; grid-template-columns: 8px 54px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; font-size: 14px; overflow: hidden; }
+.ag-row.now { background: color-mix(in srgb, var(--c) 18%, transparent); }
+.ag-row.now::after { content: ''; position: absolute; left: 0; bottom: 0; height: 2px; width: calc(var(--p, 0) * 100%); background: var(--c); }
+.ag-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.ag-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+.ag-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-title small { color: var(--muted); font-size: 12px; }
+.ag-when { color: var(--c); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.w-agenda.small { justify-content: center; gap: 2px; border-left: 4px solid var(--c, #60a5fa); }
+.ag-big-s { font-size: clamp(11px, 16cqh, 15px); color: var(--c, #60a5fa); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-big-t { font-size: clamp(14px, 26cqh, 26px); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .w-onair { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(2px, 6cqh, 12px); padding: 8px; }
 .oa-sign {
   font-weight: 800; letter-spacing: .14em; font-size: min(26cqh, 13cqw); line-height: 1; color: #3f4651;

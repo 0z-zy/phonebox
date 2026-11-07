@@ -118,6 +118,27 @@ ART = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><defs>
     ''.join(f'<line x1="150" y1="170" x2="{-300 + i * 75}" y2="300"/>' for i in range(13)) + '</g></svg>'
 
 
+def calendar():
+    # made-up calendar around the current time: one meeting is on now
+    import datetime
+    t = time.time() * 1000
+    day = datetime.datetime.combine(datetime.date.today(), datetime.time()).timestamp() * 1000
+    H, M = 3600e3, 60e3
+    def ev(title, start, mins, cal, color, location=None, all_day=False):
+        return {'title': title, 'start': int(start), 'end': int(start + mins * M), 'allDay': all_day, 'location': location, 'calendar': cal, 'color': color}
+    work, home = '#60a5fa', '#34d399'
+    events = [
+        ev('Design review', t - 20 * M, 45, 'Work', work, 'Room 4'),
+        ev('1:1 with Sam', t + 90 * M, 30, 'Work', work),
+        ev('Gym', day + 18.5 * H, 60, 'Personal', home),
+        ev('Release day', day + 24 * H, 24 * 60, 'Work', work, None, True),
+        ev('Sprint planning', day + 33.5 * H, 60, 'Work', work, 'Big room'),
+        ev('Lunch with Alex', day + 36 * H, 60, 'Personal', home, 'Noodle bar'),
+        ev('Dentist', day + 58 * H, 45, 'Personal', home),
+    ]
+    return {'updated': int(t - 4 * M), 'errors': [], 'events': sorted(events, key=lambda e: e['start'])}
+
+
 def quotas():
     n = now_ms()
     return {'providers': [
@@ -212,6 +233,7 @@ def api(method, path, query, body):
     if path == '/api/config': return js({'version': CFG_VERSION[0], 'config': public_config()})
     if path == '/api/art': return 200, 'image/svg+xml', ART.encode()
     if path == '/api/quotas': return js(quotas())
+    if path == '/api/calendar': return js(calendar())
     if path == '/api/work': return js(work())
     if path == '/api/procs': return js(procs())
     if path == '/api/procs/detail': return js(proc_detail(query.get('name', [''])[0]))

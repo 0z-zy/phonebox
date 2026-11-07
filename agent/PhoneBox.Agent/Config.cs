@@ -18,6 +18,8 @@ public sealed class AgentConfig
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
     public List<RuleConfig> Rules { get; set; } = [];
+    /// <summary>iCalendar feeds for the Agenda widget; the URLs are secrets and never go to the phone.</summary>
+    public List<CalendarSource> Calendars { get; set; } = [];
 
     /// <summary>The part sent to the phone: commands (shortcut cmd/args/cwd, command widget scripts) are never included.</summary>
     public object ToPublic() => new
@@ -150,7 +152,7 @@ public sealed class RuleConfig
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public bool Enabled { get; set; } = true;
-    /// <summary>session-waiting, session-busy, media-playing, process-running, mic-in-use, camera-in-use, cpu-above, idle, time, push.</summary>
+    /// <summary>session-waiting, session-busy, media-playing, process-running, mic-in-use, camera-in-use, calendar-event, cpu-above, idle, time, push.</summary>
     public string When { get; set; } = "session-waiting";
     /// <summary>App / process names ("zoom|Teams"), a time window ("22:00-07:00") or a push key, depending on <see cref="When"/>.</summary>
     public string? Match { get; set; }
@@ -165,8 +167,15 @@ public sealed class RuleConfig
     public string? PushValue { get; set; }
     public bool WhileActive { get; set; } = true;
 
-    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "mic-in-use", "camera-in-use", "cpu-above", "idle", "time", "push"];
+    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "mic-in-use", "camera-in-use", "calendar-event", "cpu-above", "idle", "time", "push"];
     public static readonly string[] Actions = ["goto", "notify", "push"];
+}
+
+public sealed class CalendarSource
+{
+    public string Name { get; set; } = "";
+    public string Url { get; set; } = "";
+    public string? Color { get; set; }
 }
 
 public sealed class Shortcut
@@ -288,6 +297,9 @@ public sealed partial class ConfigStore(string path)
             if (string.IsNullOrWhiteSpace(s.Args)) s.Args = null;
             if (string.IsNullOrWhiteSpace(s.Cwd)) s.Cwd = null;
         }
+        c.Calendars = (c.Calendars ?? []).Where(x => x is not null).Take(20).ToList();
+        foreach (var cal in c.Calendars) { cal.Name = cal.Name?.Trim() ?? ""; cal.Url = cal.Url?.Trim() ?? ""; }
+
         var ruleIds = new HashSet<string>();
         c.Rules = (c.Rules ?? []).Where(r => r is not null && RuleConfig.Triggers.Contains(r.When) && RuleConfig.Actions.Contains(r.Then)).Take(50).ToList();
         foreach (var r in c.Rules)

@@ -163,7 +163,16 @@ public static class Wake
 {
     private static TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    public static void Now() => Interlocked.Exchange(ref _tcs, new(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+    private static long _count;
+
+    /// <summary>Goes up on every <see cref="Now"/>, so a loop can tell a wake-up from its own timer.</summary>
+    public static long Count => Interlocked.Read(ref _count);
+
+    public static void Now()
+    {
+        Interlocked.Increment(ref _count);
+        Interlocked.Exchange(ref _tcs, new(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+    }
 
     /// <summary>Like Task.Delay, but returns early when <see cref="Now"/> is called.</summary>
     public static async Task Delay(TimeSpan delay, CancellationToken ct)
