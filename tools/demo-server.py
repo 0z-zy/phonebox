@@ -118,6 +118,15 @@ ART = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><defs>
     ''.join(f'<line x1="150" y1="170" x2="{-300 + i * 75}" y2="300"/>' for i in range(13)) + '</g></svg>'
 
 
+HA = {
+    'light.desk': {'name': 'Desk lamp', 'state': 'on'}, 'light.ceiling': {'name': 'Ceiling', 'state': 'off'},
+    'switch.coffee': {'name': 'Coffee machine', 'state': 'off'},
+    'sensor.office_temperature': {'name': 'Office', 'state': '21.4', 'unit': '°C', 'deviceClass': 'temperature'},
+    'sensor.office_humidity': {'name': 'Humidity', 'state': '43', 'unit': '%', 'deviceClass': 'humidity'},
+    'binary_sensor.front_door': {'name': 'Front door', 'state': 'off', 'deviceClass': 'door'},
+    'lock.front_door': {'name': 'Door lock', 'state': 'locked'}, 'scene.movie': {'name': 'Movie night', 'state': 'scening'},
+}
+
 CONTAINERS = [
     {'id': 'a1b2c3d4e5f6', 'name': 'shop-web-1', 'image': 'nginx:1.27', 'project': 'shop', 'state': 'running', 'status': 'Up 3 hours', 'health': None, 'cpu': 0.4, 'mem': '12MiB'},
     {'id': 'b2c3d4e5f6a1', 'name': 'shop-api-1', 'image': 'node:22-alpine', 'project': 'shop', 'state': 'running', 'status': 'Up 3 hours (healthy)', 'health': 'healthy', 'cpu': 6.2, 'mem': '148MiB'},
@@ -243,6 +252,15 @@ def api(method, path, query, body):
     if path == '/api/art': return 200, 'image/svg+xml', ART.encode()
     if path == '/api/quotas': return js(quotas())
     if path == '/api/calendar': return js(calendar())
+    if path == '/api/ha/states':
+        ids = [i for i in query.get('ids', [''])[0].split(',') if i] or list(HA)
+        ents = [{'id': i, 'unit': None, 'deviceClass': None, 'icon': None, 'changed': int(time.time() * 1000) - 600000, **HA[i]} for i in ids if i in HA]
+        return js({'configured': True, 'error': None, 'entities': ents})
+    if path.startswith('/api/ha/toggle/') and method == 'POST':
+        e = HA.get(path[len('/api/ha/toggle/'):])
+        if e and e['state'] in ('on', 'off'): e['state'] = 'off' if e['state'] == 'on' else 'on'
+        elif e and e['state'] in ('locked', 'unlocked'): e['state'] = 'unlocked' if e['state'] == 'locked' else 'locked'
+        return js({'ok': True})
     if path == '/api/docker':
         return js({'control': True, 'snapshot': {'available': True, 'error': None, 'containers': CONTAINERS, 'updated': int(time.time() * 1000)}})
     if path.startswith('/api/docker/') and method == 'POST':

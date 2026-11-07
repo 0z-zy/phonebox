@@ -20,6 +20,8 @@ public sealed class AgentConfig
     public List<RuleConfig> Rules { get; set; } = [];
     /// <summary>iCalendar feeds for the Agenda widget; the URLs are secrets and never go to the phone.</summary>
     public List<CalendarSource> Calendars { get; set; } = [];
+    /// <summary>Home Assistant address and long-lived access token (the token never goes to the phone).</summary>
+    public HomeAssistantConfig HomeAssistant { get; set; } = new();
 
     /// <summary>The part sent to the phone: commands (shortcut cmd/args/cwd, command widget scripts) are never included.</summary>
     public object ToPublic() => new
@@ -171,6 +173,12 @@ public sealed class RuleConfig
     public static readonly string[] Actions = ["goto", "notify", "push"];
 }
 
+public sealed class HomeAssistantConfig
+{
+    public string? Url { get; set; }
+    public string? Token { get; set; }
+}
+
 public sealed class CalendarSource
 {
     public string Name { get; set; } = "";
@@ -297,6 +305,9 @@ public sealed partial class ConfigStore(string path)
             if (string.IsNullOrWhiteSpace(s.Args)) s.Args = null;
             if (string.IsNullOrWhiteSpace(s.Cwd)) s.Cwd = null;
         }
+        c.HomeAssistant ??= new();
+        c.HomeAssistant.Url = string.IsNullOrWhiteSpace(c.HomeAssistant.Url) ? null : c.HomeAssistant.Url.Trim().TrimEnd('/');
+        c.HomeAssistant.Token = string.IsNullOrWhiteSpace(c.HomeAssistant.Token) ? null : c.HomeAssistant.Token.Trim();
         c.Calendars = (c.Calendars ?? []).Where(x => x is not null).Take(20).ToList();
         foreach (var cal in c.Calendars) { cal.Name = cal.Name?.Trim() ?? ""; cal.Url = cal.Url?.Trim() ?? ""; }
 

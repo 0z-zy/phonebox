@@ -1706,6 +1706,77 @@ W.checklist = {
 };
 
 // ---------------------------------------------------------------- phone & PC
+// Home Assistant entities through the agent (which holds the token). Tap a light, switch, scene… to switch it,
+// when the widget allows it.
+const HA_ICONS = {
+  light: '💡', switch: '🔌', fan: '🌀', cover: '🪟', media_player: '🎵', scene: '🎬', script: '📜', automation: '🤖',
+  climate: '🌡️', person: '🧑', vacuum: '🧹', camera: '📷', input_boolean: '🔘', button: '🔘', input_button: '🔘', sun: '☀️', weather: '⛅',
+};
+const HA_CLASS_ICONS = {
+  temperature: '🌡️', humidity: '💧', power: '⚡', energy: '⚡', battery: '🔋', illuminance: '☀️', door: '🚪', garage_door: '🚪',
+  window: '🪟', motion: '🏃', occupancy: '🧍', presence: '🧍', moisture: '💧', smoke: '🔥', gas: '🔥', co2: '🫧', carbon_dioxide: '🫧',
+  pm25: '🌫️', connectivity: '📶', plug: '🔌', outlet: '🔌', lock: '🔒', sound: '🔊', vibration: '📳',
+};
+const HA_SWITCHABLE = new Set(['light', 'switch', 'fan', 'input_boolean', 'automation', 'siren', 'humidifier', 'group', 'cover', 'media_player',
+  'scene', 'script', 'button', 'input_button', 'lock', 'vacuum']);
+const HA_ACTIVE = new Set(['on', 'open', 'opening', 'unlocked', 'playing', 'home', 'cleaning', 'heat', 'cool', 'heat_cool', 'auto', 'detected']);
+
+function haState(e) {
+  const s = e.state, dom = e.id.split('.')[0], dc = e.deviceClass;
+  if (s === 'unavailable' || s === 'unknown') return s === 'unknown' ? '—' : 'Unavailable';
+  if (dom === 'binary_sensor') {
+    const on = s === 'on';
+    if (['door', 'window', 'garage_door', 'opening'].includes(dc)) return on ? 'Open' : 'Closed';
+    if (['motion', 'occupancy', 'presence'].includes(dc)) return on ? 'Detected' : 'Clear';
+    if (dc === 'moisture') return on ? 'Wet' : 'Dry';
+    return on ? 'On' : 'Off';
+  }
+  if (dom === 'scene' || dom === 'script' || dom === 'button' || dom === 'input_button') return 'Run';
+  if (/^-?\d+(\.\d+)?$/.test(s)) { const n = +s; return (Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 10) / 10) + (e.unit ? ' ' + e.unit : ''); }
+  return s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
+W.ha = {
+  needs: ['tick'],
+  create(box, { o }) {
+    const ids = String(o.entities || '').split(/[\s,;]+/).filter((x) => x.includes('.'));
+    let data = null, lastKey = '', busy = null;
+    const grid = h('div', 'ha-grid');
+    if (o.title) box.append(h('div', 'w-title', o.title));
+    box.append(grid);
+    const load = async () => { try { data = await api('/ha/states?ids=' + encodeURIComponent(ids.join(','))); } catch (_) {} };
+    const toggle = async (e) => {
+      haptic();
+      busy = e.id; render(true);
+      try {
+        const r = await fetch(`${API}/ha/toggle/${encodeURIComponent(e.id)}`, { method: 'POST', cache: 'no-store' });
+        if (!r.ok) toast((await r.json().catch(() => ({}))).error || 'Could not switch it', 'err');
+      } catch (_) { toast('The PC did not answer', 'err'); }
+      setTimeout(async () => { await load(); busy = null; render(true); }, 700);
+    };
+    const render = (force = false) => {
+      const key = JSON.stringify([data, busy]);
+      if (!force && key === lastKey) return;
+      lastKey = key;
+      if (!ids.length) { grid.replaceChildren(h('div', 'empty', 'List entity ids in the widget settings, e.g. light.desk')); return; }
+      if (!data) { grid.replaceChildren(h('div', 'empty', 'Loading…')); return; }
+      if (!data.configured) { grid.replaceChildren(h('div', 'empty', data.error)); return; }
+      grid.replaceChildren(...data.entities.map((e) => {
+        const dom = e.id.split('.')[0];
+        const active = HA_ACTIVE.has(e.state);
+        const icon = dom === 'lock' ? (e.state === 'unlocked' ? '🔓' : '🔒') : HA_CLASS_ICONS[e.deviceClass] || HA_ICONS[dom] || '◻️';
+        const can = o.control === true && HA_SWITCHABLE.has(dom) && e.state !== 'unavailable';
+        const tile = h('div', 'ha-tile' + (active ? ' on' : '') + (can ? ' can' : '') + (busy === e.id ? ' busy' : '') + (e.state === 'unavailable' ? ' gone' : ''),
+          h('span', 'ha-ico', icon), h('span', 'ha-name', e.name), h('b', 'ha-state', haState(e)));
+        if (can) tile.addEventListener('click', () => toggle(e));
+        return tile;
+      }), ...(data.error ? [h('div', 'ha-err', '⚠ ' + data.error)] : []));
+    };
+    const tick = every(4000, async () => { await load(); render(); });
+    return { update: () => { tick(); render(); } };
+  },
+};
+
 // Docker / Podman containers on the PC. Tap one for start / stop / restart (when the widget allows it).
 W.docker = {
   needs: ['tick'],

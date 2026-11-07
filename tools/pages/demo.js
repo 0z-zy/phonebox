@@ -122,6 +122,24 @@
     };
   }
 
+  // made-up Home Assistant entities; switching flips them
+  const ha = {
+    'light.desk': { name: 'Desk lamp', state: 'on' }, 'light.ceiling': { name: 'Ceiling', state: 'off' },
+    'switch.coffee': { name: 'Coffee machine', state: 'off' }, 'sensor.office_temperature': { name: 'Office', state: '21.4', unit: '°C', deviceClass: 'temperature' },
+    'sensor.office_humidity': { name: 'Humidity', state: '43', unit: '%', deviceClass: 'humidity' }, 'binary_sensor.front_door': { name: 'Front door', state: 'off', deviceClass: 'door' },
+    'lock.front_door': { name: 'Door lock', state: 'locked' }, 'scene.movie': { name: 'Movie night', state: 'scening' },
+  };
+  function haStates(ids) {
+    const list = (ids.length ? ids : Object.keys(ha)).filter((id) => ha[id]).map((id) => ({ id, unit: null, deviceClass: null, icon: null, changed: now() - 6e5, ...ha[id] }));
+    return { configured: true, error: null, entities: list };
+  }
+  function haToggle(id) {
+    const e = ha[id];
+    if (!e) return;
+    if (id.startsWith('lock.')) e.state = e.state === 'locked' ? 'unlocked' : 'locked';
+    else if (/^(light|switch)\./.test(id)) e.state = e.state === 'on' ? 'off' : 'on';
+  }
+
   // made-up containers; start / stop / restart change them
   const containers = [
     { id: 'a1b2c3d4e5f6', name: 'shop-web-1', image: 'nginx:1.27', project: 'shop', state: 'running', status: 'Up 3 hours', health: null, cpu: 0.4, mem: '12MiB' },
@@ -208,6 +226,8 @@
     if (path === '/api/quotas') return json(quotas());
     if (path === '/api/calendar') return json(calendar());
     if (path === '/api/docker') return json(docker());
+    if (path === '/api/ha/states') return json(haStates((q.get('ids') || '').split(',').filter(Boolean)));
+    if (path.startsWith('/api/ha/toggle/') && method === 'POST') { haToggle(decodeURIComponent(path.slice(15))); return json({ ok: true }); }
     if (path.startsWith('/api/docker/') && method === 'POST') {
       const [, , , id, action] = path.split('/');
       const c = containers.find((x) => x.id === id);

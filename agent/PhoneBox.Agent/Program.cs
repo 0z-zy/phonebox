@@ -50,6 +50,7 @@ builder.Services.AddSingleton<AudioControl>();
 builder.Services.AddSingleton<PushStore>();
 builder.Services.AddSingleton<CommandRunner>();
 builder.Services.AddSingleton<ApprovalStore>();
+builder.Services.AddSingleton<HomeAssistant>();
 AddMonitor<SystemMonitor>(builder.Services);
 AddMonitor<MediaMonitor>(builder.Services);
 AddMonitor<QuotaMonitor>(builder.Services);
@@ -284,6 +285,15 @@ app.MapGet("/api/calendar", (CalendarMonitor cal) => Results.Json(cal.Snapshot()
 app.MapGet("/api/docker", (DockerMonitor docker) => Results.Json(new { snapshot = docker.Snapshot(), control = docker.ControlAllowed() }));
 app.MapPost("/api/docker/{id}/{action}", async (string id, string action, DockerMonitor docker) =>
     await docker.ActAsync(id, action) is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));
+
+// Home Assistant (widget): states of the entities the widgets list, and switching those a widget allows.
+app.MapGet("/api/ha/states", async (string? ids, HomeAssistant ha) =>
+    Results.Json(await ha.StatesAsync((ids ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))));
+app.MapPost("/api/ha/toggle/{id}", async (string id, HomeAssistant ha) =>
+    await ha.ToggleAsync(id) is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));
+// Settings › General › Home Assistant › Test (local only)
+app.MapPost("/api/ha/test", async (HomeAssistantConfig body) =>
+    Results.Json(new { result = await HomeAssistant.TestAsync(body.Url ?? "", body.Token ?? "") }));
 
 // Settings › Rules › Test: runs a rule's action once (the rule may be unsaved).
 app.MapPost("/api/rules/test", (RuleConfig rule, RuleEngine rules) =>

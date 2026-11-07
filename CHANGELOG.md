@@ -20,6 +20,10 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**Home Assistant.** Add the address and a long-lived access token in Settings › General; the Home Assistant widget
+shows the entities you list (lights, switches, sensors, doors, locks, covers, scenes…) and switches them with a tap.
+The token stays on the computer and the phone can only reach the entities its widgets list.
+
 **Docker.** A Docker widget lists Docker or Podman containers with their state, health, CPU and memory; with
 "Allow start / stop" turned on in its settings, tap a container to start, stop or restart it.
 
