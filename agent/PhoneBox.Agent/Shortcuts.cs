@@ -3,23 +3,88 @@ using System.Runtime.InteropServices;
 
 namespace PhoneBox.Agent;
 
-/// <summary>Runs the shortcuts defined in config.json. The phone only sends a shortcut id, never a command.</summary>
+/// <summary>
+/// Runs the shortcuts defined in config.json. The phone only sends a shortcut id, never a command.
+/// A shortcut starts a program, presses keys, types text or runs a macro; toggles remember or read their on / off state.
+/// </summary>
 public static class Shortcuts
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> Remembered = new();
+
     /// <returns>An error message, or null on success.</returns>
-    public static string? Run(AgentConfig cfg, string id, ILogger log)
+    public static string? Run(AgentConfig cfg, string id, ILogger log, PushStore? push = null, AudioControl? audio = null)
     {
         var sc = cfg.Shortcuts.FirstOrDefault(s => s.Id == id);
-        return sc is null ? $"no such shortcut: {id}" : Execute(sc, log);
+        if (sc is null) return $"no such shortcut: {id}";
+        if (!sc.Toggle) return Execute(sc, log, cfg);
+        var on = State(sc, push, audio) ?? false;
+        var target = on && sc.OffCmd is not null ? new Shortcut { Label = sc.Label, Cmd = sc.OffCmd, Args = sc.OffArgs, Cwd = sc.Cwd } : sc;
+        var err = Execute(target, log, cfg);
+        if (err is null && sc.StateKey is null && sc.Cmd != "builtin:mute") Remembered[sc.Id] = !on;
+        return err;
+    }
+
+    /// <summary>On / off state of the toggle keys, for the phone.</summary>
+    public static Dictionary<string, bool>? States(AgentConfig cfg, PushStore push, AudioControl audio)
+    {
+        Dictionary<string, bool>? map = null;
+        foreach (var sc in cfg.Shortcuts.Where(s => s.Toggle || s.Cmd == "builtin:mute"))
+            if (State(sc, push, audio) is { } on) (map ??= [])[sc.Id] = on;
+        return map;
+    }
+
+    private static bool? State(Shortcut sc, PushStore? push, AudioControl? audio)
+    {
+        if (sc.Cmd == "builtin:mute" && sc.StateKey is null) return audio?.Snapshot()?.Muted;
+        if (sc.StateKey is not null)
+        {
+            if (push?.Snapshot().TryGetValue(sc.StateKey, out var item) != true) return false;
+            var d = item!.Data;
+            if (d.ValueKind == System.Text.Json.JsonValueKind.Object && d.TryGetProperty("value", out var v)) d = v;
+            return d.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.True => true,
+                System.Text.Json.JsonValueKind.Number => d.GetDouble() != 0,
+                System.Text.Json.JsonValueKind.String => d.GetString() is { Length: > 0 } t && t.ToLowerInvariant() is not ("0" or "false" or "off" or "no"),
+                _ => false,
+            };
+        }
+        return Remembered.TryGetValue(sc.Id, out var r) && r;
     }
 
     /// <returns>An error message, or null on success.</returns>
-    public static string? Execute(Shortcut sc, ILogger log)
+    public static string? Execute(Shortcut sc, ILogger log, AgentConfig? cfg = null, int depth = 0)
     {
         try
         {
             switch (sc.Cmd)
             {
+                case "builtin:keys":
+                    KeySender.SendKeys(sc.Args ?? "");
+                    break;
+                case "builtin:text":
+                    KeySender.TypeText(sc.Args ?? "");
+                    break;
+                case "builtin:macro":
+                    if (depth > 3) throw new InvalidOperationException("macros call each other too deeply");
+                    foreach (var step in sc.Steps ?? [])
+                    {
+                        var i = step.IndexOf(':');
+                        var (kind, value) = i > 0 ? (step[..i].Trim().ToLowerInvariant(), step[(i + 1)..].Trim()) : ("keys", step.Trim());
+                        switch (kind)
+                        {
+                            case "keys": KeySender.SendKeys(value); break;
+                            case "text": KeySender.TypeText(value); break;
+                            case "wait": Thread.Sleep(Math.Clamp(int.TryParse(value, out var ms) ? ms : 0, 0, 10_000)); break;
+                            case "shortcut":
+                                var other = cfg?.Shortcuts.FirstOrDefault(s => s.Id == value) ?? throw new InvalidOperationException($"no such shortcut: {value}");
+                                if (Execute(other, log, cfg, depth + 1) is { } err) throw new InvalidOperationException(err);
+                                break;
+                            default: throw new InvalidOperationException($"unknown macro step \"{step}\" (use keys:, text:, wait: or shortcut:)");
+                        }
+                        Thread.Sleep(40);
+                    }
+                    break;
 #if WINDOWS
                 case "builtin:lock":
                     LockWorkStation();

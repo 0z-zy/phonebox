@@ -18,7 +18,7 @@ Widgets for your PC, AI coding sessions, music, weather and anything you push to
 
 PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and an **agent** on the computer
 (Windows, Linux or macOS) that feeds it over the USB cable (or over Wi-Fi / Tailscale after pairing once). You design
-the pages in a visual editor on the PC: **41 widgets**, **18 templates**, as many pages as you like.
+the pages in a visual editor on the PC: **47 widgets**, **18 templates**, as many pages as you like.
 
 - **Your PC at a glance**: CPU, GPU, RAM, disks, network and ping; the heaviest apps, with "end one instance / end all".
 - **AI coding**: Claude and Codex quotas with a burn-rate forecast; every Claude Code / Codex session — the phone
@@ -140,7 +140,9 @@ Double-click the tray icon (or open <http://127.0.0.1:8765>):
   the corner to resize) and set their options. The widget palette is grouped by category and searchable.
   **Live preview** swaps the canvas for the real panel with your unsaved changes and live data.
 - **Rules**: automations, see [Rules](#rules).
-- **Shortcuts**: add, edit, reorder and test keys (label, emoji, colour, command, arguments, working folder).
+- **Shortcuts**: add, edit, reorder and test keys (label, emoji, colour). A key runs a program, presses a key
+  combination (`ctrl+shift+m`), types text or runs a macro (keys, text, waits, other shortcuts); on / off keys show
+  their state on the phone (mute does by itself, others from a pushed value).
 - **Webhooks**: the webhook key, copy-paste examples, test buttons and the values pushed so far.
 - **General**: weather location search, night mode, clock seconds, idle timeout, vibration, volume-key paging,
   the phone's sensors (brightness that follows the room, the night screen when the room goes dark, wave to wake it),

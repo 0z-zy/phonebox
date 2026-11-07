@@ -1089,12 +1089,52 @@ function renderEditor() {
         h('div', { class: 'field' }, h('label', {}, 'Icon (emoji)'), h('div', { class: 'row' }, iconIn),
           h('div', { class: 'emojis' }, ...EMOJIS.map((em) => h('button', { onclick: () => { iconIn.value = em; upd('icon', em); } }, em)))),
         h('div', { class: 'field' }, h('label', {}, 'Colour'), h('div', { class: 'row' }, colorIn), sw)),
-      h('div', {},
-        h('div', { class: 'field' }, h('label', {}, 'Command'), cmdIn, preset,
-          h('span', { class: 'hint' }, 'Program, address or built-in command. Anything the Windows Run dialog accepts works.')),
-        text('args', 'Arguments', 'e.g. -d D:\\Projects claude'),
-        text('cwd', 'Working folder', 'optional'),
+      h('div', {}, ...actionFields(s, upd, text, cmdIn, preset),
         h('div', { class: 'field' }, h('label', {}, 'Id'), h('code', {}, s.id || '(generated on save)')))));
+}
+
+// What a key does: run a program, press keys, type text or run a macro; plus the on / off (toggle) options.
+const KINDS = { run: 'Run a program, file or address', keys: 'Press keys', text: 'Type text', macro: 'Run a macro (several steps)' };
+const kindOf = (s) => (s.cmd === 'builtin:keys' ? 'keys' : s.cmd === 'builtin:text' ? 'text' : s.cmd === 'builtin:macro' ? 'macro' : 'run');
+function actionFields(s, upd, text, cmdIn, preset) {
+  const kind = kindOf(s);
+  const area = (value, ph, rows, oninput) => h('textarea', { rows, placeholder: ph, spellcheck: 'false', oninput }, value);
+  const fields = [h('div', { class: 'field' }, h('label', {}, 'What it does'),
+    h('select', { onchange: (e) => {
+      const k = e.target.value;
+      s.cmd = k === 'run' ? '' : 'builtin:' + k;
+      if (k !== 'macro') delete s.steps;
+      s.args = null; s.cwd = null;
+      changed(); renderEditor();
+    } }, ...Object.entries(KINDS).map(([k, l]) => h('option', { value: k, selected: k === kind }, l))))];
+  if (kind === 'run') {
+    fields.push(
+      h('div', { class: 'field' }, h('label', {}, 'Command'), cmdIn, preset,
+        h('span', { class: 'hint' }, osName === 'windows' ? 'Program, address or built-in command. Anything the Windows Run dialog accepts works.' : 'Program, address or built-in command.')),
+      text('args', 'Arguments', osName === 'windows' ? 'e.g. -d D:\\Projects claude' : 'e.g. --new-window ~/Projects'),
+      text('cwd', 'Working folder', 'optional'));
+  } else if (kind === 'keys') {
+    fields.push(text('args', 'Keys', 'e.g. ctrl+shift+m', 'Combine with +, several in a row with commas. Ctrl, Shift, Alt, Win (Cmd on a Mac), letters, digits, F1–F24, enter, tab, esc, space, arrows, home, end, pageup, pagedown, delete, playpause, next, prev, mute, volumeup, volumedown.'));
+  } else if (kind === 'text') {
+    fields.push(h('div', { class: 'field' }, h('label', {}, 'Text to type'), area(s.args || '', 'Typed into whatever window has the focus', 3, (e) => upd('args', e.target.value, false))));
+  } else {
+    fields.push(h('div', { class: 'field' }, h('label', {}, 'Steps, one per line'),
+      area((s.steps || []).join('\n'), 'keys:ctrl+c\nwait:200\ntext:Hello\nshortcut:terminal', 6, (e) => upd('steps', e.target.value.split('\n').map((x) => x.trim()).filter(Boolean), false)),
+      h('span', { class: 'hint' }, 'keys:… presses keys, text:… types, wait:300 waits (milliseconds), shortcut:id runs another shortcut.')));
+  }
+  if (osName === 'macos' && kind !== 'run') fields.push(h('p', { class: 'hint' }, 'macOS asks once to allow PhoneBoxAgent in System Settings › Privacy & Security › Accessibility.'));
+  if (osName === 'linux' && kind !== 'run') fields.push(h('p', { class: 'hint' }, 'Needs xdotool (X11) or wtype (Wayland).'));
+
+  const isMute = s.cmd === 'builtin:mute';
+  fields.push(h('label', { class: 'check', style: { marginTop: '4px' } },
+    h('input', { type: 'checkbox', checked: !!s.toggle || isMute, disabled: isMute, onchange: (e) => { s.toggle = e.target.checked; changed(); renderEditor(); } }),
+    isMute ? 'On / off key (shows whether the sound is muted)' : 'On / off key: the phone shows its state'));
+  if (s.toggle && !isMute) {
+    fields.push(text('stateKey', 'State from a pushed value (optional)', 'e.g. teams-muted',
+      'A value pushed to /api/push/<key> (true / on / 1 = on). Without it the phone shows the state after each tap.'));
+    if (kind === 'run') fields.push(text('offCmd', 'Command to switch off (optional)', 'empty = the same command'), text('offArgs', 'Arguments to switch off', ''));
+  }
+  return fields;
 }
 
 function renderDeckKeysOnly() {

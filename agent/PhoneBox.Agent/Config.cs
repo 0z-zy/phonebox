@@ -40,7 +40,7 @@ public sealed class AgentConfig
                 options = w.Type == "command" ? w.Options?.Where(o => o.Key != "command").ToDictionary() : w.Options,
             }),
         }),
-        shortcuts = Shortcuts.Select(s => new { s.Id, s.Label, s.Icon, s.Color }),
+        shortcuts = Shortcuts.Select(s => new { s.Id, s.Label, s.Icon, s.Color, toggle = s.Toggle || s.Cmd == "builtin:mute" }),
     };
 
     /// <summary>Ending processes is allowed when an enabled page has a processes widget that allows it.</summary>
@@ -201,9 +201,20 @@ public sealed class Shortcut
     public string Label { get; set; } = "";
     public string Icon { get; set; } = "";
     public string Color { get; set; } = "#6b7280";
+    /// <summary>A program, address or file; or builtin:lock / monitor-off / mute / keys / text / macro.</summary>
     public string Cmd { get; set; } = "";
+    /// <summary>Program arguments; the key combination for builtin:keys ("ctrl+shift+m"); the text for builtin:text.</summary>
     public string? Args { get; set; }
     public string? Cwd { get; set; }
+    /// <summary>builtin:macro steps, one per entry: "keys:ctrl+c", "text:hello", "wait:300", "shortcut:other-id".</summary>
+    public List<string>? Steps { get; set; }
+    /// <summary>An on / off key: the phone shows its state.</summary>
+    public bool Toggle { get; set; }
+    /// <summary>Where a toggle's state comes from: a pushed value (truthy = on). Empty: the agent remembers the last tap.</summary>
+    public string? StateKey { get; set; }
+    /// <summary>For toggles: the command (and arguments) that switch it off; empty = the same as switching on.</summary>
+    public string? OffCmd { get; set; }
+    public string? OffArgs { get; set; }
 }
 
 /// <summary>Reads/writes config.json; external edits are picked up on the next request.</summary>
@@ -313,6 +324,11 @@ public sealed partial class ConfigStore(string path)
             s.Id = unique;
             if (string.IsNullOrWhiteSpace(s.Args)) s.Args = null;
             if (string.IsNullOrWhiteSpace(s.Cwd)) s.Cwd = null;
+            s.Steps = s.Steps?.Select(x => x.Trim()).Where(x => x.Length > 0).Take(50).ToList();
+            if (s.Steps is { Count: 0 }) s.Steps = null;
+            if (string.IsNullOrWhiteSpace(s.StateKey)) s.StateKey = null;
+            if (string.IsNullOrWhiteSpace(s.OffCmd)) s.OffCmd = null;
+            if (string.IsNullOrWhiteSpace(s.OffArgs)) s.OffArgs = null;
         }
         c.Obs ??= new();
         if (string.IsNullOrWhiteSpace(c.Obs.Url)) c.Obs.Url = "ws://127.0.0.1:4455";

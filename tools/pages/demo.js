@@ -17,7 +17,7 @@
     ['files', 'Files', '📁', '#e5b84b'], ['music', 'Spotify', '🎧', '#1db954'], ['chat', 'Discord', '💬', '#6366f1'],
     ['snip', 'Snip', '✂️', '#14b8a6'], ['taskmgr', 'Task Manager', '📊', '#22c55e'], ['mute', 'Mute', '🔇', '#f59e0b'],
     ['screenoff', 'Screen Off', '🌙', '#8b5cf6'], ['lock', 'Lock', '🔒', '#ef4444'], ['settings', 'Settings', '⚙️', '#94a3b8'],
-  ].map(([id, label, icon, color]) => ({ id, label, icon, color, cmd: 'demo' }));
+  ].map(([id, label, icon, color]) => ({ id, label, icon, color, cmd: id === 'mute' ? 'builtin:mute' : 'demo' }));
   const PAGES = ['home', 'dashboard', 'ai', 'work', 'system', 'procs', 'deck', 'music', 'status', 'ambient', 'world', 'daily', 'markets', 'feeds', 'focus', 'calm', 'clock'];
 
   let catalog = null;
@@ -120,8 +120,11 @@
       // the microphone is "in use" for 20 s of every minute, to show the On air widget
       privacy: (() => { const on = (now() / 1000) % 60 < 20; return { mic: on, camera: false, micApps: on ? ['Zoom'] : [], cameraApps: [] }; })(),
       obs: { streaming: !!obs.streamingSince, recording: !!obs.recordingSince, recordPaused: obs.paused },
+      toggles,
     };
   }
+
+  const toggles = {};
 
   // made-up OBS: streaming for a while, buttons and scenes work
   const obs = { streamingSince: now() - 754e3, recordingSince: 0, paused: false, scene: 'Desk', mic: false };
@@ -232,7 +235,13 @@
 
   async function handle(method, path, q, body) {
     if (path === '/api/state') return json(state(q.has('ev') ? +q.get('ev') : null));
-    if (path === '/api/config') { const c = await config(); return json({ version: cfgVersion(), config: { ...c, shortcuts: c.shortcuts.map(({ id, label, icon, color }) => ({ id, label, icon, color })) } }); }
+    if (path === '/api/config') { const c = await config(); return json({ version: cfgVersion(), config: { ...c, shortcuts: c.shortcuts.map(({ id, label, icon, color, toggle, cmd }) => ({ id, label, icon, color, toggle: !!toggle || cmd === 'builtin:mute' })) } }); }
+    if (path.startsWith('/api/run/') && method === 'POST') {
+      // on / off keys flip in the demo
+      const id = decodeURIComponent(path.slice(9)), sc = (await config()).shortcuts.find((s) => s.id === id);
+      if (sc && (sc.toggle || sc.cmd === 'builtin:mute')) toggles[id] = !toggles[id];
+      return json({ ok: true });
+    }
     if (path === '/api/quotas') return json(quotas());
     if (path === '/api/calendar') return json(calendar());
     if (path === '/api/docker') return json(docker());

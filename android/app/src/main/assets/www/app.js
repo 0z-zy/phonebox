@@ -314,8 +314,9 @@ async function runShortcut(btn, id) {
 }
 
 function keyButton(s) {
-  const b = h('button', 'key', h('span', 'k-icon', s.icon || '•'), h('span', 'k-label', s.label));
+  const b = h('button', 'key' + (s.toggle ? ' toggle' : ''), h('span', 'k-icon', s.icon || '•'), h('span', 'k-label', s.label));
   b.style.setProperty('--k', s.color || '#6b7280');
+  b.dataset.id = s.id;
   b.addEventListener('click', () => runShortcut(b, s.id));
   return b;
 }
@@ -1100,8 +1101,14 @@ W.processes = {
   },
 };
 
+// On / off keys light up from the agent's state (D.state.toggles: { id: true | false }).
+function applyToggles(root) {
+  const t = D.state?.toggles || {};
+  root.querySelectorAll('.key.toggle').forEach((b) => b.classList.toggle('on', t[b.dataset.id] === true));
+}
+
 W.shortcuts = {
-  needs: [],
+  needs: ['state'],
   create(box, { o }) {
     const all = cfg.shortcuts || [];
     const ids = Array.isArray(o.ids) && o.ids.length ? o.ids : null;
@@ -1115,16 +1122,16 @@ W.shortcuts = {
     grid.style.gridTemplateColumns = `repeat(${Math.min(cols, list.length)}, 1fr)`;
     grid.style.gridTemplateRows = `repeat(${Math.ceil(list.length / cols)}, 1fr)`;
     box.append(grid);
-    return {};
+    return { update: () => applyToggles(box) };
   },
 };
 
 W.button = {
-  bare: true, needs: [],
+  bare: true, needs: ['state'],
   create(box, { o }) {
     const s = (cfg.shortcuts || []).find((x) => x.id === o.id) || (cfg.shortcuts || [])[0];
     box.append(s ? keyButton(s) : h('div', 'empty', 'Pick a shortcut in the settings'));
-    return {};
+    return { update: () => applyToggles(box) };
   },
 };
 

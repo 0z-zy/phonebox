@@ -195,12 +195,12 @@ app.MapPut("/api/settings", async (HttpRequest req, ConfigStore cfg, ILogger<Pro
     return Results.Ok(new { version = cfg.Version });
 });
 
-app.MapPost("/api/shortcuts/test", async (HttpRequest req, ILogger<Program> log) =>
+app.MapPost("/api/shortcuts/test", async (HttpRequest req, ConfigStore cfg, ILogger<Program> log) =>
 {
     if (req.ContentType?.StartsWith("application/json") != true) return Results.StatusCode(415);
     var sc = await req.ReadFromJsonAsync<PhoneBox.Agent.Shortcut>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
     if (sc is null || string.IsNullOrWhiteSpace(sc.Cmd)) return Results.BadRequest(new { error = "command is empty" });
-    var err = Shortcuts.Execute(sc, log);
+    var err = Shortcuts.Execute(sc, log, cfg.Get());
     return err is null ? Results.Ok() : Results.BadRequest(new { error = err });
 });
 
@@ -278,6 +278,7 @@ object State(IServiceProvider sp, long? ev)
         rules = sp.GetRequiredService<RuleEngine>().Active(),
         privacy = sp.GetRequiredService<PrivacyMonitor>().Snapshot(),
         obs = sp.GetRequiredService<ObsMonitor>().Snapshot() is { Connected: true } o ? new { o.Streaming, o.Recording, o.RecordPaused } : null,
+        toggles = Shortcuts.States(sp.GetRequiredService<ConfigStore>().Get(), push, sp.GetRequiredService<AudioControl>()),
     };
 }
 
@@ -447,9 +448,9 @@ app.MapPost("/api/procs/kill", (string? name, int? pid, ProcessMonitor procs, Co
     return r.Killed > 0 ? Results.Json(r) : Results.Json(r, statusCode: 409);
 });
 
-app.MapPost("/api/run/{id}", (string id, ConfigStore cfg, ILogger<Program> log) =>
+app.MapPost("/api/run/{id}", (string id, ConfigStore cfg, PushStore push, AudioControl audio, ILogger<Program> log) =>
 {
-    var result = Shortcuts.Run(cfg.Get(), id, log);
+    var result = Shortcuts.Run(cfg.Get(), id, log, push, audio);
     return result is null ? Results.Ok() : Results.Problem(result);
 });
 
