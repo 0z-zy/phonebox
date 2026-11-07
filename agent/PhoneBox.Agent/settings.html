@@ -891,6 +891,16 @@ async function importPages() {
   const known = new Set(catalog.widgets.map((w) => w.type));
   const clean = pages.map((x) => ({ ...JSON.parse(JSON.stringify(x)), id: '', widgets: x.widgets.filter((w) => known.has(w.type)).map((w) => ({ ...w, id: '' })) }));
   const dropped = pages.reduce((n, x) => n + x.widgets.length, 0) - clean.reduce((n, x) => n + x.widgets.length, 0);
+  // Command widgets run their command on this computer once saved, and custom HTML can run shortcuts: a file from
+  // someone else must not bring those in unseen. Show them and keep them only with an explicit yes.
+  const risky = clean.flatMap((p) => p.widgets.filter((w) => (w.type === 'command' && w.options?.command) || (w.type === 'html' && w.options?.html)));
+  if (risky.length) {
+    const list = risky.map((w) => w.type === 'command'
+      ? `• Command: ${String(w.options.command).slice(0, 160)}${w.options.commandUnix ? ` / ${String(w.options.commandUnix).slice(0, 80)}` : ''}`
+      : `• Custom HTML (${String(w.options.html).length} characters)`).join('\n');
+    const keep = confirm(`This file contains ${risky.length} widget(s) that run code on this computer:\n\n${list}\n\nOK = import them as they are (only if you trust the file)\nCancel = import them empty`);
+    if (!keep) for (const w of risky) { w.options = { ...w.options }; delete w.options.command; delete w.options.commandUnix; if (w.type === 'html') w.options.html = ''; }
+  }
   const replace = cfg.pages.length && confirm(`Import ${clean.length} page(s).\n\nOK = replace all ${cfg.pages.length} current pages\nCancel = add them after the current pages`);
   if (replace) cfg.pages = clean; else cfg.pages.push(...clean);
   selPage = replace ? 0 : cfg.pages.length - clean.length;
@@ -903,6 +913,7 @@ $('uploadJson').onclick = async () => {
   const text = await pickFile();
   if (text == null) return;
   try { JSON.parse(text); } catch (e) { $('jsonErr').textContent = e.message; return; }
+  if (!confirm('This replaces all settings, including the commands that shortcuts and command widgets run on this computer. Only load your own or a trusted file. Continue?')) return;
   $('json').value = text;
   $('applyJson').click();
 };
