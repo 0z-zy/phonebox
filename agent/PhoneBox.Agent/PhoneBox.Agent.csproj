@@ -3,7 +3,9 @@
   <!-- Windows build: tray icon, WinRT media session, Core Audio. Linux / macOS build: the same agent without WinForms;
        the platform parts live in Unix/. Build one with  dotnet publish -f net10.0 -r linux-x64  (or osx-arm64 …). -->
   <PropertyGroup>
-    <TargetFrameworks>net10.0-windows10.0.19041.0;net10.0</TargetFrameworks>
+    <!-- On Windows both builds are available; elsewhere only the cross-platform one (no Windows targeting packs needed). -->
+    <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">net10.0-windows10.0.19041.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(OS)' != 'Windows_NT'">net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>PhoneBoxAgent</AssemblyName>
