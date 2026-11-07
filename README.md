@@ -18,21 +18,23 @@ Widgets for your PC, AI coding sessions, music, weather and anything you push to
 
 PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and an **agent** on the computer
 (Windows, Linux or macOS) that feeds it over the USB cable (or over Wi-Fi / Tailscale after pairing once). You design
-the pages in a visual editor on the PC: **48 widgets**, **18 templates**, as many pages as you like.
+the pages in a visual editor on the PC: **53 widgets**, **23 templates**, as many pages as you like.
 
 - **Your PC at a glance**: CPU, GPU, RAM, disks, network and ping; the heaviest apps, with "end one instance / end all".
 - **AI coding**: Claude and Codex quotas with a burn-rate forecast; every Claude Code / Codex session — the phone
-  buzzes when one finishes or needs you. GitHub review requests and your pull requests with CI status.
+  buzzes when one finishes or needs you, and Claude Code's permission prompts show up with **Allow** / **Deny**.
+  GitHub review requests and your pull requests with CI status.
 - **Desk companion**: now playing with controls and volume, clocks, weather, sun & moon, air quality, calendar,
   pomodoro, timers, checklists, notes, a breathing exercise.
 - **Stream Deck–style keys** that launch apps, URLs or built-in actions on the PC.
-- **Webhooks**: scripts, CI and Home Assistant can push values and notifications onto the panel.
+- **Webhooks and rules**: scripts, CI and Home Assistant push values and notifications; rules switch pages calmly
+  when something happens (a call, music, an AI session waiting for you).
 
 <p align="center"><a href="docs/phonebox-tour.mp4"><img src="docs/phonebox-tour.gif" width="780" alt="A tour of PhoneBox pages"></a><br>
 <sub>A tour through the pages (made-up data). <a href="docs/phonebox-tour.mp4">Full video (MP4)</a></sub></p>
 
 **Contents**: [Quick start](#quick-start) · [Pages & templates](#pages--templates) · [Widgets](#widgets) ·
-[Layout editor](#layout-editor--settings) · [Webhooks](#webhooks) · [Rules](#rules) · [Wi-Fi & Tailscale](#wi-fi--tailscale) ·
+[Layout editor](#layout-editor--settings) · [Claude Code prompts](#claude-code-permission-prompts) · [Webhooks](#webhooks) · [Rules](#rules) · [Wi-Fi & Tailscale](#wi-fi--tailscale) ·
 [Updates](#updates) · [How it works](#how-it-works) · [Security](#security--privacy) · [FAQ](#faq--troubleshooting) ·
 [Development](#development)
 
@@ -136,7 +138,7 @@ keeps the screen on.
 |---|---|
 | **Time** | Clock (with status line and weather) · Analog clock (any time zone) · **Word clock** · World clocks · Calendar · **Next up** · Time progress (day / week / month / year) · Countdown · Pomodoro · Quick timer · Stopwatch |
 | **Weather & sky** | Weather · Forecast (hourly / 7 days) · Sun & moon (daylight left, UV, moon phase) · **Moon** · Air quality (European AQI, PM2.5, PM10, O₃, NO₂) |
-| **Computer** | **Rules** (which hold, pause) · **Battery care** · On air (microphone / camera / OBS) · OBS Studio (live, recording, scenes) · Device batteries (headphones, mice, keyboards) · Docker (containers, start / stop) · Metric tile · Gauge · Chart · Memory & disks · Top processes · Processes · Now playing · Volume · Shortcut grid · Big button · **Command** (PowerShell output, refreshed every N seconds) |
+| **Computer** | **Rules** (which hold, pause) · **Battery care** · On air (microphone / camera / OBS) · OBS Studio (live, recording, scenes) · Device batteries (headphones, mice, keyboards) · Docker (containers, start / stop) · Metric tile · Gauge · Chart · Memory & disks · Top processes · Processes · Now playing · Volume · Shortcut grid · Big button · **Command** (PowerShell / bash / zsh output, refreshed every N seconds) |
 | **AI & code** | AI quotas · Quota ring · AI sessions · GitHub |
 | **Personal** | **Agenda** (Google / Outlook / iCloud calendars) · Note · Checklist (resets daily) · Counter · Breathe · Quote · Title · Phone battery |
 | **Web & data** | **Custom HTML** (your own widget, sandboxed) · **Home Assistant** (entities, tap to switch) · **Pushed value** · **Notifications** (both fed by [webhooks](#webhooks)) · Hacker News · Exchange rates (ECB) · Crypto prices · Image / webcam |
@@ -147,11 +149,12 @@ public APIs ([Open-Meteo](https://open-meteo.com), [Frankfurter](https://frankfu
 
 ## Layout editor & settings
 
-Double-click the tray icon (or open <http://127.0.0.1:8765>):
+Double-click the tray icon on Windows (or open <http://127.0.0.1:8765>):
 
 <p align="center"><img src="docs/screenshots/settings-editor.png" width="900" alt="The layout editor"></p>
 
-- **Pages**: add pages from templates, reorder, show/hide, export and import them as files; arrange widgets on a phone-sized canvas (drag to move, drag
+- **Pages**: add pages from templates, reorder, show/hide, export and import them as files, choose how long each page
+  may stay before the panel goes home; arrange widgets on a phone-sized canvas (drag to move, drag
   the corner to resize) and set their options. The widget palette is grouped by category and searchable.
   **Live preview** swaps the canvas for the real panel with your unsaved changes and live data.
 - **Rules**: automations, see [Rules](#rules).
@@ -159,14 +162,26 @@ Double-click the tray icon (or open <http://127.0.0.1:8765>):
   combination (`ctrl+shift+m`), types text or runs a macro (keys, text, waits, other shortcuts); on / off keys show
   their state on the phone (mute does by itself, others from a pushed value).
 - **Webhooks**: the webhook key, copy-paste examples, test buttons and the values pushed so far.
-- **General**: weather location search, theme and accent colour, orientation (landscape, portrait or both), night mode, clock seconds, idle timeout, vibration, volume-key paging,
-  the phone's sensors (brightness that follows the room, the night screen when the room goes dark, wave to wake it),
-  kiosk options (screen pinning, the panel as the phone's home screen so it starts after a reboot; no root needed),
-  phones (several at once, each with its own pages), Wi-Fi & Tailscale, updates.
+- **General**: weather location search; calendars (ICS links from Google, Outlook or iCloud), Home Assistant and OBS
+  connections; night mode; theme and accent colour, orientation (landscape, portrait or both), clock seconds,
+  vibration, volume-key paging and the phone's sensors (brightness that follows the room, the night screen when the
+  room goes dark, wave to wake it); [page switching](#rules) (home page, countdown, back home after);
+  kiosk options (screen pinning, the panel as the phone's home screen so it starts after a reboot, keep the phone
+  awake on the charger; no root needed); [battery care](#rules); [Claude Code permission prompts](#claude-code-permission-prompts);
+  phones (several at once, each with its own pages); Wi-Fi & Tailscale; updates.
 - **Advanced**: the raw JSON.
 
 Settings live in `%APPDATA%\PhoneBox\config.json` (Linux: `~/.config/PhoneBox`, macOS: `~/Library/Application Support/PhoneBox`);
 the phone picks up changes within a few seconds.
+
+## Claude Code permission prompts
+
+When Claude Code asks for permission (run a command, edit a file, use an MCP tool…), the phone shows the request —
+project, tool and the command or file — with **Allow** and **Deny**. Turn it on in **Settings › General › Claude Code
+permission prompts** and press *Install hook*: PhoneBox adds a `PermissionRequest` hook to `~/.claude/settings.json`
+(and keeps a backup next to it as `settings.json.phonebox.bak`). If the phone is not connected or nobody answers in
+time, the hook returns no decision and Claude Code asks in the terminal as usual. Optionally only when you have been
+away from the keyboard for a minute.
 
 ## Webhooks
 
@@ -284,6 +299,8 @@ flowchart LR
 
 - The WebView never talks to the PC directly: requests to `/agent/*` are intercepted by the app and forwarded over
   the adb tunnel (or the pinned HTTPS connection), so there are no CORS, mixed-content or local-network issues.
+- Live events (page switches, notifications, permission prompts) arrive over one server-sent-events stream
+  (`/api/stream`); plain polling remains as the fallback.
 - The agent samples only what is on screen: process lists and command widgets run only while a phone looks at them.
 
 ## Security & privacy
@@ -298,6 +315,8 @@ flowchart LR
   on its own.
 - Ending processes is limited to your own session, never touches a list of Windows-critical processes, and can be
   switched off in the processes widget's options.
+- **Claude Code permission prompts** are opt-in. The hook only posts the request to the agent on `127.0.0.1`; the
+  phone can only answer allow or deny for that one request.
 - **Claude quota:** read with the OAuth token Claude Code stores in `~/.claude/.credentials.json`, sent only to
   `api.anthropic.com/api/oauth/usage` (the endpoint behind Claude Code's `/usage`). The token is read-only: PhoneBox
   never refreshes it, so it can't interfere with Claude Code. This endpoint is undocumented and may change.
@@ -339,6 +358,8 @@ Yes. PhoneBox needs no root on the phone and no admin rights on the PC.
 
 ```powershell
 python tools/demo-server.py                  # panel + settings page with made-up data: http://127.0.0.1:8790 and /settings
+dotnet test agent/PhoneBox.Agent.Tests       # agent unit tests
+cd tools/ui-tests; npm ci; npx playwright test; cd ../..   # browser tests of the panel and settings (against the demo)
 .\scripts\build.ps1                          # dist\PhoneBox-<v>.apk + dist\PhoneBoxAgent-<v>-win-x64.zip
 cd android; .\gradlew.bat assembleDebug      # APK only
 dotnet run --project agent/PhoneBox.Agent    # agent from source
