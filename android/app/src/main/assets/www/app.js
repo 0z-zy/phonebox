@@ -653,7 +653,8 @@ $('apDeny').addEventListener('click', () => decide('deny'));
 function handleEvent(e) {
   if (e.kind === 'approval' || e.kind === 'approval-done') loadApprovals();
   else if (e.kind === 'notify' && e.data) handleNotify(e.data);
-  else if (e.kind === 'goto' && e.data) gotoPageRef(e.data.page);
+  else if (e.kind === 'goto' && e.data) ruleGoto(e.data);
+  else if (e.kind === 'back' && e.data) { if (ruleHold && ruleHold.rule === e.data.rule) endHold(); }
   else if (e.kind === 'refresh') { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadWeather(true); }
   else if (e.kind === 'reload') location.reload();
 }
@@ -2069,7 +2070,24 @@ function goPage(i, instant = false) {
 
 function gotoPageRef(ref) {
   const n = typeof ref === 'number' ? ref - 1 : /^\d+$/.test(String(ref)) ? +ref - 1 : pages.findIndex((p) => p.id === ref || p.title.toLowerCase() === String(ref).toLowerCase());
-  if (n >= 0 && n < pages.length) { lastTouch = Date.now(); goPage(n, Math.abs(n - curPage) > 1); }
+  if (n < 0 || n >= pages.length) return -1;
+  lastTouch = Date.now();
+  goPage(n, Math.abs(n - curPage) > 1);
+  return n;
+}
+
+// An automation rule that switches pages "while active" holds its page (no idle return); when the rule ends the panel
+// goes back to the page it was on, unless you moved on yourself in the meantime.
+let ruleHold = null; // { rule, page, from, at }
+function ruleGoto(d) {
+  const from = ruleHold ? ruleHold.from : curPage;
+  const n = gotoPageRef(d.page);
+  if (n >= 0 && d.hold && d.rule) ruleHold = { rule: d.rule, page: n, from, at: Date.now() };
+}
+function endHold() {
+  const h = ruleHold;
+  ruleHold = null;
+  if (h && curPage === h.page && h.from !== h.page) { lastTouch = Date.now(); goPage(h.from, Math.abs(h.from - curPage) > 1); }
 }
 
 let titleTimer = 0;
@@ -2176,7 +2194,8 @@ function tick() {
   $('nDate').textContent = now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
   setNight(isNight(now) && Date.now() > wakeUntil);
   const idle = cfg.display?.idleReturnSec ?? 90;
-  if (idle > 0 && Date.now() - lastTouch > idle * 1000 && (curPage !== 0 || sheet || !$('overview').hidden)) {
+  const held = ruleHold && curPage === ruleHold.page;
+  if (idle > 0 && !held && Date.now() - lastTouch > idle * 1000 && (curPage !== 0 || sheet || !$('overview').hidden)) {
     closeSheet(); closeOverview(); goPage(0, true);
   }
   if (!nightOn) emit('tick');
@@ -2247,6 +2266,8 @@ function applyState(s) {
   if (s.pushVersion !== undefined && s.pushVersion !== pushVersion) loadPush();
   if (evSeq != null) for (const e of s.events || []) if (e.seq > evSeq) handleEvent(e);
   evSeq = Math.max(evSeq ?? 0, s.evSeq ?? 0);
+  // the "back" event can be missed while offline; the list of active rules settles it
+  if (ruleHold && Array.isArray(s.rules) && !s.rules.includes(ruleHold.rule) && Date.now() - ruleHold.at > 4000) endHold();
   {
     const pc = s.pc;
     if (pc) {

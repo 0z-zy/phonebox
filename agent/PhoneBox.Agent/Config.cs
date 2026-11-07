@@ -17,6 +17,7 @@ public sealed class AgentConfig
     public ClaudeConfig Claude { get; set; } = new();
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
+    public List<RuleConfig> Rules { get; set; } = [];
 
     /// <summary>The part sent to the phone: commands (shortcut cmd/args/cwd, command widget scripts) are never included.</summary>
     public object ToPublic() => new
@@ -128,6 +129,34 @@ public sealed class WidgetConfig
     public bool? Bool(string key) => Opt(key) is { } v ? v.ValueKind switch { JsonValueKind.True => true, JsonValueKind.False => false, _ => null } : null;
     public void Set(string key, object? value) => (Options ??= [])[key] = JsonSerializer.SerializeToElement(value);
     public WidgetConfig Clone() => new() { Id = Id, Type = Type, X = X, Y = Y, W = W, H = H, Options = Options?.ToDictionary(kv => kv.Key, kv => kv.Value.Clone()) };
+}
+
+/// <summary>
+/// An automation rule: when something happens on the PC, do something on the panel. With <see cref="WhileActive"/>
+/// the effect lasts only as long as the condition (the phone goes back to its page, a pushed value is removed).
+/// </summary>
+public sealed class RuleConfig
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    /// <summary>session-waiting, session-busy, media-playing, process-running, cpu-above, idle, time, push.</summary>
+    public string When { get; set; } = "session-waiting";
+    /// <summary>App / process names ("zoom|Teams"), a time window ("22:00-07:00") or a push key, depending on <see cref="When"/>.</summary>
+    public string? Match { get; set; }
+    /// <summary>CPU percent, or idle minutes.</summary>
+    public double? Value { get; set; }
+    /// <summary>goto, notify or push.</summary>
+    public string Then { get; set; } = "goto";
+    public string? Page { get; set; }
+    public string? Text { get; set; }
+    public string? Level { get; set; }
+    public string? Key { get; set; }
+    public string? PushValue { get; set; }
+    public bool WhileActive { get; set; } = true;
+
+    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "cpu-above", "idle", "time", "push"];
+    public static readonly string[] Actions = ["goto", "notify", "push"];
 }
 
 public sealed class Shortcut
@@ -248,6 +277,19 @@ public sealed partial class ConfigStore(string path)
             s.Id = unique;
             if (string.IsNullOrWhiteSpace(s.Args)) s.Args = null;
             if (string.IsNullOrWhiteSpace(s.Cwd)) s.Cwd = null;
+        }
+        var ruleIds = new HashSet<string>();
+        c.Rules = (c.Rules ?? []).Where(r => r is not null && RuleConfig.Triggers.Contains(r.When) && RuleConfig.Actions.Contains(r.Then)).Take(50).ToList();
+        foreach (var r in c.Rules)
+        {
+            r.Name = r.Name?.Trim() ?? "";
+            var id = Slug(string.IsNullOrWhiteSpace(r.Id) ? (r.Name == "" ? r.When : r.Name) : r.Id);
+            if (id == "") id = "rule";
+            var unique = id;
+            for (var i = 2; !ruleIds.Add(unique); i++) unique = $"{id}-{i}";
+            r.Id = unique;
+            if (r.Value is { } v) r.Value = Math.Clamp(v, 0, r.When == "idle" ? 1440 : 100);
+            r.Level = r.Level is "ok" or "warn" or "error" ? r.Level : "info";
         }
         return c;
     }

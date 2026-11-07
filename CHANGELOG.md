@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+**Claude Code permission prompts on the phone.** When Claude Code asks for permission, the phone shows the request
+with Allow and Deny (through a `PermissionRequest` hook that the settings page installs). If the phone is not
+connected or nobody answers in time, Claude Code asks in the terminal as usual. Optionally only when you are away.
+
+**Live connection.** The phone keeps one server-sent-events stream open (`/api/stream`) instead of polling: page
+switches, notifications and permission prompts arrive at once. Polling remains as the fallback.
+
+**Linux and macOS.** The agent runs on Linux (x64, arm64) and macOS (Apple silicon, Intel): system readings, now
+playing (MPRIS / Spotify and Music), volume, processes and app icons, shortcuts, command widgets (bash / zsh),
+Claude token from the macOS Keychain. `scripts/install.sh` sets it up as a systemd user service or a launchd agent.
+
+**Rules.** Settings › Rules: when an AI session needs you, music plays, an app runs, the CPU is busy, you are away,
+at certain times or when a pushed value is on, show a page, a notification or push a value, optionally only while
+it lasts.
+
+**Live demo.** <https://ersinkoc.github.io/phonebox/> runs the real panel and layout editor in the browser with
+made-up data.
+
 ## 0.6.2 — 2026-11-07
 
 **Widgets.** Pages are now 12 × 6 grids of widgets instead of fixed screens.

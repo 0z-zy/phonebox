@@ -32,7 +32,7 @@ the pages in a visual editor on the PC: **41 widgets**, **18 templates**, as man
 <sub>A tour through the pages (made-up data). <a href="docs/phonebox-tour.mp4">Full video (MP4)</a></sub></p>
 
 **Contents**: [Quick start](#quick-start) · [Pages & templates](#pages--templates) · [Widgets](#widgets) ·
-[Layout editor](#layout-editor--settings) · [Webhooks](#webhooks) · [Wi-Fi & Tailscale](#wi-fi--tailscale) ·
+[Layout editor](#layout-editor--settings) · [Webhooks](#webhooks) · [Rules](#rules) · [Wi-Fi & Tailscale](#wi-fi--tailscale) ·
 [Updates](#updates) · [How it works](#how-it-works) · [Security](#security--privacy) · [FAQ](#faq--troubleshooting) ·
 [Development](#development)
 
@@ -176,6 +176,25 @@ Notifications take `title`, `text`, `level`, `vibrate`, `seconds`, `wake` (light
 From this PC no key is needed. With Wi-Fi on, other machines on the network or Tailscale can use the same endpoints
 on `https://<pc>:8766` with the **webhook key** from the settings (`Authorization: Bearer <key>`, or `?token=<key>`
 for senders that cannot set headers). That key opens only the webhook endpoints, never the phone API.
+
+## Rules
+
+**Settings › Rules** lets the panel react to what happens on the computer. Each rule is *when → then*:
+
+| When | Then |
+|---|---|
+| an AI session needs you / is working (optionally for some projects) | show a page |
+| music or video plays (optionally in some apps: `Spotify\|Music`) | show a notification (`{detail}` = what happened) |
+| an app is running (`zoom\|Teams\|obs64`) | push a value (e.g. `onair`, shown by a Pushed value widget) |
+| the CPU stays above a percentage for 15 s | |
+| you have been away from the keyboard for N minutes | |
+| it is between two times (`22:00-07:00`) | |
+| a pushed value is on (a webhook from Home Assistant, a doorbell…) | |
+
+With **only while it lasts**, the effect ends with the condition: the phone goes back to the page it was on (unless
+you moved on yourself) and stays on the rule's page instead of returning home when idle; a pushed value is removed
+again. The editor starts from examples (Claude needs me → AI page, music → Music page, on air during calls, CPU busy,
+away → Ambient, evenings → Calm, doorbell) and has a Test button for each rule.
 
 ## Wi-Fi & Tailscale
 

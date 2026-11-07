@@ -129,6 +129,16 @@ table.items td { border-top: 1px solid var(--line); padding: 6px 8px; vertical-a
 table.items td.val { font-family: Consolas, monospace; font-size: 12px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1100px) { .pages-layout, .ed-cols { grid-template-columns: 1fr; } #pageTabs { position: static; } }
 
+/* rules */
+.rule { display: grid; gap: 10px; }
+.rule .line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rule .line > b { font-size: 13px; color: var(--muted); font-weight: 600; min-width: 44px; }
+.rule select, .rule input[type=text], .rule input[type=number] { width: auto; min-width: 0; }
+.rule input.grow { flex: 1 1 180px; }
+.rule.off { opacity: .55; }
+.rule .live { font-size: 12px; color: var(--accent); font-weight: 600; }
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* shortcuts */
 .deck { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .key {
@@ -197,6 +207,7 @@ dd { margin: 0; word-break: break-all; }
   <nav id="nav">
     <a href="#pages" class="on">Pages</a>
     <a href="#shortcuts">Shortcuts</a>
+    <a href="#rules">Rules</a>
     <a href="#webhooks">Webhooks</a>
     <a href="#general">General</a>
     <a href="#advanced">Advanced</a>
@@ -219,6 +230,18 @@ dd { margin: 0; word-break: break-all; }
       <p class="lead">The keys shown by Shortcut grid and Big button widgets. Click a key to edit it, drag to reorder. The phone only sends the key's id; commands never leave this computer.</p>
       <div class="deck" id="deck"></div>
       <div class="card editor" id="editor"></div>
+    </section>
+
+    <section id="rules">
+      <h2>Rules</h2>
+      <p class="lead">Let the panel react to what happens on this computer: show the AI page when Claude needs you, the music page when
+        something plays, an "on air" sign during calls. A rule fires when its condition starts; with <b>only while it lasts</b> the phone
+        goes back to where it was (and a pushed value is removed) when the condition ends.</p>
+      <div class="card">
+        <h3>Add a rule</h3>
+        <div class="presets" id="rulePresets"></div>
+      </div>
+      <div id="ruleList"></div>
     </section>
 
     <section id="general">
@@ -722,6 +745,88 @@ function openTemplates(index) {
 }
 function closeModal() { $('modal').hidden = true; }
 
+// ---------------------------------------------------------------- rules
+const TRIGGERS = {
+  'session-waiting': { label: 'an AI session needs me', match: 'any project (or: api|docs, codex)' },
+  'session-busy': { label: 'an AI session is working', match: 'any project (or: api|docs, codex)' },
+  'media-playing': { label: 'music or video plays', match: 'any app (or: Spotify|Music)' },
+  'process-running': { label: 'an app is running', match: 'zoom|Teams|obs64' },
+  'cpu-above': { label: 'the CPU is busy', value: '% (for 15 s)', def: 85 },
+  idle: { label: 'I am away from the PC', value: 'minutes', def: 5 },
+  time: { label: 'it is between', match: '22:00-07:00' },
+  push: { label: 'a pushed value is on', match: 'key, e.g. doorbell' },
+};
+const ACTIONS = { goto: 'show the page', notify: 'show a notification', push: 'push a value' };
+const pageId = (...ids) => ids.find((id) => cfg.pages.some((p) => p.id === id)) || cfg.pages[0]?.id || '';
+const RULE_PRESETS = [
+  ['✳️ Claude needs me → AI page', () => ({ name: 'Claude needs me', when: 'session-waiting', then: 'goto', page: pageId('ai', 'work'), whileActive: true })],
+  ['🎵 Music plays → music page', () => ({ name: 'Music', when: 'media-playing', match: 'Spotify', then: 'goto', page: pageId('music', 'home'), whileActive: true })],
+  ['🔴 On air during calls', () => ({ name: 'On air', when: 'process-running', match: osName === 'macos' ? 'zoom.us|Microsoft Teams|FaceTime' : 'zoom|Teams|ms-teams|Webex', then: 'push', key: 'onair', pushValue: 'On air', whileActive: true })],
+  ['🔥 CPU busy → notification', () => ({ name: 'CPU busy', when: 'cpu-above', value: 90, then: 'notify', text: '{detail} for a while', level: 'warn', whileActive: false })],
+  ['🌙 Away → ambient page', () => ({ name: 'Away', when: 'idle', value: 10, then: 'goto', page: pageId('ambient', 'clock', 'calm'), whileActive: true })],
+  ['🕙 Evenings → calm page', () => ({ name: 'Evenings', when: 'time', match: '22:00-07:00', then: 'goto', page: pageId('calm', 'clock', 'ambient'), whileActive: true })],
+  ['🔔 Doorbell → notification', () => ({ name: 'Doorbell', when: 'push', match: 'doorbell', then: 'notify', text: 'Someone is at the door', level: 'warn', whileActive: false })],
+  ['➕ Empty rule', () => ({ name: '', when: 'session-waiting', then: 'goto', page: pageId('home'), whileActive: true })],
+];
+let activeRules = [];
+
+function renderRules() {
+  cfg.rules ??= [];
+  $('rulePresets').replaceChildren(...RULE_PRESETS.map(([label, make]) => h('button', { class: 'btn', onclick: () => {
+    cfg.rules.push({ id: '', enabled: true, ...make() });
+    renderRules(); changed();
+  } }, label)));
+  const list = $('ruleList');
+  if (!cfg.rules.length) { list.replaceChildren(h('p', { class: 'hint' }, 'No rules yet — start from one of the examples above.')); return; }
+  list.replaceChildren(...cfg.rules.map((r, i) => ruleCard(r, i)));
+}
+
+function ruleCard(r, i) {
+  const set = (k, v, rerender = false) => { r[k] = v; changed(); if (rerender) renderRules(); };
+  const t = TRIGGERS[r.when] || TRIGGERS['session-waiting'];
+  const sel = (value, options, onchange) => h('select', { onchange: (e) => onchange(e.target.value) },
+    ...Object.entries(options).map(([k, v]) => h('option', { value: k, selected: k === value }, typeof v === 'string' ? v : v.label)));
+  const text = (key, placeholder, cls = '') => h('input', { type: 'text', class: cls, value: r[key] ?? '', placeholder, oninput: (e) => set(key, e.target.value || null) });
+
+  const cond = [];
+  if (t.match) cond.push(text('match', t.match, 'grow'));
+  if (t.value) cond.push(h('input', { type: 'number', min: 0, style: 'width:90px', value: r.value ?? t.def, oninput: (e) => set('value', e.target.value === '' ? null : +e.target.value) }), h('span', { class: 'hint' }, t.value));
+
+  const act = [];
+  if (r.then === 'goto') act.push(h('select', { onchange: (e) => set('page', e.target.value) },
+    ...cfg.pages.map((p) => h('option', { value: p.id, selected: p.id === r.page }, `${p.icon || ''} ${p.title}`.trim()))));
+  if (r.then === 'notify') act.push(text('text', 'text ({detail} = what happened)', 'grow'),
+    sel(r.level || 'info', { info: 'info', ok: 'ok', warn: 'warning', error: 'error' }, (v) => set('level', v)));
+  if (r.then === 'push') act.push(text('key', 'key, e.g. onair'), text('pushValue', 'value (default: true)', 'grow'));
+
+  const live = activeRules.includes(r.id);
+  return h('div', { class: 'card rule' + (r.enabled === false ? ' off' : '') },
+    h('div', { class: 'line' },
+      h('label', { class: 'switch', title: 'Enabled' }, h('input', { type: 'checkbox', checked: r.enabled !== false, onchange: (e) => set('enabled', e.target.checked, true) }), h('span')),
+      h('input', { type: 'text', class: 'grow', value: r.name || '', placeholder: 'Name (shown on notifications)', oninput: (e) => set('name', e.target.value) }),
+      live ? h('span', { class: 'live' }, '● active now') : null,
+      h('button', { class: 'btn sm', title: 'Run the action once', onclick: async () => {
+        const res = await fetch('/api/rules/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r) });
+        toast(res.ok ? 'Done — look at the phone' : 'Could not run it', !res.ok);
+      } }, 'Test'),
+      h('button', { class: 'btn sm danger', onclick: () => { cfg.rules.splice(i, 1); renderRules(); changed(); } }, 'Delete')),
+    h('div', { class: 'line' }, h('b', {}, 'When'), sel(r.when, TRIGGERS, (v) => { r.match = null; r.value = null; set('when', v, true); }), ...cond),
+    h('div', { class: 'line' }, h('b', {}, 'Then'), sel(r.then, ACTIONS, (v) => set('then', v, true)), ...act),
+    r.then !== 'notify' ? h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: r.whileActive !== false, onchange: (e) => set('whileActive', e.target.checked) }),
+      r.then === 'goto' ? 'Only while it lasts (then go back to the previous page)' : 'Only while it lasts (then remove the value)') : null);
+}
+
+// shows which rules hold right now while the Rules section is open
+async function pollRules() {
+  if (!$('rules').classList.contains('on')) return;
+  try {
+    const s = await (await fetch('/api/state')).json();
+    const next = s.rules || [];
+    if (next.join() !== activeRules.join()) { activeRules = next; if (!document.activeElement?.closest?.('#ruleList')) renderRules(); }
+  } catch (_) {}
+}
+setInterval(pollRules, 2000);
+
 // ---------------------------------------------------------------- webhooks
 function renderWebhooks(lan) {
   const local = `http://127.0.0.1:${location.port || 8765}`;
@@ -955,9 +1060,9 @@ async function loadInfo() {
 async function load() {
   if (!catalog.widgets.length) catalog = await (await fetch('/api/catalog')).json();
   cfg = await (await fetch('/api/settings')).json();
-  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false };
+  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.rules ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false };
   saved = JSON.stringify(cfg);
-  renderPages(); renderDeck(); bindForm(); changed(); loadInfo();
+  renderPages(); renderDeck(); renderRules(); bindForm(); changed(); loadInfo();
 }
 
 async function save() {
@@ -969,7 +1074,7 @@ async function save() {
 }
 
 $('save').onclick = save;
-$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); bindForm(); changed(); };
+$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); renderRules(); bindForm(); changed(); };
 $('openPhone').onclick = async () => { await fetch('/api/phone/open', { method: 'POST' }); toast('Opening the panel on the phone'); };
 $('cityBtn').onclick = searchCity;
 function renderUpdate(u) {
@@ -1028,7 +1133,7 @@ $('whClear').onclick = async () => { if (!confirm('Delete all pushed values?')) 
 setInterval(loadPushed, 4000);
 $('citySearch').onkeydown = (e) => { if (e.key === 'Enter') searchCity(); };
 $('applyJson').onclick = () => {
-  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
+  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); renderRules(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
   catch (e) { $('jsonErr').textContent = e.message; }
 };
 document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (!$('save').disabled) save(); } });

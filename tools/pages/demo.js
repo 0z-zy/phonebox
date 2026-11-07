@@ -194,6 +194,18 @@
       bc.postMessage({ type: 'push', key, value });
       return json({ ok: true });
     }
+    if (path === '/api/rules/test' && method === 'POST') {
+      // runs the rule's action once, like the agent's Test button
+      const r = parse(body) || {};
+      if (r.then === 'goto' && r.page) emit('goto', { page: r.page });
+      else if (r.then === 'notify') emit('notify', { title: r.name || 'PhoneBox', text: (r.text || 'test').replace('{detail}', 'test'), level: r.level || 'info' });
+      else if (r.then === 'push' && r.key) {
+        const value = r.pushValue ?? true;
+        push[r.key] = { data: value, at: now() }; pushVersion++;
+        bc.postMessage({ type: 'push', key: r.key, value });
+      }
+      return json({ ok: true });
+    }
     if (path === '/api/notify' && method === 'POST') { const d = parse(body); return json(emit('notify', typeof d === 'object' && d ? d : { text: String(d) })); }
     if (path.startsWith('/api/goto/') && method === 'POST') return json(emit('goto', { page: decodeURIComponent(path.slice(10)) }));
     if (path === '/api/refresh' && method === 'POST') return json(emit('refresh'));

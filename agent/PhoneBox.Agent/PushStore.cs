@@ -6,7 +6,7 @@ namespace PhoneBox.Agent;
 
 public sealed record PushItem(JsonElement Data, long At, long? ExpiresAt);
 
-/// <param name="Kind">notify | goto | refresh | reload</param>
+/// <param name="Kind">notify | goto | back | refresh | reload | approval | approval-done</param>
 public sealed record PanelEvent(long Seq, string Kind, JsonElement? Data, long At);
 
 /// <summary>
@@ -144,6 +144,8 @@ public sealed partial class PushStore
     }
 
     /// <summary>"21.5" becomes a number, "true" a boolean, anything else a string.</summary>
+    public static JsonElement ParseValue(string text) => Parse(text);
+
     private static JsonElement Parse(string text)
     {
         if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d) && double.IsFinite(d))

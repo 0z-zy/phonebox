@@ -59,6 +59,7 @@ AddMonitor<GitHubMonitor>(builder.Services);
 AddMonitor<PingMonitor>(builder.Services);
 AddMonitor<AdbReverse>(builder.Services);
 AddMonitor<UpdateService>(builder.Services);
+AddMonitor<RuleEngine>(builder.Services);
 builder.Services.AddHostedService<Tray>();
 
 var app = builder.Build();
@@ -242,8 +243,18 @@ object State(IServiceProvider sp, long? ev)
         media = sp.GetRequiredService<MediaMonitor>().Snapshot(),
         audio = sp.GetRequiredService<AudioControl>().Snapshot(),
         ping = sp.GetRequiredService<PingMonitor>().Snapshot(),
+        rules = sp.GetRequiredService<RuleEngine>().Active(),
     };
 }
+
+// Settings › Rules › Test: runs a rule's action once (the rule may be unsaved).
+app.MapPost("/api/rules/test", (RuleConfig rule, RuleEngine rules) =>
+{
+    if (!RuleConfig.Actions.Contains(rule.Then)) return Results.BadRequest(new { error = "unknown action" });
+    if (string.IsNullOrWhiteSpace(rule.Id)) rule.Id = "test";
+    rules.Test(rule);
+    return Results.Ok(new { ok = true });
+});
 
 app.MapGet("/api/state", (long? ev, HttpContext ctx) => Results.Json(State(ctx.RequestServices, ev)));
 
