@@ -23,14 +23,19 @@ corner to resize, click to set options). Start a page from a template or from sc
 | <img src="docs/screenshots/ai.png" alt=""> | <img src="docs/screenshots/feeds.png" alt=""> |
 | **World**: world clocks, hourly forecast and calendar. | **Music**: a big now-playing card with the clock and a 7-day forecast. |
 | <img src="docs/screenshots/world.png" alt=""> | <img src="docs/screenshots/music.png" alt=""> |
+| **Ambient**: analog clock, sun & moon, air quality, a quote and the week's weather. | **Markets**: exchange rates and crypto with trends, Hacker News top stories. |
+| <img src="docs/screenshots/ambient.png" alt=""> | <img src="docs/screenshots/markets.png" alt=""> |
 | **System**: live charts for CPU, GPU (NVIDIA), memory, disks, network and ping. | **Shortcuts**: a Stream Deck–style grid that launches apps, URLs or built-in actions on the PC. |
 | <img src="docs/screenshots/system.png" alt=""> | <img src="docs/screenshots/shortcuts.png" alt=""> |
 
-Templates: Home, AI quotas, Sessions, System, Processes, Shortcuts, Music, Clock, Focus, World, Dashboard, DevOps, Feeds.
+Templates (18): Home, AI quotas, Sessions, System, Processes, Shortcuts, Music, Clock, Focus, World, Dashboard, DevOps,
+Feeds, Ambient, Markets, Daily, Status, Calm.
 
-Widgets (23): clock · weather · forecast (hourly / daily) · now playing · metric tile · gauge · chart · memory & disks ·
-AI quotas · AI sessions · GitHub · processes · shortcut grid · big button · world clocks · calendar · pomodoro ·
-countdown · note · title · **command** (runs a PowerShell command on the PC every N seconds and shows its output; the
+Widgets (41): clock · analog clock · world clocks · calendar · time progress · weather · forecast (hourly / daily) ·
+sun & moon · air quality · now playing · volume · metric tile · gauge · chart · memory & disks · top processes ·
+processes · AI quotas · quota ring · AI sessions · GitHub · shortcut grid · big button · phone battery · pomodoro ·
+quick timer · stopwatch · countdown · counter · checklist · breathe · note · quote · title · image / webcam ·
+Hacker News · exchange rates · crypto prices · **command** (runs a PowerShell command on the PC every N seconds and shows its output; the
 command never leaves the PC) · **pushed value** and **notifications** (fed by webhooks).
 
 - **Sessions**: the live state of every Claude Code / Codex session (working, waiting for input, idle). The phone

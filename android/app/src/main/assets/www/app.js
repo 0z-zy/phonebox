@@ -221,7 +221,7 @@ const wxIcon = (code, day = 1) => { const x = WX[code] || ['—', '🌡️']; re
 
 async function loadWeather(force = false) {
   const { lat, lon } = cfg.weather || DEFAULT_CFG.weather;
-  const key = `v2:${lat},${lon}`;
+  const key = `v3:${lat},${lon}`;
   const cached = store.get('wx', null);
   if (cached && cached.key === key && !D.weather) { D.weather = cached.data; emit('weather'); }
   if (!force && cached && cached.key === key && Date.now() - cached.at < 14 * 60_000) return;
@@ -229,7 +229,7 @@ async function loadWeather(force = false) {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       '&current=temperature_2m,apparent_temperature,weather_code,is_day' +
       '&hourly=temperature_2m,weather_code,precipitation_probability,is_day' +
-      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,daylight_duration,uv_index_max' +
       '&timezone=auto&forecast_days=7';
     const ctl = new AbortController();
     setTimeout(() => ctl.abort(), 8000);
@@ -1343,9 +1343,579 @@ W.inbox = {
   },
 };
 
+// ---------------------------------------------------------------- more widgets: helpers
+const inflight = {};
+/** fetch() + JSON with a localStorage cache; returns stale data when offline. */
+function cached(key, url, maxAgeMs) {
+  const c = store.get('nc:' + key, null);
+  if (c && Date.now() - c.at < maxAgeMs) return Promise.resolve(c.data);
+  if (inflight[key]) return inflight[key];
+  const ctl = new AbortController();
+  setTimeout(() => ctl.abort(), 10000);
+  inflight[key] = fetch(url, { signal: ctl.signal })
+    .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then((data) => { store.set('nc:' + key, { at: Date.now(), data }); return data; })
+    .catch((e) => { if (c) return c.data; throw e; })
+    .finally(() => delete inflight[key]);
+  return inflight[key];
+}
+
+/** Calls load() now and then every intervalMs while the widget is on a visible page. */
+function every(intervalMs, load) {
+  let last = 0;
+  return () => { if (Date.now() - last >= intervalMs) { last = Date.now(); load(); } };
+}
+
+function sparkLine(canvas, data, col) {
+  if (!canvas.clientWidth || !data || data.length < 2) return;
+  const [g, w, hh, dpr] = sizeCanvas(canvas);
+  g.clearRect(0, 0, w, hh);
+  const min = Math.min(...data), max = Math.max(...data), span = max - min || 1;
+  g.beginPath();
+  data.forEach((v, i) => { const x = (i / (data.length - 1)) * w, y = hh - 2 * dpr - ((v - min) / span) * (hh - 4 * dpr); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+  g.strokeStyle = col; g.lineWidth = 1.5 * dpr; g.lineJoin = 'round'; g.stroke();
+}
+
+const fmtNum = (v) => (v == null ? '—' : v >= 1000 ? v.toLocaleString(LOCALE, { maximumFractionDigits: 0 }) : v >= 10 ? v.toFixed(2) : v.toPrecision(4));
+const pctSpan = (p) => { const e = h('span', 'chg ' + (p >= 0 ? 'up' : 'down'), `${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(2)}%`); return e; };
+const lines = (v, d) => (Array.isArray(v) ? v : typeof v === 'string' ? v.split('\n') : d).map((x) => String(x).trim()).filter(Boolean);
+
+/** Gauge-style dial used by several widgets. */
+function dialEl() {
+  const dial = h('div', 'g-dial'), val = h('div', 'g-val');
+  dial.append(val);
+  let svg = null;
+  dial.set = (pct, text, unit, elapsed) => {
+    if (svg) svg.remove();
+    dial.insertAdjacentHTML('afterbegin', ringSvg(pct, elapsed)); // numbers only
+    svg = dial.firstElementChild;
+    val.replaceChildren(String(text), unit ? h('small', null, unit) : '');
+  };
+  return dial;
+}
+
+function canKillAnywhere() {
+  return (cfg.pages || []).some((p) => p.enabled !== false && (p.widgets || []).some((w) => w.type === 'processes' && w.options?.allowKill !== false));
+}
+
+// ---------------------------------------------------------------- clocks & time
+W.analog = {
+  bare: true, needs: ['tick'],
+  create(box, { o }) {
+    const showSec = o.seconds !== false;
+    let fmt = null;
+    if (o.zone) { try { fmt = new Intl.DateTimeFormat('en-GB', { timeZone: o.zone, hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' }); } catch (_) {} }
+    const ticks = Array.from({ length: 60 }, (_, i) => {
+      const big = i % 5 === 0, a = (i * Math.PI) / 30, r1 = big ? 40 : 43.5;
+      return `<line class="tk${big ? ' b' : ''}" x1="${(50 + r1 * Math.sin(a)).toFixed(2)}" y1="${(50 - r1 * Math.cos(a)).toFixed(2)}" x2="${(50 + 46.5 * Math.sin(a)).toFixed(2)}" y2="${(50 - 46.5 * Math.cos(a)).toFixed(2)}"/>`;
+    }).join('');
+    const nums = o.numbers ? [12, 3, 6, 9].map((n, i) => `<text x="${50 + 33 * Math.sin((i * Math.PI) / 2)}" y="${50 - 33 * Math.cos((i * Math.PI) / 2) + 3.6}">${n}</text>`).join('') : '';
+    box.innerHTML = `<svg viewBox="0 0 100 100" class="analog"><circle class="face" cx="50" cy="50" r="48.5"/>${ticks}${nums}` +
+      '<line class="hh" x1="50" y1="53" x2="50" y2="27"/><line class="mh" x1="50" y1="55" x2="50" y2="12"/>' +
+      (showSec ? '<line class="sh" x1="50" y1="60" x2="50" y2="8"/>' : '') + '<circle class="hub" cx="50" cy="50" r="2.4"/></svg>';
+    if (o.label) box.append(h('div', 'an-l', o.label));
+    const [hh, mh, sh] = ['.hh', '.mh', '.sh'].map((s) => box.querySelector(s));
+    return {
+      update() {
+        let H, M, S;
+        if (fmt) { const p = Object.fromEntries(fmt.formatToParts(new Date()).map((x) => [x.type, +x.value])); [H, M, S] = [p.hour, p.minute, p.second]; }
+        else { const d = new Date(); [H, M, S] = [d.getHours(), d.getMinutes(), d.getSeconds()]; }
+        hh.setAttribute('transform', `rotate(${(H % 12) * 30 + M * 0.5} 50 50)`);
+        mh.setAttribute('transform', `rotate(${M * 6 + S * 0.1} 50 50)`);
+        sh?.setAttribute('transform', `rotate(${S * 6} 50 50)`);
+      },
+    };
+  },
+};
+
+W.progress = {
+  needs: ['tick'],
+  create(box) {
+    const rows = ['Day', 'Week', 'Month', 'Year'].map((n) => {
+      const pct = h('span'), bar = h('i');
+      const row = h('div', 'pr-row', h('div', 'm-row', h('span', null, n), pct), h('div', 'track', bar));
+      return { pct, bar, row };
+    });
+    box.append(h('div', 'w-title', 'Time'), h('div', 'pr-list', rows.map((r) => r.row)));
+    let shown = -1;
+    return {
+      update() {
+        const now = new Date();
+        if (now.getMinutes() === shown) return;
+        shown = now.getMinutes();
+        const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const wk0 = new Date(day0); wk0.setDate(day0.getDate() - ((day0.getDay() + 6) % 7));
+        const m0 = new Date(now.getFullYear(), now.getMonth(), 1), m1 = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const y0 = new Date(now.getFullYear(), 0, 1), y1 = new Date(now.getFullYear() + 1, 0, 1);
+        const vals = [(now - day0) / 864e5, (now - wk0) / (7 * 864e5), (now - m0) / (m1 - m0), (now - y0) / (y1 - y0)];
+        vals.forEach((v, i) => { rows[i].pct.textContent = (v * 100).toFixed(i === 3 ? 1 : 0) + '%'; rows[i].bar.style.width = v * 100 + '%'; });
+      },
+    };
+  },
+};
+
+W.stopwatch = {
+  needs: ['fast'],
+  create(box, { page, w }) {
+    const key = `sw:${page.id}/${w.id}`;
+    let st = store.get(key, null) || { start: null, acc: 0, laps: [] };
+    const save = () => store.set(key, st);
+    const t = h('div', 'sw-t'), laps = h('div', 'sw-laps');
+    const a = h('button', 'pb main', '▶'), b = h('button', 'pb', '↺');
+    box.append(h('div', 'w-title', 'Stopwatch'), t, h('div', 'pomo-btns', b, a), laps);
+    const elapsed = () => st.acc + (st.start ? Date.now() - st.start : 0);
+    const fmtSw = (ms) => { const s = Math.floor(ms / 1000); const hh = Math.floor(s / 3600); return (hh ? hh + ':' + pad(Math.floor((s % 3600) / 60)) : Math.floor(s / 60)) + ':' + pad(s % 60) + '.' + Math.floor((ms % 1000) / 100); };
+    const renderLaps = () => laps.replaceChildren(...st.laps.slice(-6).reverse().map((l, i, arr) => h('div', 'sw-lap', h('span', null, '#' + (st.laps.length - i)), h('span', null, fmtSw(l)))));
+    const paint = () => { a.textContent = st.start ? '⏸' : '▶'; b.textContent = st.start ? '⚑' : '↺'; box.classList.toggle('run', !!st.start); };
+    a.addEventListener('click', () => { haptic(); if (st.start) { st.acc = elapsed(); st.start = null; } else st.start = Date.now(); save(); paint(); });
+    b.addEventListener('click', () => { haptic(); if (st.start) st.laps.push(elapsed()); else st = { start: null, acc: 0, laps: [] }; save(); paint(); renderLaps(); });
+    paint(); renderLaps();
+    return { update() { t.textContent = fmtSw(elapsed()); } };
+  },
+};
+
+W.timer = {
+  needs: ['tick'],
+  create(box, { o, page, w }) {
+    const key = `tm:${page.id}/${w.id}`;
+    const presets = lines(o.presets, ['1', '3', '5', '10', '15', '25']).map(Number).filter((n) => n > 0).slice(0, 8);
+    let st = store.get(key, null) || { endsAt: null, left: 0, total: 0 };
+    const save = () => store.set(key, st);
+    const dial = dialEl(), btns = h('div', 'tm-btns');
+    box.append(h('div', 'w-title', o.label || 'Timer'), dial, btns);
+    box.style.setProperty('--q', o.color || '#38bdf8');
+    const remaining = () => (st.endsAt ? Math.max(0, st.endsAt - Date.now()) : st.left);
+    const renderBtns = () => {
+      if (!st.total) {
+        btns.replaceChildren(...presets.map((m) => { const b = h('button', 'chip-btn', m + 'm'); b.addEventListener('click', () => { haptic(); st = { endsAt: Date.now() + m * 60000, left: m * 60000, total: m * 60000 }; save(); renderBtns(); render(); }); return b; }));
+      } else {
+        const p = h('button', 'pb main', st.endsAt ? '⏸' : '▶'), x = h('button', 'pb', '✕');
+        p.addEventListener('click', () => { haptic(); if (st.endsAt) { st.left = remaining(); st.endsAt = null; } else st.endsAt = Date.now() + st.left; save(); renderBtns(); });
+        x.addEventListener('click', () => { haptic(); st = { endsAt: null, left: 0, total: 0 }; save(); renderBtns(); render(); });
+        btns.replaceChildren(x, p);
+      }
+    };
+    const render = () => {
+      if (st.endsAt && remaining() <= 0) {
+        st = { endsAt: null, left: 0, total: 0 }; save(); renderBtns();
+        buzz('0,300,150,300,150,600');
+        toast('Time is up', 'ok', '⏳ ' + (o.label || 'Timer'), 6);
+      }
+      const left = remaining();
+      dial.set(st.total ? 100 * (left / st.total) : 0, st.total ? fmtTime(left + 999) : '—');
+      box.classList.toggle('run', !!st.endsAt);
+    };
+    renderBtns();
+    return { update: render };
+  },
+};
+
+W.counter = {
+  needs: [],
+  create(box, { o, page, w }) {
+    const key = `ct:${page.id}/${w.id}`;
+    const today = new Date().toDateString();
+    let st = store.get(key, null) || { n: 0, day: today };
+    if (o.daily && st.day !== today) st = { n: 0, day: today };
+    const step = Number(o.step) || 1;
+    const num = h('div', 'ct-n'), minus = h('button', 'pb', '−'), plus = h('button', 'pb main', '+'), reset = h('button', 'mini-btn', 'Reset');
+    box.style.setProperty('--q', o.color || '#a78bfa');
+    box.append(h('div', 'w-title', o.label || 'Counter', reset), num, h('div', 'pomo-btns', minus, plus));
+    const set = (n) => { st.n = n; st.day = new Date().toDateString(); store.set(key, st); num.textContent = st.n; };
+    plus.addEventListener('click', () => { haptic(); set(st.n + step); });
+    minus.addEventListener('click', () => { haptic(); set(st.n - step); });
+    reset.addEventListener('click', () => { haptic(); set(0); });
+    num.textContent = st.n;
+    return {};
+  },
+};
+
+W.breathe = {
+  needs: ['tick'],
+  create(box, { o }) {
+    const PATTERNS = { box: [['Inhale', 4], ['Hold', 4], ['Exhale', 4], ['Hold', 4]], relax: [['Inhale', 4], ['Hold', 7], ['Exhale', 8]], calm: [['Inhale', 5], ['Exhale', 5]] };
+    const phases = PATTERNS[o.pattern] || PATTERNS.box;
+    const cycle = phases.reduce((a, p) => a + p[1], 0);
+    const ball = h('div', 'br-ball'), word = h('div', 'br-w', 'Tap to start'), count = h('div', 'br-c');
+    box.append(h('div', 'br-stage', ball, h('div', 'br-txt', word, count)));
+    let start = null, lastPhase = -1;
+    box.addEventListener('click', () => { haptic(); start = start ? null : Date.now(); lastPhase = -1; if (!start) { ball.style.transition = 'transform 1s ease'; ball.style.transform = 'scale(.45)'; word.textContent = 'Tap to start'; count.textContent = ''; } });
+    ball.style.transform = 'scale(.45)';
+    return {
+      update() {
+        if (!start) return;
+        let t = ((Date.now() - start) / 1000) % cycle, i = 0;
+        while (t >= phases[i][1]) { t -= phases[i][1]; i++; }
+        const [name, secs] = phases[i];
+        if (i !== lastPhase) {
+          lastPhase = i;
+          ball.style.transition = `transform ${secs}s ease-in-out`;
+          if (name === 'Inhale') ball.style.transform = 'scale(1)';
+          if (name === 'Exhale') ball.style.transform = 'scale(.45)';
+          word.textContent = name;
+        }
+        count.textContent = Math.ceil(secs - t);
+      },
+    };
+  },
+};
+
+const QUOTES = [
+  ['The best way out is always through.', 'Robert Frost'],
+  ['Simplicity is the ultimate sophistication.', 'Leonardo da Vinci'],
+  ['Well begun is half done.', 'Aristotle'],
+  ['Premature optimization is the root of all evil.', 'Donald Knuth'],
+  ['Talk is cheap. Show me the code.', 'Linus Torvalds'],
+  ['First, solve the problem. Then, write the code.', 'John Johnson'],
+  ['Programs must be written for people to read.', 'Harold Abelson'],
+  ['Make it work, make it right, make it fast.', 'Kent Beck'],
+  ['Deleted code is debugged code.', 'Jeff Sickel'],
+  ['Waste no more time arguing what a good man should be. Be one.', 'Marcus Aurelius'],
+  ['What stands in the way becomes the way.', 'Marcus Aurelius'],
+  ['We suffer more often in imagination than in reality.', 'Seneca'],
+  ['Luck is what happens when preparation meets opportunity.', 'Seneca'],
+  ['Do what you can, with what you have, where you are.', 'Theodore Roosevelt'],
+  ['Nothing in life is to be feared, it is only to be understood.', 'Marie Curie'],
+  ['Imagination is more important than knowledge.', 'Albert Einstein'],
+  ['Knowledge is power.', 'Francis Bacon'],
+  ['Measure twice, cut once.', 'Proverb'],
+  ['Rome wasn’t built in a day.', 'Proverb'],
+  ['Drop by drop, a lake is formed.', 'Turkish proverb'],
+  ['Patience is bitter, but its fruit is sweet.', 'Proverb'],
+  ['A journey of a thousand miles begins with a single step.', 'Laozi'],
+];
+
+W.quote = {
+  needs: ['tick'],
+  create(box, { o }) {
+    const custom = lines(o.quotes, []).map((l) => { const i = l.lastIndexOf(' — '); return i > 0 ? [l.slice(0, i), l.slice(i + 3)] : [l, '']; });
+    const list = custom.length ? custom : QUOTES;
+    const mins = Math.max(1, Number(o.minutes) || 30);
+    const q = h('div', 'qt-q'), a = h('div', 'qt-a');
+    box.append(h('div', 'qt-mark', '“'), q, a);
+    let offset = 0, shown = -1;
+    const pick = () => {
+      const idx = (Math.floor(Date.now() / (mins * 60000)) + offset) % list.length;
+      if (idx === shown) return;
+      shown = idx;
+      q.textContent = list[idx][0];
+      a.textContent = list[idx][1] ? '— ' + list[idx][1] : '';
+      box.style.setProperty('--qf', list[idx][0].length < 40 ? 1.25 : list[idx][0].length < 80 ? 1 : 0.8);
+    };
+    box.addEventListener('click', () => { haptic(); offset++; pick(); });
+    return { update: pick };
+  },
+};
+
+W.checklist = {
+  needs: ['tick'],
+  create(box, { o, page, w }) {
+    const items = lines(o.items, ['Water the plants', 'Stretch', 'Inbox zero']);
+    const key = `cl:${page.id}/${w.id}`;
+    const day = () => new Date().toDateString();
+    let st = store.get(key, null) || { day: day(), done: [] };
+    const fresh = () => { if (o.daily !== false && st.day !== day()) st = { day: day(), done: [] }; };
+    const head = h('span', 'w-sub');
+    const list = h('div', 'cl-list');
+    box.append(h('div', 'w-title', o.title || 'Today', head), list);
+    const render = () => {
+      fresh();
+      const n = items.filter((x) => st.done.includes(x)).length;
+      head.textContent = `${n} / ${items.length}`;
+      box.classList.toggle('all', n === items.length && n > 0);
+      list.replaceChildren(...items.map((it) => {
+        const done = st.done.includes(it);
+        const row = h('button', 'cl-i' + (done ? ' done' : ''), h('span', 'cl-box', done ? '✓' : ''), h('span', 'cl-t', it));
+        row.addEventListener('click', () => {
+          haptic();
+          st.done = done ? st.done.filter((x) => x !== it) : [...st.done, it];
+          st.day = day();
+          store.set(key, st);
+          render();
+        });
+        return row;
+      }));
+    };
+    let lastDay = day();
+    render();
+    return { update() { if (day() !== lastDay) { lastDay = day(); render(); } } };
+  },
+};
+
+// ---------------------------------------------------------------- phone & PC
+W.battery = {
+  needs: ['tick'],
+  create(box) {
+    const dial = dialEl(), sub = h('div', 'g-sub');
+    box.append(dial, h('div', 'g-label', 'PHONE'), sub);
+    const load = every(20_000, () => {
+      if (!bridge) { dial.set(0, '—'); sub.textContent = 'Only on the phone'; return; }
+      try {
+        const b = JSON.parse(bridge.battery());
+        box.style.setProperty('--q', b.plugged ? '#22c55e' : b.level <= 20 ? '#ef4444' : b.level <= 40 ? '#f59e0b' : '#84cc16');
+        dial.set(b.level, b.level, '%');
+        sub.textContent = (b.plugged ? '⚡ Charging' : 'On battery') + (b.temp ? ` · ${b.temp.toFixed(0)}°C` : '');
+      } catch (_) {}
+    });
+    return { update: load };
+  },
+};
+
+W.topprocs = {
+  needs: ['procs'],
+  create(box, { o }) {
+    const byMem = o.sort === 'mem';
+    const list = h('div', 'tp-list');
+    box.style.setProperty('--c', '#f472b6');
+    box.append(h('div', 'w-title', byMem ? 'Top memory' : 'Top CPU'), list);
+    return {
+      update() {
+        const data = D.procs;
+        if (!data?.groups?.length) { list.replaceChildren(h('div', 'empty', 'Measuring…')); return; }
+        const n = Math.max(1, Math.floor((box.clientHeight - 30) / 24));
+        const top = [...data.groups].sort((a, b) => (byMem ? b.memMb - a.memMb : b.cpu - a.cpu)).slice(0, n);
+        list.replaceChildren(...top.map((g) => {
+          const ico = h('div', 'p-ico');
+          fillIcon(ico, g);
+          const row = h('div', 'tp-i', ico, h('span', 'tp-n', g.title + (g.count > 1 ? ` ×${g.count}` : '')), h('b', null, byMem ? fmtMem(g.memMb) : g.cpu.toFixed(1) + '%'));
+          row.addEventListener('click', () => { haptic(); openSheet(g, canKillAnywhere()); });
+          return row;
+        }));
+      },
+    };
+  },
+};
+
+W.quotaring = {
+  needs: ['quotas', 'tick'],
+  create(box, { o }) {
+    const prov = o.provider || 'claude', idx = Number(o.limit) || 0;
+    const st = Q_STYLE[prov] || { color: '#94a3b8', logo: '●' };
+    box.style.setProperty('--q', st.color);
+    const dial = dialEl(), label = h('div', 'g-label'), sub = h('div', 'g-sub');
+    box.append(dial, label, sub);
+    let last = 0;
+    const render = () => {
+      const p = quotaProviders().find((x) => x.id === prov);
+      const l = p?.limits?.[idx];
+      if (!l) { dial.set(0, '—'); label.textContent = `${st.logo} ${p?.name || prov}`; sub.textContent = D.quotas ? 'No data' : 'Waiting…'; return; }
+      const pace = paceInfo(l);
+      dial.style.setProperty('--qc', l.percent >= 95 ? '#ef4444' : l.percent >= 80 ? '#f59e0b' : 'var(--q)');
+      dial.set(l.percent, Math.round(l.percent), '%', pace?.elapsed);
+      label.textContent = `${st.logo} ${p.name} · ${l.label}`;
+      sub.textContent = l.resetsAt ? 'resets in ' + fmtDur(l.resetsAt - Date.now()) : '';
+      sub.className = 'g-sub ' + (pace?.cls === 'over' ? 'hot' : '');
+    };
+    return { update(kind) { if (kind === 'tick' && Date.now() - last < 30_000) return; last = Date.now(); render(); } };
+  },
+};
+
+W.volume = {
+  needs: ['state'],
+  create(box) {
+    const fill = h('i'), bar = h('div', 'vb', fill), pct = h('div', 'vb-v', '--');
+    const mute = h('button', 'pb', '🔇'), down = h('button', 'pb', '−'), up = h('button', 'pb', '+');
+    box.append(h('div', 'w-title', 'Volume'), h('div', 'vb-row', bar, pct), h('div', 'pomo-btns', mute, down, up));
+    let dragging = false, timer = 0, level = 0;
+    const vertical = () => box.clientHeight > box.clientWidth * 1.15;
+    const paint = (v, muted) => {
+      level = v;
+      box.classList.toggle('vert', vertical());
+      fill.style[vertical() ? 'height' : 'width'] = v + '%';
+      fill.style[vertical() ? 'width' : 'height'] = '100%';
+      pct.textContent = muted ? 'muted' : v + '%';
+      box.classList.toggle('muted', !!muted);
+    };
+    const fromPointer = (e) => {
+      const r = bar.getBoundingClientRect();
+      const f = vertical() ? 1 - (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+      const v = Math.round(Math.max(0, Math.min(1, f)) * 100);
+      paint(v, false);
+      clearTimeout(timer);
+      timer = setTimeout(() => api('/volume?level=' + v, 'POST').catch(() => {}), 80);
+    };
+    bar.addEventListener('pointerdown', (e) => { dragging = true; bar.setPointerCapture(e.pointerId); fromPointer(e); });
+    bar.addEventListener('pointermove', (e) => { if (dragging) fromPointer(e); });
+    bar.addEventListener('pointerup', () => setTimeout(() => (dragging = false), 400));
+    const op = (q) => async () => { haptic(); try { const a = await api('/volume?' + q, 'POST'); paint(a.volume, a.muted); } catch (_) {} };
+    mute.addEventListener('click', op('op=mute'));
+    down.addEventListener('click', op('op=down'));
+    up.addEventListener('click', op('op=up'));
+    return { update() { const a = D.state?.audio; if (a && !dragging) paint(a.volume, a.muted); } };
+  },
+};
+
+// ---------------------------------------------------------------- sky & air
+function moonPhase(date) {
+  const syn = 29.530588853;
+  const age = ((((date - Date.UTC(2000, 0, 6, 18, 14)) / 864e5) % syn) + syn) % syn;
+  const names = ['New moon', 'Waxing crescent', 'First quarter', 'Waxing gibbous', 'Full moon', 'Waning gibbous', 'Last quarter', 'Waning crescent'];
+  const i = Math.floor(((age + syn / 16) % syn) / (syn / 8));
+  return { name: names[i], icon: '🌑🌒🌓🌔🌕🌖🌗🌘'.match(/./gu)[i], illum: (1 - Math.cos((2 * Math.PI * age) / syn)) / 2 };
+}
+
+W.sun = {
+  needs: ['weather', 'tick'],
+  create(box) {
+    box.innerHTML = '<div class="w-title">Sun &amp; moon<span class="w-sub"></span></div>' +
+      '<svg class="sun-arc" viewBox="0 0 200 80" preserveAspectRatio="xMidYMax meet"><path class="sa-bg" d="M10 75 A90 70 0 0 1 190 75"/><path class="sa-fg" d="M10 75 A90 70 0 0 1 190 75"/><line class="sa-h" x1="2" y1="75" x2="198" y2="75"/><circle class="sa-sun" r="7" cx="10" cy="75"/></svg>' +
+      '<div class="sun-row"><span class="sr"></span><span class="sl"></span><span class="ss"></span></div><div class="moon"></div>';
+    const q = (s) => box.querySelector(s);
+    const fg = q('.sa-fg'), sun = q('.sa-sun');
+    const len = fg.getTotalLength();
+    fg.style.strokeDasharray = len;
+    let shown = '';
+    return {
+      update() {
+        const d = D.weather?.daily;
+        if (!d?.sunrise) { q('.sl').textContent = D.weather === null ? 'Loading…' : 'Weather unavailable'; return; }
+        const now = new Date();
+        const key = now.getHours() + ':' + now.getMinutes();
+        if (key === shown) return;
+        shown = key;
+        const rise = new Date(d.sunrise[0]), set = new Date(d.sunset[0]);
+        const f = Math.max(0, Math.min(1, (now - rise) / (set - rise)));
+        fg.style.strokeDashoffset = len * (1 - f);
+        const pt = fg.getPointAtLength(len * f);
+        sun.setAttribute('cx', pt.x.toFixed(1)); sun.setAttribute('cy', pt.y.toFixed(1));
+        box.classList.toggle('night', now < rise || now > set);
+        const hm = (t) => t.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
+        q('.sr').textContent = '↑ ' + hm(rise);
+        q('.ss').textContent = hm(set) + ' ↓';
+        q('.sl').textContent = now < rise ? `rises in ${fmtDur(rise - now)}` : now > set ? 'after sunset' : `${fmtDur(set - now)} of light left`;
+        q('.w-sub').textContent = 'Day ' + fmtDur((d.daylight_duration?.[0] ?? (set - rise) / 1000) * 1000) + (d.uv_index_max?.[0] != null ? ` · UV ${Math.round(d.uv_index_max[0])}` : '');
+        const m = moonPhase(now);
+        q('.moon').textContent = `${m.icon} ${m.name} · ${Math.round(m.illum * 100)}%`;
+      },
+    };
+  },
+};
+
+const AQI_BANDS = [[20, 'Good', '#22c55e'], [40, 'Fair', '#84cc16'], [60, 'Moderate', '#eab308'], [80, 'Poor', '#f97316'], [100, 'Very poor', '#ef4444'], [1e9, 'Extremely poor', '#a855f7']];
+W.air = {
+  needs: ['tick'],
+  create(box) {
+    const v = h('div', 'aq-v', '—'), cat = h('div', 'aq-c', 'Loading…'), chips = h('div', 'aq-chips');
+    box.append(h('div', 'w-title', 'Air quality', h('span', 'w-sub', cfg.weather?.city || '')), h('div', 'aq-main', v, cat), chips);
+    const load = every(30 * 60_000, async () => {
+      const { lat, lon } = cfg.weather || DEFAULT_CFG.weather;
+      try {
+        const d = await cached(`air:${lat},${lon}`, `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}` +
+          '&current=european_aqi,pm2_5,pm10,ozone,nitrogen_dioxide&timezone=auto', 30 * 60_000);
+        const c = d.current || {};
+        const band = AQI_BANDS.find((b) => (c.european_aqi ?? 0) <= b[0]);
+        box.style.setProperty('--c', band[2]);
+        v.textContent = Math.round(c.european_aqi ?? 0);
+        cat.textContent = band[1] + ' · European AQI';
+        chips.replaceChildren(...[['PM2.5', c.pm2_5], ['PM10', c.pm10], ['O₃', c.ozone], ['NO₂', c.nitrogen_dioxide]]
+          .filter((x) => x[1] != null).map(([n, x]) => h('span', 'chip', `${n} ${Math.round(x)}`)));
+      } catch (_) { cat.textContent = 'Unavailable'; }
+    });
+    return { update: load };
+  },
+};
+
+// ---------------------------------------------------------------- the internet
+W.hackernews = {
+  needs: ['tick'],
+  create(box) {
+    const list = h('div', 'hn-list', h('div', 'empty', 'Loading…'));
+    box.style.setProperty('--c', '#ff6600');
+    box.append(h('div', 'w-title', 'Hacker News', h('span', 'w-sub', '')), list);
+    const load = every(15 * 60_000, async () => {
+      try {
+        const key = 'hn';
+        let data = store.get('nc:' + key, null);
+        if (!data || Date.now() - data.at > 15 * 60_000) {
+          const ids = (await cached('hn-ids', 'https://hacker-news.firebaseio.com/v0/topstories.json', 15 * 60_000)).slice(0, 15);
+          const items = await Promise.all(ids.map((id) => fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then((r) => r.json()).catch(() => null)));
+          data = { at: Date.now(), data: items.filter(Boolean).map((i) => ({ t: i.title, u: i.url, s: i.score, c: i.descendants || 0 })) };
+          store.set('nc:' + key, data);
+        }
+        box.querySelector('.w-sub').textContent = ago(data.at);
+        const n = Math.max(1, Math.floor((box.clientHeight - 30) / 33));
+        list.replaceChildren(...data.data.slice(0, n).map((s, i) => {
+          let host = '';
+          try { host = s.u ? new URL(s.u).hostname.replace(/^www\./, '') : 'news.ycombinator.com'; } catch (_) {}
+          return h('div', 'hn-i', h('span', 'hn-r', i + 1), h('div', 'hn-b', h('div', 'hn-t', s.t), h('div', 'hn-m', `▲ ${s.s} · ${s.c} comments · ${host}`)));
+        }));
+      } catch (_) { if (!list.querySelector('.hn-i')) list.replaceChildren(h('div', 'empty', 'Offline')); }
+    });
+    return { update: load };
+  },
+};
+
+W.exchange = {
+  needs: ['tick'],
+  create(box, { o }) {
+    const base = (o.base || 'EUR').toUpperCase();
+    const syms = lines(o.symbols, ['TRY', 'USD', 'GBP']).map((s) => s.toUpperCase()).slice(0, 8);
+    const list = h('div', 'fx-list', h('div', 'empty', 'Loading…'));
+    box.append(h('div', 'w-title', `1 ${base}`, h('span', 'w-sub', '')), list);
+    const load = every(60 * 60_000, async () => {
+      try {
+        const from = new Date(Date.now() - 31 * 864e5).toISOString().slice(0, 10);
+        const d = await cached(`fx:${base}:${syms}`, `https://api.frankfurter.dev/v1/${from}..?base=${base}&symbols=${syms.join(',')}`, 60 * 60_000);
+        const days = Object.keys(d.rates).sort();
+        box.querySelector('.w-sub').textContent = 'ECB · ' + days.at(-1);
+        list.replaceChildren(...syms.map((s) => {
+          const series = days.map((k) => d.rates[k][s]).filter((x) => x != null);
+          const last = series.at(-1), prev = series.at(-2) ?? last;
+          const c = h('canvas', 'fx-sp');
+          const row = h('div', 'fx-i', h('b', null, s), h('span', 'fx-v', fmtNum(last)), pctSpan(((last - prev) / prev) * 100), c);
+          requestAnimationFrame(() => sparkLine(c, series, last >= series[0] ? '#22c55e' : '#ef4444'));
+          return row;
+        }));
+      } catch (_) { list.replaceChildren(h('div', 'empty', 'Rates unavailable')); }
+    });
+    return { update: load };
+  },
+};
+
+W.crypto = {
+  needs: ['tick'],
+  create(box, { o }) {
+    const coins = lines(o.coins, ['bitcoin', 'ethereum', 'solana']).map((s) => s.toLowerCase()).slice(0, 8);
+    const cur = (o.currency || 'usd').toLowerCase();
+    const list = h('div', 'fx-list', h('div', 'empty', 'Loading…'));
+    box.append(h('div', 'w-title', 'Crypto', h('span', 'w-sub', cur.toUpperCase() + ' · 24 h · 7 d')), list);
+    const load = every(5 * 60_000, async () => {
+      try {
+        const d = await cached(`cg:${cur}:${coins}`, `https://api.coingecko.com/api/v3/coins/markets?vs_currency=${cur}&ids=${coins.join(',')}&sparkline=true&price_change_percentage=24h`, 5 * 60_000);
+        list.replaceChildren(...d.map((c) => {
+          const cv = h('canvas', 'fx-sp');
+          const series = c.sparkline_in_7d?.price || [];
+          requestAnimationFrame(() => sparkLine(cv, series, (c.price_change_percentage_24h ?? 0) >= 0 ? '#22c55e' : '#ef4444'));
+          return h('div', 'fx-i', h('b', null, (c.symbol || '').toUpperCase()), h('span', 'fx-v', fmtNum(c.current_price)), pctSpan(c.price_change_percentage_24h ?? 0), cv);
+        }));
+      } catch (_) { list.replaceChildren(h('div', 'empty', 'Prices unavailable')); }
+    });
+    return { update: load };
+  },
+};
+
+W.image = {
+  needs: ['tick'],
+  create(box, { o }) {
+    const url = String(o.url || '');
+    const img = h('img', 'im-img');
+    img.alt = '';
+    img.style.objectFit = o.fit === 'contain' ? 'contain' : 'cover';
+    box.append(img);
+    if (o.caption) box.append(h('div', 'im-cap', o.caption));
+    if (!/^https?:\/\//i.test(url)) { box.replaceChildren(h('div', 'empty', 'Set an image address (https://…) in the settings')); return {}; }
+    img.onerror = () => box.classList.add('err');
+    img.onload = () => box.classList.remove('err');
+    const mins = Number(o.minutes) || 0;
+    const load = every(mins > 0 ? mins * 60_000 : 1e12, () => { img.src = mins > 0 ? url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now() : url; });
+    return { update: load };
+  },
+};
+
 const WIDGET_ICONS = { clock: '🕒', weather: '⛅', forecast: '🌦️', media: '🎵', stat: '📈', gauge: '⏲️', chart: '📊', meters: '💾', quotas: '✳️', sessions: '🤖',
   github: '🐙', processes: '⚙️', shortcuts: '🎛️', button: '🔘', worldclock: '🌍', calendar: '📅', pomodoro: '🍅', countdown: '⏳', note: '📝', command: '💻',
-  push: '📡', inbox: '📬', label: '🔤' };
+  push: '📡', inbox: '📬', label: '🔤', analog: '🕰️', progress: '📆', stopwatch: '⏱️', timer: '⏲️', counter: '🔢', breathe: '🫁', quote: '💬',
+  checklist: '✅', battery: '🔋', topprocs: '🔥', quotaring: '🎯', volume: '🔊', sun: '🌅', air: '🍃', hackernews: '📰', exchange: '💱', crypto: '🪙', image: '🖼️' };
 
 // ================================================================= pages
 const pager = $('pager');
