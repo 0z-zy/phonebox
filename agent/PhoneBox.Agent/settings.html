@@ -330,6 +330,12 @@ dd { margin: 0; word-break: break-all; }
 
       <div class="card">
         <h3>Display</h3>
+        <div class="row" style="gap:16px;margin-bottom:12px;align-items:flex-end">
+          <div class="field" style="margin:0"><label>Theme</label>
+            <select data-bind="display.theme"><option value="default">Default</option><option value="amoled">AMOLED black</option><option value="midnight">Midnight blue</option><option value="warm">Warm</option><option value="graphite">Graphite</option></select></div>
+          <div class="field" style="margin:0"><label>Accent colour</label><input type="color" data-bind="display.accent" style="width:56px;height:36px;padding:2px"></div>
+          <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="display.artTint"> Tint the background with the album art</label>
+        </div>
         <label class="check"><input type="checkbox" data-bind="display.showSeconds"> Show seconds on the clock</label>
         <label class="check"><input type="checkbox" data-bind="display.vibrate"> Vibrate when a session finishes or needs input</label>
         <label class="check"><input type="checkbox" data-bind="display.volumeKeys"> The phone's volume keys switch pages</label>

@@ -72,6 +72,12 @@ public sealed class DisplayConfig
     public bool Vibrate { get; set; } = true;
     /// <summary>The phone's volume keys switch pages.</summary>
     public bool VolumeKeys { get; set; } = true;
+    /// <summary>default, amoled, midnight, warm or graphite.</summary>
+    public string Theme { get; set; } = "default";
+    /// <summary>Accent colour (background glow, page dots), e.g. "#2dd4bf".</summary>
+    public string Accent { get; set; } = "#2dd4bf";
+    /// <summary>Tint the background with the album art's colour while music plays.</summary>
+    public bool ArtTint { get; set; } = true;
     /// <summary>Screen brightness follows the room (the phone's light sensor).</summary>
     public bool AutoBrightness { get; set; }
     /// <summary>Show the night screen whenever the room is dark, not only at night.</summary>

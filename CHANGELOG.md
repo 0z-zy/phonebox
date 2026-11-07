@@ -20,6 +20,9 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**Themes.** Settings › Display: Default, AMOLED black, Midnight blue, Warm and Graphite, an accent colour for the
+background glow and page dots, and whether the album art tints the background.
+
 **Custom HTML widget.** Write your own widget in HTML, CSS and JavaScript; it runs in a sandbox (no access to the
 panel, the agent or the phone) and gets the PC's data through `phonebox.on('state', …)`; it can run shortcuts.
 

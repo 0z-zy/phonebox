@@ -324,7 +324,11 @@ function keyButton(s) {
 // ---------------------------------------------------------------- media (shared state, any number of widgets)
 let media = null;          // last media state + the time it was received
 let volDragging = false;
-const DEFAULT_AMBIENT = '45, 212, 191';
+// The background glow: the accent colour (Settings › Display), or the album art's colour while music plays.
+let DEFAULT_AMBIENT = '45, 212, 191';
+let artTint = true;
+let currentArtColor = null;
+const hexToRgb = (hex) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return null; const n = parseInt(m[1], 16); return `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`; };
 
 function averageColor(img) {
   try {
@@ -345,7 +349,7 @@ function averageColor(img) {
     return [R, G, B].map((v) => Math.round(Math.min(255, v * k))).join(', ');
   } catch (_) { return null; }
 }
-const setAmbient = (rgb) => document.documentElement.style.setProperty('--ambient', rgb || DEFAULT_AMBIENT);
+const setAmbient = (rgb) => document.documentElement.style.setProperty('--ambient', (artTint && rgb) || DEFAULT_AMBIENT);
 
 const MEDIA_HTML = `
   <div class="m-top">
@@ -754,7 +758,7 @@ W.media = {
     const q = (s) => box.querySelector(s);
     const img = q('.art'), vol = q('.volr');
     let artId = -1, volTimer = 0;
-    img.addEventListener('load', () => { img.classList.add('on'); setAmbient(averageColor(img)); });
+    img.addEventListener('load', () => { img.classList.add('on'); currentArtColor = averageColor(img); setAmbient(currentArtColor); });
     img.addEventListener('error', () => img.classList.remove('on'));
     box.querySelectorAll('[data-media]').forEach((btn) => btn.addEventListener('click', async () => {
       haptic();
@@ -809,7 +813,7 @@ W.media = {
           q('.m-artist').textContent = 'Press ▶ to resume';
           q('.fill').style.width = '0';
           q('.m-pos').textContent = q('.m-dur').textContent = '0:00';
-          if (artId !== 0) { artId = 0; img.classList.remove('on'); setAmbient(null); }
+          if (artId !== 0) { artId = 0; img.classList.remove('on'); currentArtColor = null; setAmbient(null); }
           return;
         }
         box.classList.toggle('playing', m.playing);
@@ -820,7 +824,7 @@ W.media = {
         if (m.artId !== artId) {
           artId = m.artId;
           if (m.artId) img.src = `${API}/art?id=${m.artId}`;
-          else { img.classList.remove('on'); setAmbient(null); }
+          else { img.classList.remove('on'); currentArtColor = null; setAmbient(null); }
         }
       },
     };
@@ -2602,8 +2606,16 @@ function tick() {
 
 // ---------------------------------------------------------------- data from the agent
 function applyDisplay() {
-  if (PREVIEW || !bridge) return;
   const d = cfg.display || {};
+  // theme and accent apply in the preview and the browser too
+  document.body.dataset.theme = ['amoled', 'midnight', 'warm', 'graphite'].includes(d.theme) ? d.theme : 'default';
+  const accent = hexToRgb(d.accent);
+  const before = DEFAULT_AMBIENT;
+  DEFAULT_AMBIENT = accent || '45, 212, 191';
+  document.documentElement.style.setProperty('--accent', `rgb(${DEFAULT_AMBIENT})`);
+  artTint = d.artTint !== false;
+  if (before !== DEFAULT_AMBIENT || !artTint) setAmbient(artTint ? currentArtColor : null);
+  if (PREVIEW || !bridge) return;
   try { bridge.setVolumeKeys && bridge.setVolumeKeys(d.volumeKeys !== false); } catch (_) {}
   try { bridge.setPinned && bridge.setPinned(d.pin === true); } catch (_) {}
   try { bridge.setHomeScreen && bridge.setHomeScreen(d.homeScreen === true); } catch (_) {}
@@ -2737,6 +2749,7 @@ if (PREVIEW) {
     // no night screen and no idle return in the preview
     cfg = { ...DEFAULT_CFG, ...c, night: { ...(c.night || {}), enabled: false }, display: { ...(c.display || {}), idleReturnSec: 0 } };
     buildLayout();
+    applyDisplay();
     const wk = JSON.stringify(cfg.weather);
     if (wk !== weatherKey) { weatherKey = wk; loadWeather(); }
     // the editor's page index counts hidden pages too; the panel only has the shown ones
