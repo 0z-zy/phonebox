@@ -112,6 +112,8 @@ app.Use(async (ctx, next) =>
     }
     if (ctx.Request.Path.StartsWithSegments("/api/state") && ctx.Request.Headers.ContainsKey("X-PhoneBox-App"))
         Interlocked.Exchange(ref ApprovalStore.PhoneLastSeen, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+    if (ctx.Request.Headers.TryGetValue("X-PhoneBox-Device", out var device))
+        PhoneRegistry.Touch(device.ToString(), ctx.Request.Headers["X-PhoneBox-Model"].ToString(), ctx.Connection.LocalPort == Port ? "USB" : "Wi-Fi");
     if (ctx.Request.Headers.TryGetValue("X-PhoneBox-App", out var appVersion) && appVersion.ToString().Length is > 0 and < 32)
         UpdateService.AppVersion = appVersion.ToString();
     ctx.Response.Headers.CacheControl = "no-store";
@@ -399,7 +401,25 @@ app.MapPost("/api/approvals/{id}", (string id, string decision, ApprovalStore a)
 app.MapGet("/api/widget/{page}/{widget}", (string page, string widget, bool? force, CommandRunner runner) =>
     runner.Get(page, widget, force == true) is { } r ? Results.Json(r) : Results.NotFound());
 
-app.MapGet("/api/config", (ConfigStore cfg) => Results.Json(new { version = cfg.Version, config = cfg.Get().ToPublic() }));
+app.MapGet("/api/config", (ConfigStore cfg, HttpRequest req) =>
+    Results.Json(new { version = cfg.Version, config = cfg.Get().ToPublic(req.Headers["X-PhoneBox-Device"].ToString()) }));
+
+// Phones that have talked to this agent, with their settings (Settings › Phones).
+app.MapGet("/api/phones", (ConfigStore cfg) =>
+{
+    var c = cfg.Get();
+    var seen = PhoneRegistry.All().ToDictionary(p => p.Id);
+    var ids = seen.Keys.Union(c.Phones.Select(p => p.Id));
+    return Results.Json(ids.Select(id => new
+    {
+        id,
+        model = seen.TryGetValue(id, out var s) ? s.Model : null,
+        lastSeen = s?.LastSeen,
+        via = s?.Via,
+        name = c.Phones.FirstOrDefault(p => p.Id == id)?.Name,
+        pages = c.Phones.FirstOrDefault(p => p.Id == id)?.Pages,
+    }).OrderByDescending(p => p.lastSeen ?? 0));
+});
 
 app.MapGet("/api/art", (MediaMonitor media) =>
     media.Art is { } art ? Results.File(art.Bytes, art.Mime) : Results.NotFound());

@@ -18,6 +18,8 @@ public sealed class AgentConfig
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
     public List<RuleConfig> Rules { get; set; } = [];
+    /// <summary>Per-phone settings when several phones use this agent: a name and which pages each one shows.</summary>
+    public List<PhoneConfig> Phones { get; set; } = [];
     /// <summary>iCalendar feeds for the Agenda widget; the URLs are secrets and never go to the phone.</summary>
     public List<CalendarSource> Calendars { get; set; } = [];
     /// <summary>Home Assistant address and long-lived access token (the token never goes to the phone).</summary>
@@ -25,13 +27,22 @@ public sealed class AgentConfig
     /// <summary>OBS Studio's WebSocket server (obs-websocket 5).</summary>
     public ObsConfig Obs { get; set; } = new();
 
+    /// <summary>The pages a phone shows: its own selection (Settings › Phones), or all of them.</summary>
+    public IEnumerable<PageConfig> PagesFor(string? deviceId)
+    {
+        var ids = Phones.FirstOrDefault(p => p.Id == deviceId)?.Pages;
+        if (ids is not { Count: > 0 }) return Pages;
+        var chosen = Pages.Where(p => ids.Contains(p.Id)).ToList();
+        return chosen.Count > 0 ? chosen : Pages;
+    }
+
     /// <summary>The part sent to the phone: commands (shortcut cmd/args/cwd, command widget scripts) are never included.</summary>
-    public object ToPublic() => new
+    public object ToPublic(string? deviceId = null) => new
     {
         weather = Weather,
         night = Night,
         display = Display,
-        pages = Pages.Select(p => new
+        pages = PagesFor(deviceId).Select(p => new
         {
             p.Id, p.Title, p.Icon, p.Enabled,
             widgets = (p.Widgets ?? []).Select(w => new
@@ -196,6 +207,15 @@ public sealed class HomeAssistantConfig
     public string? Token { get; set; }
 }
 
+public sealed class PhoneConfig
+{
+    /// <summary>The id the phone sends (X-PhoneBox-Device).</summary>
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    /// <summary>Page ids this phone shows, in the usual order; empty or null = all pages.</summary>
+    public List<string>? Pages { get; set; }
+}
+
 public sealed class CalendarSource
 {
     public string Name { get; set; } = "";
@@ -338,6 +358,8 @@ public sealed partial class ConfigStore(string path)
             if (string.IsNullOrWhiteSpace(s.OffCmd)) s.OffCmd = null;
             if (string.IsNullOrWhiteSpace(s.OffArgs)) s.OffArgs = null;
         }
+        c.Phones = (c.Phones ?? []).Where(p => p is not null && !string.IsNullOrWhiteSpace(p.Id)).GroupBy(p => p.Id).Select(g => g.First()).Take(20).ToList();
+        foreach (var ph in c.Phones) { ph.Name = ph.Name?.Trim() ?? ""; if (ph.Pages is { Count: 0 }) ph.Pages = null; }
         c.Obs ??= new();
         if (string.IsNullOrWhiteSpace(c.Obs.Url)) c.Obs.Url = "ws://127.0.0.1:4455";
         c.HomeAssistant ??= new();

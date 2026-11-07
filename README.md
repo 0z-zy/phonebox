@@ -147,7 +147,7 @@ Double-click the tray icon (or open <http://127.0.0.1:8765>):
 - **General**: weather location search, theme and accent colour, orientation (landscape, portrait or both), night mode, clock seconds, idle timeout, vibration, volume-key paging,
   the phone's sensors (brightness that follows the room, the night screen when the room goes dark, wave to wake it),
   kiosk options (screen pinning, the panel as the phone's home screen so it starts after a reboot; no root needed),
-  phone selection, Wi-Fi & Tailscale, updates.
+  phones (several at once, each with its own pages), Wi-Fi & Tailscale, updates.
 - **Advanced**: the raw JSON.
 
 Settings live in `%APPDATA%\PhoneBox\config.json` (Linux: `~/.config/PhoneBox`, macOS: `~/Library/Application Support/PhoneBox`);

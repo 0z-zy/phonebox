@@ -246,6 +246,10 @@
     if (path === '/api/calendar') return json(calendar());
     if (path === '/api/docker') return json(docker());
     if (path === '/api/obs') return json(obsState());
+    if (path === '/api/phones') return json([
+      { id: '3f9a1c0d7b2e', model: 'UMIDIGI BISON', lastSeen: now() - 2000, via: 'USB', name: null, pages: null },
+      { id: 'c81e728d9d4c', model: 'samsung SM-X200', lastSeen: now() - 140000, via: 'Wi-Fi', name: null, pages: null },
+    ]);
     if (path === '/api/batteries') return json({ devices: [
       { name: 'WH-1000XM5', level: 64, kind: 'headphones', charging: null },
       { name: 'MX Master 3S', level: 85, kind: 'mouse', charging: null },

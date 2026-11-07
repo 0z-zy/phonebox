@@ -145,6 +145,10 @@ table.items td.val { font-family: Consolas, monospace; font-size: 12px; max-widt
 .rule.off { opacity: .55; }
 .rule .live { font-size: 12px; color: var(--accent); font-weight: 600; }
 .presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.phone-row { border-top: 1px solid var(--line); padding: 10px 0; }
+.phone-row:first-child { border-top: 0; padding-top: 0; }
+.phone-row .row { gap: 10px; }
+.phone-pages { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
 .cal-row { display: grid; grid-template-columns: 160px minmax(0, 1fr) 44px auto; gap: 8px; align-items: center; margin-bottom: 8px; }
 .cal-row input[type=color] { width: 44px; height: 34px; padding: 2px; }
 @media (max-width: 700px) { .cal-row { grid-template-columns: 1fr 44px auto; } .cal-row .cal-url { grid-column: 1 / -1; grid-row: 2; } }
@@ -372,6 +376,12 @@ dd { margin: 0; word-break: break-all; }
           <div class="field"><label>Phone to use</label><select id="serial"></select><span class="hint">If several Android devices are connected, choose which one runs the panel.</span></div>
           <div class="field"><label>Path to adb.exe (empty = auto-detect)</label><input type="text" data-bind="adbPath" placeholder="auto-detected"><span class="hint" id="adbFound"></span></div>
         </div>
+      </div>
+      <div class="card">
+        <h3>Phones</h3>
+        <p class="hint" style="margin:0 0 12px">Several phones (or a phone and a tablet) can use this computer at once, over USB or Wi-Fi. Give each one a
+          name and choose the pages it shows; a phone shows all pages until you choose.</p>
+        <div id="phoneList"><p class="hint">No phone has connected yet.</p></div>
       </div>
       <div class="card">
         <h3>Wi-Fi &amp; Tailscale</h3>
@@ -864,6 +874,40 @@ function openTemplates(index) {
 }
 function closeModal() { $('modal').hidden = true; }
 
+// ---------------------------------------------------------------- phones
+let phonesSeen = [];
+async function loadPhones() {
+  try { phonesSeen = await (await fetch('/api/phones')).json(); } catch (_) { return; }
+  renderPhones();
+}
+function renderPhones() {
+  cfg.phones ??= [];
+  const ago = (ms) => { if (!ms) return 'not seen since the agent started'; const s = (Date.now() - ms) / 1000; return s < 15 ? 'connected now' : s < 3600 ? `seen ${Math.round(s / 60)} min ago` : `seen ${Math.round(s / 3600)} h ago`; };
+  const list = phonesSeen.length ? phonesSeen : [];
+  if (!list.length) { $('phoneList').replaceChildren(h('p', { class: 'hint' }, 'No phone has connected yet.')); return; }
+  const entry = (id) => { let e = cfg.phones.find((x) => x.id === id); if (!e) { e = { id, name: '', pages: null }; cfg.phones.push(e); } return e; };
+  $('phoneList').replaceChildren(...list.map((ph) => {
+    const conf = cfg.phones.find((x) => x.id === ph.id);
+    const chosen = conf?.pages || null;
+    const all = !chosen?.length;
+    return h('div', { class: 'phone-row' },
+      h('div', { class: 'row' },
+        h('input', { type: 'text', value: conf?.name || '', placeholder: ph.model || 'Phone', style: { maxWidth: '220px' }, oninput: (e) => { entry(ph.id).name = e.target.value; changed(); } }),
+        h('span', { class: 'hint' }, `${ph.model || 'Android device'} · ${ago(ph.lastSeen)}${ph.via ? ' over ' + ph.via : ''}`)),
+      h('label', { class: 'check', style: { marginTop: '8px' } },
+        h('input', { type: 'checkbox', checked: all, onchange: (e) => { entry(ph.id).pages = e.target.checked ? null : cfg.pages.map((p) => p.id).filter(Boolean); changed(); renderPhones(); } }),
+        'Shows all pages'),
+      all ? null : h('div', { class: 'phone-pages' }, ...cfg.pages.filter((p) => p.id).map((p) => h('label', { class: 'check' },
+        h('input', { type: 'checkbox', checked: chosen.includes(p.id), onchange: (e) => {
+          const e2 = entry(ph.id);
+          const set = new Set(e2.pages || []);
+          if (e.target.checked) set.add(p.id); else set.delete(p.id);
+          e2.pages = cfg.pages.map((x) => x.id).filter((id) => set.has(id));
+          changed();
+        } }), `${p.icon || ''} ${p.title}`.trim()))));
+  }));
+}
+
 // ---------------------------------------------------------------- import / export
 function download(name, obj) {
   const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' })), download: name + '.json' });
@@ -986,7 +1030,7 @@ const RULE_PRESETS = [
 let activeRules = [];
 
 function renderRules() {
-  cfg.rules ??= []; cfg.calendars ??= []; cfg.homeAssistant ??= {}; cfg.obs ??= { enabled: false, url: 'ws://127.0.0.1:4455' };
+  cfg.rules ??= []; cfg.calendars ??= []; cfg.phones ??= []; cfg.homeAssistant ??= {}; cfg.obs ??= { enabled: false, url: 'ws://127.0.0.1:4455' };
   $('rulePresets').replaceChildren(...RULE_PRESETS.map(([label, make]) => h('button', { class: 'btn', onclick: () => {
     cfg.rules.push({ id: '', enabled: true, ...make() });
     renderRules(); changed();
@@ -1317,7 +1361,7 @@ async function load() {
   cfg = await (await fetch('/api/settings')).json();
   cfg.pages ??= []; cfg.shortcuts ??= []; cfg.rules ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false };
   saved = JSON.stringify(cfg);
-  renderPages(); renderDeck(); renderRules(); renderCalendars(); bindForm(); changed(); loadInfo();
+  renderPages(); renderDeck(); renderRules(); renderCalendars(); bindForm(); changed(); loadInfo(); loadPhones();
 }
 
 async function save() {
@@ -1329,7 +1373,7 @@ async function save() {
 }
 
 $('save').onclick = save;
-$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); renderRules(); renderCalendars(); bindForm(); changed(); };
+$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); renderRules(); renderCalendars(); renderPhones(); bindForm(); changed(); };
 $('openPhone').onclick = async () => { await fetch('/api/phone/open', { method: 'POST' }); toast('Opening the panel on the phone'); };
 $('cityBtn').onclick = searchCity;
 function renderUpdate(u) {
@@ -1388,7 +1432,7 @@ $('whClear').onclick = async () => { if (!confirm('Delete all pushed values?')) 
 setInterval(loadPushed, 4000);
 $('citySearch').onkeydown = (e) => { if (e.key === 'Enter') searchCity(); };
 $('applyJson').onclick = () => {
-  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); renderRules(); renderCalendars(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
+  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); renderRules(); renderCalendars(); renderPhones(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
   catch (e) { $('jsonErr').textContent = e.message; }
 };
 document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (!$('save').disabled) save(); } });

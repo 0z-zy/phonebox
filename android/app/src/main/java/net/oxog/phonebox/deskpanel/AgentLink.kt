@@ -1,6 +1,8 @@
 package net.oxog.phonebox.deskpanel
 
 import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -35,6 +37,12 @@ class AgentLink(context: Context) {
 
     private val prefs = context.getSharedPreferences("pairing", Context.MODE_PRIVATE)
     private val appVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+    // Identifies this phone to the agent (several phones can show different pages): a short hash of the app-scoped
+    // Android id, and the model name.
+    private val deviceId = MessageDigest.getInstance("SHA-256")
+        .digest((Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown").toByteArray())
+        .take(6).joinToString("") { "%02x".format(it) }
+    private val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}".filter { it in ' '..'~' }.trim().take(40)
     private val background = Executors.newSingleThreadExecutor()
     @Volatile private var lastPair = 0L
     @Volatile private var preferredHost = 0
@@ -101,6 +109,8 @@ class AgentLink(context: Context) {
     private fun send(c: HttpURLConnection, method: String, readTimeout: Int = 4000): Reply {
         c.requestMethod = method
         c.setRequestProperty("X-PhoneBox-App", appVersion) // lets the agent offer updates
+        c.setRequestProperty("X-PhoneBox-Device", deviceId)
+        c.setRequestProperty("X-PhoneBox-Model", deviceModel)
         c.readTimeout = readTimeout
         c.useCaches = false
         if (method == "POST") {
