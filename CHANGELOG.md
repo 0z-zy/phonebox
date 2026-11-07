@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.2 — unreleased
+## 0.6.2 — 2026-11-07
 
 **Widgets.** Pages are now 12 × 6 grids of widgets instead of fixed screens.
 
