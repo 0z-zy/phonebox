@@ -291,10 +291,12 @@ function renderStatus(el) {
     kids.push(s);
   }
   const waiting = (D.work?.sessions || []).filter((s) => s.status === 'waiting').length;
-  if (waiting) kids.push(h('span', 'sep', '·'), h('span', 'smini', `${waiting} waiting for you`));
+  if (waiting) kids.push(h('span', 'sep', '·'), h('span', 'smini', `${waiting} waiting`));
   const u = D.state?.update;
   if (u) kids.push(h('span', 'sep', '·'), h('span', 'upd', u.app && via !== 'usb' ? `⬆ ${u.latest}: plug in USB to update` : `⬆ ${u.latest} available`));
   el.replaceChildren(...kids);
+  // Too long for the widget: drop the quota summaries, the most dispensable part.
+  while (el.scrollWidth > el.clientWidth + 1 && el.querySelector('.qm')) [...el.querySelectorAll('.qm')].pop().remove();
 }
 
 // ---------------------------------------------------------------- shortcuts

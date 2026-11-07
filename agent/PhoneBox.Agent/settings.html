@@ -99,7 +99,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 @container (max-height: 36px) { .wb b { display: none; } }
 .rz { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--accent) 50%); border-bottom-right-radius: 8px; opacity: .7; }
 .ed-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-.palette { display: grid; grid-template-columns: 1fr; gap: 4px; max-height: 560px; overflow-y: auto; }
+.palette { display: grid; grid-template-columns: 1fr; gap: 2px; max-height: 620px; overflow-y: auto; }
+.pal-cat { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 10px 0 2px 8px; }
+.pal-cat:first-child { margin-top: 0; }
+input[type=search] { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; outline: none; }
 .pal { display: flex; gap: 10px; align-items: center; text-align: left; padding: 6px 8px; border-radius: 9px; border: 1px solid transparent; background: none; cursor: pointer; }
 .pal:hover { background: var(--panel-2); border-color: var(--line); }
 .pal-ico { font-size: 20px; width: 28px; text-align: center; }
@@ -496,7 +499,9 @@ function renderPageEditor() {
     h('p', { class: 'hint', style: { margin: '6px 0 14px' } }, 'Drag a widget to move it, drag its corner to resize. Widgets cannot overlap. Click one to edit its options.'),
     h('div', { class: 'ed-cols' },
       h('div', { class: 'card', id: 'inspector' }),
-      h('div', { class: 'card' }, h('h3', {}, 'Add a widget'), h('div', { class: 'palette', id: 'palette' }))));
+      h('div', { class: 'card' }, h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '8px' } }, h('h3', { style: { margin: 0 } }, 'Add a widget'),
+        h('input', { type: 'search', id: 'palSearch', placeholder: `Search ${catalog.widgets.length} widgets…`, value: palQuery, style: { width: '210px' },
+          oninput: (e) => { palQuery = e.target.value; renderPalette(); } })), h('div', { class: 'palette', id: 'palette' }))));
   renderCanvas();
   renderPalette();
   renderInspector();
@@ -559,9 +564,14 @@ function startDrag(e, w, i, mode) {
   window.addEventListener('pointerup', onUp);
 }
 
+let palQuery = '';
 function renderPalette() {
-  $('palette').replaceChildren(...catalog.widgets.map((d) => h('button', { class: 'pal', title: d.desc, onclick: () => addWidget(d) },
-    h('span', { class: 'pal-ico' }, d.icon), h('span', {}, h('b', {}, d.name), h('small', {}, d.desc)))));
+  const q = palQuery.trim().toLowerCase();
+  const list = catalog.widgets.filter((d) => !q || `${d.name} ${d.desc} ${d.type} ${d.category}`.toLowerCase().includes(q));
+  const groups = [...new Set(list.map((d) => d.category || 'Other'))];
+  $('palette').replaceChildren(...(list.length ? groups.flatMap((g) => [h('div', { class: 'pal-cat' }, g),
+    ...list.filter((d) => (d.category || 'Other') === g).map((d) => h('button', { class: 'pal', title: d.desc, onclick: () => addWidget(d) },
+      h('span', { class: 'pal-ico' }, d.icon), h('span', {}, h('b', {}, d.name), h('small', {}, d.desc))))]) : [h('p', { class: 'hint' }, 'No widget matches.')]));
 }
 
 function addWidget(d) {

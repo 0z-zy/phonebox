@@ -1,0 +1,42 @@
+# Changelog
+
+## 0.6.2 — unreleased
+
+**Widgets.** Pages are now 12 × 6 grids of widgets instead of fixed screens.
+
+- 41 widget types: clocks (digital, analog, world), calendar, time progress, countdown, pomodoro, quick timer,
+  stopwatch, weather, forecast, sun & moon, air quality, now playing, volume, metric tiles, gauges, charts,
+  memory & disks, processes, top processes, AI quotas, quota ring, AI sessions, GitHub, shortcut grid, big button,
+  phone battery, note, checklist, counter, breathe, quote, title, image / webcam, Hacker News, exchange rates,
+  crypto, command output, pushed values and notifications.
+- 18 page templates: Home, AI quotas, Sessions, System, Processes, Shortcuts, Music, Clock, Focus, World,
+  Dashboard, DevOps, Feeds, Ambient, Markets, Daily, Status, Calm.
+- Visual layout editor in the settings page: drag to move, drag the corner to resize, per-widget options,
+  a searchable widget palette grouped by category, and a template picker.
+- Existing 0.6.1 settings migrate automatically (page order, home tiles, shortcut columns, kill permission).
+
+**Getting around.** Tap the page dots or long-press a page for an overview of all pages; the phone's volume keys
+flip pages (can be turned off); the page title flashes when it changes.
+
+**Webhooks.** The agent accepts data as well as serving it: `POST /api/push/<key>` (shown by "Pushed value"
+widgets), `/api/notify` (toast, vibration, notifications widget), `/api/goto/<page>` and `/api/refresh`.
+Other machines on the network or Tailscale use a separate webhook key that never opens the phone API.
+
+**Command widgets** run a PowerShell command on the PC every N seconds and show its output; the phone never sees
+the command.
+
+**Tools.** `tools/demo-server.py` runs the panel and the settings page in a desktop browser with made-up data.
+
+## 0.6.1
+
+- Automatic updates from GitHub releases: the agent installs the new APK on the phone over USB and replaces
+  itself.
+
+## 0.6.0
+
+- Wi-Fi & Tailscale mode: pair once over USB, then HTTPS to the PC with a pinned certificate and a secret key.
+
+## 0.5.0
+
+- First public release: home, AI quotas, sessions & GitHub, system, processes and shortcut pages; settings page;
+  tray agent; night mode.

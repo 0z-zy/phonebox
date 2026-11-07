@@ -2,145 +2,189 @@
 
 <h1 align="center">PhoneBox</h1>
 
-<p align="center">Turn an old Android phone into a USB desk panel for your Windows PC.</p>
+<p align="center"><b>Turn an old Android phone into a desk panel for your Windows PC.</b><br>
+Widgets for your PC, AI coding sessions, music, weather and anything you push to it. USB or Wi-Fi, no cloud.</p>
 
-<p align="center"><img src="docs/screenshots/home.png" width="760" alt="PhoneBox home page"></p>
+<p align="center">
+  <a href="https://github.com/ersinkoc/phonebox/actions/workflows/build.yml"><img src="https://github.com/ersinkoc/phonebox/actions/workflows/build.yml/badge.svg" alt="build"></a>
+  <a href="https://github.com/ersinkoc/phonebox/releases/latest"><img src="https://img.shields.io/github/v/release/ersinkoc/phonebox?label=release" alt="latest release"></a>
+  <img src="https://img.shields.io/badge/Windows%2010%2F11-.NET%2010-512bd4" alt="Windows 10/11, .NET 10">
+  <img src="https://img.shields.io/badge/Android-9%2B-3ddc84" alt="Android 9+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+</p>
+
+<p align="center"><img src="docs/hero.png" width="900" alt="PhoneBox on three phones: status, home and ambient pages"></p>
 
 PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and a **Windows agent** that
-lives in the system tray and feeds it data over the USB cable (`adb reverse`), or optionally over Wi-Fi / Tailscale
-after pairing once over USB. No cloud, no accounts.
+lives in the system tray and feeds it over the USB cable (or over Wi-Fi / Tailscale after pairing once). You design
+the pages in a visual editor on the PC: **41 widgets**, **18 templates**, as many pages as you like.
 
-## Pages & widgets
+- **Your PC at a glance**: CPU, GPU, RAM, disks, network and ping; the heaviest apps, with "end one instance / end all".
+- **AI coding**: Claude and Codex quotas with a burn-rate forecast; every Claude Code / Codex session — the phone
+  buzzes when one finishes or needs you. GitHub review requests and your pull requests with CI status.
+- **Desk companion**: now playing with controls and volume, clocks, weather, sun & moon, air quality, calendar,
+  pomodoro, timers, checklists, notes, a breathing exercise.
+- **Stream Deck–style keys** that launch apps, URLs or built-in actions on the PC.
+- **Webhooks**: scripts, CI and Home Assistant can push values and notifications onto the panel.
 
-Every page is a 12 × 6 grid of **widgets**, designed in a visual editor on the settings page (drag to move, drag the
-corner to resize, click to set options). Start a page from a template or from scratch; have as many pages as you like.
+<p align="center"><a href="docs/tour.mp4"><img src="docs/tour.gif" width="780" alt="A tour of PhoneBox pages"></a><br>
+<sub>A tour through the pages (made-up data). <a href="docs/tour.mp4">Full video (MP4)</a></sub></p>
+
+**Contents**: [Quick start](#quick-start) · [Pages & templates](#pages--templates) · [Widgets](#widgets) ·
+[Layout editor](#layout-editor--settings) · [Webhooks](#webhooks) · [Wi-Fi & Tailscale](#wi-fi--tailscale) ·
+[Updates](#updates) · [How it works](#how-it-works) · [Security](#security--privacy) · [FAQ](#faq--troubleshooting) ·
+[Development](#development)
+
+## Quick start
+
+You need Windows 10/11, an Android 9+ phone with
+[USB debugging](https://developer.android.com/studio/debug/dev-options) turned on, and:
+
+```powershell
+winget install Microsoft.DotNet.SDK.10 Google.PlatformTools   # .NET 10 and adb
+git clone https://github.com/ersinkoc/phonebox
+cd phonebox
+.\scripts\install.ps1 -Apk -Autostart   # agent + phone app, start with Windows (add -Serial <id> if several devices are connected)
+```
+
+Plug the phone in: it wakes up and opens the panel. Double-click the tray icon (or open <http://127.0.0.1:8765>) for
+the settings. `.\scripts\uninstall.ps1 [-Purge] [-Apk]` removes everything again.
+
+Optional extras that light up more widgets: an NVIDIA GPU (`nvidia-smi`), the [GitHub CLI](https://cli.github.com)
+(`gh auth login`), Claude Code, Codex, and [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
+with its web server on port 8085 for the CPU temperature.
+
+## Pages & templates
+
+Every page is a 12 × 6 grid. Start a page from one of the 18 templates (or from scratch) and change anything.
 
 | | |
 |---|---|
-| **Home**: clock, date, weather (Open-Meteo), now playing with controls and volume, CPU / GPU / RAM / network tiles. | **Dashboard**: gauges, clock, media and a few shortcut keys. |
-| <img src="docs/screenshots/home.png" alt=""> | <img src="docs/screenshots/dashboard.png" alt=""> |
-| **AI quotas**: Claude and Codex usage limits with reset times and a burn-rate forecast ("at this pace: full in 1 d 5 h"). | **Feeds**: values and notifications pushed in through the [webhook API](#webhooks). |
-| <img src="docs/screenshots/ai.png" alt=""> | <img src="docs/screenshots/feeds.png" alt=""> |
-| **World**: world clocks, hourly forecast and calendar. | **Music**: a big now-playing card with the clock and a 7-day forecast. |
-| <img src="docs/screenshots/world.png" alt=""> | <img src="docs/screenshots/music.png" alt=""> |
-| **Ambient**: analog clock, sun & moon, air quality, a quote and the week's weather. | **Markets**: exchange rates and crypto with trends, Hacker News top stories. |
-| <img src="docs/screenshots/ambient.png" alt=""> | <img src="docs/screenshots/markets.png" alt=""> |
-| **System**: live charts for CPU, GPU (NVIDIA), memory, disks, network and ping. | **Shortcuts**: a Stream Deck–style grid that launches apps, URLs or built-in actions on the PC. |
-| <img src="docs/screenshots/system.png" alt=""> | <img src="docs/screenshots/shortcuts.png" alt=""> |
+| **Home** — clock, weather, now playing, CPU / GPU / RAM / network tiles | **Dashboard** — gauges, clock, media and a few shortcut keys |
+| <img src="docs/screenshots/home.png" alt="Home"> | <img src="docs/screenshots/dashboard.png" alt="Dashboard"> |
+| **AI quotas** — Claude and Codex limits, reset times, "at this pace: full in 1 d 5 h" | **Sessions** — Claude Code / Codex sessions and GitHub |
+| <img src="docs/screenshots/ai.png" alt="AI quotas"> | <img src="docs/screenshots/work.png" alt="Sessions"> |
+| **System** — CPU, GPU, memory, disks, network and ping charts | **Processes** — heaviest apps; tap one to end an instance or all of them |
+| <img src="docs/screenshots/system.png" alt="System"> | <img src="docs/screenshots/procs-sheet.png" alt="Processes"> |
+| **Status** — quota rings, phone battery, top CPU, volume, sessions | **Ambient** — analog clock, sun & moon, air quality, quote, forecast |
+| <img src="docs/screenshots/status.png" alt="Status"> | <img src="docs/screenshots/ambient.png" alt="Ambient"> |
+| **Markets** — exchange rates, crypto, Hacker News | **Feeds** — values and notifications pushed by webhooks |
+| <img src="docs/screenshots/markets.png" alt="Markets"> | <img src="docs/screenshots/feeds.png" alt="Feeds"> |
+| **Daily** — checklist, time progress, timer, counter, stopwatch | **World** — world clocks, hourly forecast, calendar |
+| <img src="docs/screenshots/daily.png" alt="Daily"> | <img src="docs/screenshots/world.png" alt="World"> |
+| **Music** — a big now-playing card | **Shortcuts** — Stream Deck–style keys |
+| <img src="docs/screenshots/music.png" alt="Music"> | <img src="docs/screenshots/deck.png" alt="Shortcuts"> |
 
-Templates (18): Home, AI quotas, Sessions, System, Processes, Shortcuts, Music, Clock, Focus, World, Dashboard, DevOps,
-Feeds, Ambient, Markets, Daily, Status, Calm.
+More templates: **Clock**, **Focus** (pomodoro + note), **Calm** (breathing), **DevOps** (command widgets).
 
-Widgets (41): clock · analog clock · world clocks · calendar · time progress · weather · forecast (hourly / daily) ·
-sun & moon · air quality · now playing · volume · metric tile · gauge · chart · memory & disks · top processes ·
-processes · AI quotas · quota ring · AI sessions · GitHub · shortcut grid · big button · phone battery · pomodoro ·
-quick timer · stopwatch · countdown · counter · checklist · breathe · note · quote · title · image / webcam ·
-Hacker News · exchange rates · crypto prices · **command** (runs a PowerShell command on the PC every N seconds and shows its output; the
-command never leaves the PC) · **pushed value** and **notifications** (fed by webhooks).
+**Getting around.** Swipe; press the phone's **volume keys** to flip pages; tap the page dots (or long-press an empty
+spot) for an overview of all pages and jump straight to one. Webhooks can switch pages too. The panel returns to
+the first page when idle, dims to a clock at night and keeps the screen on.
 
-- **Sessions**: the live state of every Claude Code / Codex session (working, waiting for input, idle). The phone
-  vibrates when a session finishes or needs you. The GitHub widget shows review requests, your open pull requests with
-  CI status, and unread notifications (via the GitHub CLI).
-- **Processes**: the heaviest apps by CPU or RAM. Tap an app to see each instance (Claude Code instances show their
-  session name) and end one instance with its child processes, or all of them. Windows-critical processes are locked.
+<p align="center"><img src="docs/screenshots/overview.png" width="600" alt="Page overview"></p>
 
-**Getting around**: swipe, press the phone's **volume keys** to flip pages (can be turned off), or tap the page dots
-(or long-press an empty spot) for an overview of all pages and jump straight to one. Webhooks can switch pages too.
+## Widgets
 
-The panel also dims itself at night (clock only), keeps the screen on, returns to the first page when idle and keeps
-showing the clock and weather when the PC is off.
+| Category | Widgets |
+|---|---|
+| **Time** | Clock (with status line and weather) · Analog clock (any time zone) · World clocks · Calendar · Time progress (day / week / month / year) · Countdown · Pomodoro · Quick timer · Stopwatch |
+| **Weather & sky** | Weather · Forecast (hourly / 7 days) · Sun & moon (daylight left, UV, moon phase) · Air quality (European AQI, PM2.5, PM10, O₃, NO₂) |
+| **Computer** | Metric tile · Gauge · Chart · Memory & disks · Top processes · Processes · Now playing · Volume · Shortcut grid · Big button · **Command** (PowerShell output, refreshed every N seconds) |
+| **AI & code** | AI quotas · Quota ring · AI sessions · GitHub |
+| **Personal** | Note · Checklist (resets daily) · Counter · Breathe · Quote · Title · Phone battery |
+| **Web & data** | **Pushed value** · **Notifications** (both fed by [webhooks](#webhooks)) · Hacker News · Exchange rates (ECB) · Crypto prices · Image / webcam |
 
-## Webhooks
+Widgets scale to the size you give them. Weather, air quality, rates, crypto and Hacker News come straight from free
+public APIs ([Open-Meteo](https://open-meteo.com), [Frankfurter](https://frankfurter.dev), [CoinGecko](https://www.coingecko.com),
+[HN](https://github.com/HackerNews/API)) on the phone, without API keys, and keep their last data when offline.
 
-The agent also accepts data, so scripts, CI jobs, Home Assistant or cron can push things onto the panel:
-
-```sh
-curl -X POST http://127.0.0.1:8765/api/push/temperature -d 21.5                       # a "Pushed value" widget with key "temperature"
-curl -X POST http://127.0.0.1:8765/api/push/build -H "Content-Type: application/json"      -d '{"value":"passed","sub":"main · 3m 12s"}'                                       # value, title, sub, unit, icon, color, level, progress, items, ttl
-curl -X POST "http://127.0.0.1:8765/api/push/door?ttl=600" -d open                      # expires after 10 minutes
-curl -X POST http://127.0.0.1:8765/api/notify -H "Content-Type: application/json"      -d '{"title":"Deploy","text":"Production is live","level":"ok","page":"feeds"}'   # toast + vibration (+ switch page)
-curl -X POST http://127.0.0.1:8765/api/goto/music                                       # switch the phone to a page (id or number)
-curl -X POST http://127.0.0.1:8765/api/refresh                                          # refresh quotas/GitHub and the panel now (?reload=1 reloads it)
-```
-
-`GET /api/push` lists the values, `DELETE /api/push/<key>` removes one. Values survive restarts. From this PC no token
-is needed; with Wi-Fi enabled, other machines on the network or Tailscale can use the same endpoints on the HTTPS port
-with the separate **webhook key** (`Authorization: Bearer <key>`, or `?token=<key>` for senders that cannot set
-headers). That key opens only the webhook endpoints, never the phone API, and can be replaced on its own. The settings
-page has a Webhooks section with the key, copy-paste examples and test buttons.
-
-## Requirements
-
-- Windows 10/11 with the [.NET 10 SDK](https://dotnet.microsoft.com/download) (the runtime is enough for the release zip)
-- `adb` — `winget install Google.PlatformTools`
-- An Android 9+ phone with USB debugging enabled
-- Optional: an NVIDIA GPU (`nvidia-smi`), the GitHub CLI (`gh`), Claude Code, Codex,
-  [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) with its web server on port 8085 for CPU temperature
-
-## Install
-
-```powershell
-git clone https://github.com/ersinkoc/phonebox
-cd phonebox
-.\scripts\install.ps1 -Apk            # agent + phone app (add -Serial <id> if several devices are connected)
-.\scripts\install.ps1 -Apk -Autostart # same, and start the agent with Windows
-```
-
-The agent installs to `%LOCALAPPDATA%\PhoneBox\app` and shows a tray icon. Plugging the phone in wakes it and opens
-the panel. `.\scripts\uninstall.ps1 [-Purge] [-Apk]` removes it again.
-
-## Settings
+## Layout editor & settings
 
 Double-click the tray icon (or open <http://127.0.0.1:8765>):
 
-- **Pages**: add pages from templates, reorder, show/hide, and lay out widgets on a phone-sized canvas with their
-  options (metric, columns, time zones, push key, command, colour …).
+<p align="center"><img src="docs/screenshots/settings-editor.png" width="900" alt="The layout editor"></p>
+
+- **Pages**: add pages from templates, reorder, show/hide; arrange widgets on a phone-sized canvas (drag to move, drag
+  the corner to resize) and set their options. The widget palette is grouped by category and searchable.
 - **Shortcuts**: add, edit, reorder and test keys (label, emoji, colour, command, arguments, working folder).
-- **Webhooks**: copy-paste examples, test buttons and the values pushed so far.
-- **General**: weather location search, night mode, clock seconds, idle timeout, vibration, volume-key paging, phone selection.
+- **Webhooks**: the webhook key, copy-paste examples, test buttons and the values pushed so far.
+- **General**: weather location search, night mode, clock seconds, idle timeout, vibration, volume-key paging,
+  phone selection, Wi-Fi & Tailscale, updates.
 - **Advanced**: the raw JSON.
 
 Settings live in `%APPDATA%\PhoneBox\config.json`; the phone picks up changes within a few seconds.
 
-## Wi-Fi & Tailscale (optional)
+## Webhooks
+
+The agent accepts data as well as serving it, so anything that can make an HTTP request can put things on the panel:
+
+```sh
+curl -X POST http://127.0.0.1:8765/api/push/temperature -d 21.5                     # shown by a "Pushed value" widget with key "temperature"
+curl -X POST http://127.0.0.1:8765/api/push/build -H "Content-Type: application/json" \
+     -d '{"value":"passed","sub":"main · 3m 12s"}'
+curl -X POST "http://127.0.0.1:8765/api/push/door?ttl=600" -d open                    # expires after 10 minutes
+curl -X POST http://127.0.0.1:8765/api/notify -H "Content-Type: application/json" \
+     -d '{"title":"Deploy","text":"Production is live","level":"ok","page":"feeds"}' # toast + vibration (+ switch page)
+curl -X POST http://127.0.0.1:8765/api/goto/music                                     # switch the phone to a page (id or number)
+curl -X POST http://127.0.0.1:8765/api/refresh                                        # refresh quotas/GitHub and the panel now (?reload=1 reloads it)
+```
+
+| Payload field | Meaning |
+|---|---|
+| `value`, `title`, `sub`, `unit`, `icon`, `color` | What the widget shows. Plain text or a number works too. |
+| `level` | `ok` / `warn` / `error` colours it; values like `passed`, `failed`, `running` are coloured automatically. |
+| `progress` | 0–1 or 0–100: a bar under the value, or the ring in gauge style. |
+| `items` | A list (strings or `{label, value, level}`) for the list style. |
+| `ttl` | Seconds until the value disappears (also `?ttl=`). |
+
+Notifications take `title`, `text`, `level`, `vibrate`, `seconds`, `wake` (light up the night screen) and `page`.
+`GET /api/push` lists the values and `DELETE /api/push/<key>` removes one; values survive restarts.
+
+From this PC no key is needed. With Wi-Fi on, other machines on the network or Tailscale can use the same endpoints
+on `https://<pc>:8766` with the **webhook key** from the settings (`Authorization: Bearer <key>`, or `?token=<key>`
+for senders that cannot set headers). That key opens only the webhook endpoints, never the phone API.
+
+## Wi-Fi & Tailscale
 
 Turn on **Settings › General › Wi-Fi & Tailscale**, restart the agent when asked, and plug the phone in once. Over
 USB the phone receives the PC's addresses, a secret key and the fingerprint of the agent's self-signed TLS
 certificate. When the cable is unplugged it switches to `https://<pc>:8766` automatically and back to USB when it is
-plugged in again; the panel shows which one it uses.
+plugged in again; the status line shows which one it uses.
 
 - The phone and the PC need to be on the same network. If they are not (separate Wi-Fi networks, another
   building…), install [Tailscale](https://tailscale.com) on both: the agent offers its Tailscale address too.
 - Windows Firewall asks once when Wi-Fi is turned on; allow it for the network types you use.
 - The screen stays on, so the phone still needs a charger — just not necessarily the PC.
+
 ## Updates
 
 The agent checks the latest GitHub release every 6 hours (or **Settings › General › Updates › Check now**) and, with
-automatic updates on:
+automatic updates on, installs the new APK on the phone with `adb install -r` while it is plugged in (no prompt on the
+phone; over Wi-Fi the panel shows "plug in USB to update") and replaces its own files, then restarts. Android only
+accepts an update signed with the same key as the installed app; the agent never uninstalls to force one.
+See the [changelog](CHANGELOG.md).
 
-- installs the new APK on the phone with `adb install -r` while it is plugged in (no prompt on the phone; over Wi-Fi
-  the panel shows "plug in USB to update");
-- swaps its own files in `%LOCALAPPDATA%\PhoneBox\app` and restarts.
-
-Android only accepts an update signed with the same key as the installed app, and the agent never uninstalls to
-force one. To publish a release from your clone: bump the version in `PhoneBox.Agent.csproj` and
-`android/app/build.gradle.kts`, commit, then run `.\scripts\release.ps1`.
 ## How it works
 
-```
- Android phone                                   Windows PC
-┌───────────────────────────┐   USB / adb    ┌────────────────────────────────────┐
-│ PhoneBox app (WebView)    │   reverse      │ PhoneBox agent (tray, .NET 10)     │
-│  assets/www UI            │ ─────────────▶ │  127.0.0.1:8765 only               │
-│  /agent/* → 127.0.0.1:8765│  tcp:8765      │  CPU/RAM/net, nvidia-smi, media,   │
-│  (native proxy)           │                │  volume, processes, sessions, gh,  │
-└───────────────────────────┘                │  quotas, shortcuts, settings UI    │
-                                             └────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph Phone["Android phone"]
+    UI["Panel UI<br/>(WebView, assets/www)"] -->|"/agent/*"| Proxy["Native proxy<br/>(AgentLink)"]
+    UI -->|weather, rates, HN| Web(("Public APIs"))
+  end
+  subgraph PC["Windows PC"]
+    Agent["PhoneBox agent<br/>(.NET 10, tray)"]
+    Agent --- Mon["System, GPU, media, volume,<br/>processes, sessions, quotas, GitHub"]
+    Agent --- Set["Settings page &<br/>layout editor"]
+  end
+  Proxy -->|"USB: adb reverse → 127.0.0.1:8765"| Agent
+  Proxy -.->|"Wi-Fi / Tailscale: HTTPS :8766,<br/>pinned certificate + key"| Agent
+  Hooks["Scripts, CI,<br/>Home Assistant"] -->|webhooks| Agent
 ```
 
-- The WebView never talks to the network for agent calls: requests to `/agent/*` are intercepted by the app and
-  forwarded over the adb tunnel, so there are no CORS, mixed-content or local-network permission issues.
-- Weather comes straight from [Open-Meteo](https://open-meteo.com/) on the phone.
+- The WebView never talks to the PC directly: requests to `/agent/*` are intercepted by the app and forwarded over
+  the adb tunnel (or the pinned HTTPS connection), so there are no CORS, mixed-content or local-network issues.
+- The agent samples only what is on screen: process lists and command widgets run only while a phone looks at them.
 
 ## Security & privacy
 
@@ -148,29 +192,71 @@ force one. To publish a release from your clone: bump the version in `PhoneBox.A
   `Origin` (CSRF) are rejected; only the settings page itself is accepted from browsers.
 - The optional Wi-Fi port (8766) only serves the panel API, only over TLS pinned to the paired certificate, and only
   with the paired key. Settings, shortcut tests and pairing stay local. **New key** in the settings unpairs all phones.
-- The phone only ever sends a shortcut **id**; the commands are defined on the PC. Command widgets work the same way:
-  the phone asks for a widget's output by id and never sees the command.
-- Webhooks are accepted from this PC (same `Host`/`Origin` checks) and, with Wi-Fi on, from the network only with the key.
+- The phone only ever sends a shortcut **id**; commands are defined on the PC. Command widgets work the same way:
+  the phone asks for a widget's output and never sees the command.
+- Webhooks from other machines need the separate webhook key, which cannot open the phone API and can be replaced
+  on its own.
 - Ending processes is limited to your own session, never touches a list of Windows-critical processes, and can be
   switched off in the processes widget's options.
 - **Claude quota:** read with the OAuth token Claude Code stores in `~/.claude/.credentials.json`, sent only to
   `api.anthropic.com/api/oauth/usage` (the endpoint behind Claude Code's `/usage`). The token is read-only: PhoneBox
   never refreshes it, so it can't interfere with Claude Code. This endpoint is undocumented and may change.
 - **Codex quota and sessions** are read from local files in `~/.codex/sessions`; Claude Code sessions from
-  `~/.claude/sessions`.
+  `~/.claude/sessions`. Nothing leaves your machine except the requests listed above.
+
+## FAQ & troubleshooting
+
+<details><summary><b>The panel says "PC not connected".</b></summary>
+
+Is the agent running (tray icon)? Run `adb devices`: the phone must be listed as `device`, not `unauthorized` —
+accept the USB debugging prompt on the phone. If several devices are connected, pick the phone under
+**Settings › General › Phone connection**. Over Wi-Fi, pair once over USB and allow the agent in Windows Firewall.
+</details>
+
+<details><summary><b>Some widgets show "—" or "No data".</b></summary>
+
+GPU values need an NVIDIA GPU (`nvidia-smi`), CPU temperature needs LibreHardwareMonitor's web server on port 8085,
+GitHub needs `gh auth login`, quotas and sessions need Claude Code / Codex to have been used on this PC.
+</details>
+
+<details><summary><b>I want the volume keys to change the phone's volume.</b></summary>
+
+Turn off **Settings › General › Display › The phone's volume keys switch pages**.
+</details>
+
+<details><summary><b>The update was not installed on the phone.</b></summary>
+
+App updates need USB (Android installs them through adb without a prompt). They also need to be signed with the same
+key as the installed app — if you built the app yourself, keep using your own release key.
+</details>
+
+<details><summary><b>Can I use it without root?</b></summary>
+
+Yes. PhoneBox needs no root on the phone and no admin rights on the PC.
+</details>
 
 ## Development
 
 ```powershell
+python tools/demo-server.py                  # panel + settings page with made-up data: http://127.0.0.1:8790 and /settings
 .\scripts\build.ps1                          # dist\PhoneBox-<v>.apk + dist\PhoneBoxAgent-<v>-win-x64.zip
 cd android; .\gradlew.bat assembleDebug      # APK only
 dotnet run --project agent/PhoneBox.Agent    # agent from source
 pwsh tools/make-icon.ps1                     # regenerate the .ico
 ```
 
+The demo server needs only Python: size the browser window to 780 × 360 (the phone's screen in CSS pixels) and the
+panel behaves as on the phone, including webhooks (`curl -X POST http://127.0.0.1:8790/api/notify -d hello`).
+
+A widget is a `{ needs, create(box, ctx) → { update(kind) } }` entry in `W` in
+[`app.js`](android/app/src/main/assets/www/app.js), plus its styles in `style.css` and its catalogue entry
+(name, size, options) in [`widgets.json`](agent/PhoneBox.Agent/widgets.json), which drives the settings editor.
+Templates live in [`templates.json`](agent/PhoneBox.Agent/templates.json).
+
 Release APKs are signed with your own key when `PHONEBOX_STORE_FILE`, `PHONEBOX_STORE_PASSWORD`, `PHONEBOX_KEY_ALIAS`
 and `PHONEBOX_KEY_PASSWORD` are set (in `~/.gradle/gradle.properties` or the environment); otherwise the debug key
-is used. With the WebView debuggable in debug builds, `chrome://inspect` on the PC shows the panel's console.
+is used. Debug builds make the WebView debuggable through `chrome://inspect`. To publish a release: bump the
+version in `PhoneBox.Agent.csproj` and `android/app/build.gradle.kts`, commit, then run `.\scripts\release.ps1`.
 
 ## Extras
 
