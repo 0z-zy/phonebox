@@ -14,7 +14,7 @@
 <div id="ptitle"></div>
 
 <div id="overview" hidden>
-  <div class="ov-head">All pages <small>tap one to jump · volume keys flip pages · long-press a page to come back here</small><span id="ovPcs"></span></div>
+  <div class="ov-head">All pages <small>tap one to jump · volume keys flip pages · long-press a page to come back here</small><span id="ovPcs"></span><button class="ov-pc" id="ovRules" hidden></button></div>
   <div id="ovGrid"></div>
 </div>
 
@@ -41,6 +41,15 @@
     </div>
   </div>
 </div>
+
+<!-- calm page switching: countdown before a rule (or the idle return) changes the page, and a chip while it waits -->
+<div id="navCard" role="status">
+  <div class="nv-ring"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="19"/><circle id="nvRing" cx="22" cy="22" r="19" pathLength="100"/></svg><b id="nvNum">3</b></div>
+  <div class="nv-text"><b id="nvName"></b><span id="nvLine"></span><small id="nvDetail"></small></div>
+  <button class="nv-btn" id="nvStay">Stay</button>
+  <button class="nv-btn go" id="nvGo">Go now</button>
+</div>
+<div id="navChip"><button id="ncGo"><span>⏳</span><b id="ncText"></b><small id="ncWhy"></small></button><button id="ncX" aria-label="Dismiss">✕</button></div>
 
 <div class="toast" id="toast"></div>
 <div id="offline">PC not connected</div>

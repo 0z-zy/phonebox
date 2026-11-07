@@ -102,6 +102,21 @@ public sealed class HomeAssistant(ConfigStore config, ILogger<HomeAssistant> log
         catch (Exception ex) { return ex is TaskCanceledException ? "Home Assistant did not answer" : ex.Message; }
     }
 
+    /// <summary>Turns an entity on or off (the charge guard's smart plug; set in the local-only settings).</summary>
+    public async Task<string?> SwitchAsync(string id, bool on)
+    {
+        if (!id.Contains('.')) return "not an entity id";
+        try
+        {
+            using var req = Request(HttpMethod.Post, $"/api/services/homeassistant/{(on ? "turn_on" : "turn_off")}");
+            req.Content = new StringContent(JsonSerializer.Serialize(new { entity_id = id }), Encoding.UTF8, "application/json");
+            using var res = await Http.SendAsync(req);
+            _statesAt = DateTime.MinValue;
+            return res.IsSuccessStatusCode ? null : $"Home Assistant answered {(int)res.StatusCode}";
+        }
+        catch (Exception ex) { return ex is TaskCanceledException ? "Home Assistant did not answer" : ex.Message; }
+    }
+
     /// <summary>Settings › Test: checks a URL and token (possibly unsaved).</summary>
     public static async Task<string> TestAsync(string url, string token)
     {

@@ -245,3 +245,39 @@ W.checklist = {
     return { update() { if (day() !== lastDay) { lastDay = day(); render(); } } };
   },
 };
+
+// The time in words, to the nearest five minutes ("quarter past ten").
+const NUM_WORDS = ['twelve', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven'];
+export function timeInWords(d) {
+  const total = d.getHours() * 60 + d.getMinutes();
+  const r = Math.round(total / 5) * 5;
+  const exact = r === total, over = total > r;
+  const m = r % 60, hr = Math.floor(r / 60) % 24;
+  const hourName = (x) => NUM_WORDS[x % 12];
+  const minutes = { 5: 'five', 10: 'ten', 15: 'quarter', 20: 'twenty', 25: 'twenty-five', 30: 'half' };
+  let main;
+  if (m === 0) main = hr === 0 ? ['midnight'] : hr === 12 ? ['noon'] : [hourName(hr), "o'clock"];
+  else if (m <= 30) main = [minutes[m], 'past', hourName(hr)];
+  else main = [minutes[60 - m], 'to', hourName(hr + 1)];
+  return { lead: exact ? "it's" : over ? "it's just after" : "it's almost", main };
+}
+W.wordclock = {
+  bare: true, needs: ['tick'],
+  create(box) {
+    const lead = h('div', 'wc-lead'), main = h('div', 'wc-main'), date = h('div', 'wc-date');
+    box.append(lead, main, date);
+    let shown = '';
+    return {
+      update() {
+        const now = new Date();
+        const t = timeInWords(now);
+        const k = t.lead + t.main.join(' ');
+        if (k === shown) return;
+        shown = k;
+        lead.textContent = t.lead;
+        main.replaceChildren(...t.main.map((w, i) => h('span', i === t.main.length - 1 || t.main.length === 1 ? 'hr' : null, w + ' ')));
+        date.textContent = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+      },
+    };
+  },
+};

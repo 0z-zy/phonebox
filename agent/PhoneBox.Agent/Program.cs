@@ -66,6 +66,7 @@ AddMonitor<DockerMonitor>(builder.Services);
 AddMonitor<ObsMonitor>(builder.Services);
 AddMonitor<BatteryMonitor>(builder.Services);
 AddMonitor<RuleEngine>(builder.Services);
+AddMonitor<ChargeGuard>(builder.Services);
 builder.Services.AddHostedService<Tray>();
 
 var app = builder.Build();
@@ -256,7 +257,9 @@ app.MapPost("/api/notify", async (HttpRequest req, PushStore push) =>
     return Results.Json(push.Emit("notify", payload));
 });
 
-app.MapPost("/api/goto/{page}", (string page, PushStore push) => Results.Json(push.Emit("goto", JsonSerializer.SerializeToElement(new { page }))));
+// ?countdown=0 switches at once; otherwise the phone counts down like for a rule.
+app.MapPost("/api/goto/{page}", (string page, int? countdown, PushStore push) =>
+    Results.Json(push.Emit("goto", JsonSerializer.SerializeToElement(new { page, countdown = countdown is { } c ? Math.Clamp(c, 0, 30) : (int?)null }))));
 
 app.MapPost("/api/refresh", (bool? reload, PushStore push) =>
 {
@@ -283,6 +286,7 @@ object State(IServiceProvider sp, long? ev)
         audio = sp.GetRequiredService<AudioControl>().Snapshot(),
         ping = sp.GetRequiredService<PingMonitor>().Snapshot(),
         rules = sp.GetRequiredService<RuleEngine>().Active(),
+        rulesPaused = sp.GetRequiredService<RuleEngine>().PausedUntil(),
         privacy = sp.GetRequiredService<PrivacyMonitor>().Snapshot(),
         obs = sp.GetRequiredService<ObsMonitor>().Snapshot() is { Connected: true } o ? new { o.Streaming, o.Recording, o.RecordPaused } : null,
         toggles = Shortcuts.States(sp.GetRequiredService<ConfigStore>().Get(), push, sp.GetRequiredService<AudioControl>()),
@@ -328,6 +332,19 @@ app.MapPost("/api/rules/test", (RuleConfig rule, RuleEngine rules) =>
     if (string.IsNullOrWhiteSpace(rule.Id)) rule.Id = "test";
     rules.Test(rule);
     return Results.Ok(new { ok = true });
+});
+
+// The phone reports its battery (charge guard); the settings show the guard's state and can switch the power to test it.
+app.MapPost("/api/phone/battery", (int level, bool plugged, double? temp) => { ChargeGuard.Report(level, plugged, temp); return Results.Ok(); });
+app.MapGet("/api/charge", (ChargeGuard guard) => Results.Json(guard.Status()));
+app.MapPost("/api/charge/test", async (string action, ChargeGuard guard, ConfigStore cfg) =>
+    action is "on" or "off" && await guard.Switch(cfg.Get().Charge, action) is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));
+
+// Pause all rules for a while (the phone's overview, the settings); minutes=0 resumes.
+app.MapPost("/api/rules/pause", (int? minutes, RuleEngine rules) =>
+{
+    rules.Pause(minutes ?? 60);
+    return Results.Ok(new { pausedUntil = rules.PausedUntil() });
 });
 
 app.MapGet("/api/state", (long? ev, HttpContext ctx) => Results.Json(State(ctx.RequestServices, ev)));

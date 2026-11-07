@@ -71,3 +71,35 @@ W.air = {
     return { update: load };
   },
 };
+
+// The moon tonight, drawn to its phase, with the next full and new moon.
+W.moon = {
+  needs: ['tick'],
+  create(box) {
+    box.innerHTML = '<div class="w-title">Moon</div><div class="mo-body"><svg viewBox="0 0 100 100" class="mo-disc"><circle class="mo-dark" cx="50" cy="50" r="44"/><path class="mo-lit"/></svg>' +
+      '<div class="mo-text"><b class="mo-name"></b><span class="mo-ill"></span><small class="mo-next"></small></div></div>';
+    const q = (s) => box.querySelector(s);
+    let shown = -1;
+    return {
+      update() {
+        const now = new Date();
+        const hour = Math.floor(now / 36e5);
+        if (hour === shown) return;
+        shown = hour;
+        const syn = 29.530588853;
+        const age = ((((now - Date.UTC(2000, 0, 6, 18, 14)) / 864e5) % syn) + syn) % syn;
+        const m = moonPhase(now);
+        const r = 44, rx = Math.abs(Math.cos((2 * Math.PI * age) / syn)) * r;
+        const waxing = age < syn / 2, gibbous = m.illum > 0.5;
+        // outer edge on the lit side, back along the terminator (an ellipse)
+        const d = waxing ? `M50 6 A${r} ${r} 0 0 1 50 94 A${rx.toFixed(2)} ${r} 0 0 ${gibbous ? 1 : 0} 50 6Z`
+          : `M50 6 A${r} ${r} 0 0 0 50 94 A${rx.toFixed(2)} ${r} 0 0 ${gibbous ? 0 : 1} 50 6Z`;
+        q('.mo-lit').setAttribute('d', d);
+        q('.mo-name').textContent = m.name;
+        q('.mo-ill').textContent = `${Math.round(m.illum * 100)}% lit`;
+        const inDays = (target) => { const dd = ((target - age) % syn + syn) % syn; return dd < 0.5 ? 'tonight' : dd < 1.5 ? 'tomorrow' : `in ${Math.round(dd)} days`; };
+        q('.mo-next').textContent = age < syn / 2 ? `Full moon ${inDays(syn / 2)}` : `New moon ${inDays(syn)}`;
+      },
+    };
+  },
+};

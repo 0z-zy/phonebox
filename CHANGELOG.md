@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+**Calm page switching.** Rules, webhooks and the idle return no longer jump between pages. The phone shows
+*"Claude needs me — switching to AI in 3…"* with **Stay** and **Go now**, then fades over. It waits while you are
+using the panel (20 s after the last touch by default), keeps at least 15 s between two automatic switches, and merges
+rules that fire one after another: the higher priority goes first, a rule that ends before its turn is dropped, a
+lower rule does not take over a higher rule's page, and when the higher one ends the waiting rule goes straight to its
+page instead of bouncing back first. All of it is set in Settings › General › Page switching.
+
+**Back home after a while.** Choose the home page (where the idle return and the Back key go), and per page how long
+it may stay without a touch (never, 30 s … 1 hour). A rule keeps its page at most 30 minutes by default; then the idle
+return takes over. The return home counts down too.
+
+**Richer rules.** Each rule has a priority, *only on these days* and *only between these hours*, *act when it lasts N
+seconds*, a rest time before it may act again, and its own countdown. New conditions: an AI quota above a
+percentage, a GitHub review requested, CI failing on your pull request, a device battery low, a slow or unreachable
+network, a pushed value above / below / equal to a value, and *always* (for schedules). New action: run a shortcut
+(a toggle switches back off when the rule ends). A condition has to be off for 4 s before a rule ends, so a
+flickering condition no longer flaps. Pause all rules for an hour from the phone's overview, the Rules widget or the
+settings.
+
+**Battery care.** Keeps the phone's battery between two levels (50–80 % by default) by switching its power through
+a Home Assistant smart plug or two shortcuts (for example `uhubctl` for a USB hub with switchable ports); phones cannot
+stop charging by themselves without root. The phone reports its battery to the agent every half minute.
+
+**Keep awake.** Over USB the agent turns off Android's screen saver (which starts on the charger) and keeps the phone
+awake while plugged in.
+
+**New widgets:** Rules, Battery care, Next up (the next calendar event with a countdown), Moon (drawn to its phase),
+Word clock. **New templates:** Nightstand, Planner, Automation, Weekend, Deep work.
+
 ## 0.6.3 — 2026-11-08
 
 **Claude Code permission prompts on the phone.** When Claude Code asks for permission, the phone shows the request

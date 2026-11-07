@@ -18,6 +18,7 @@ public sealed class AgentConfig
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
     public List<RuleConfig> Rules { get; set; } = [];
+    public ChargeConfig Charge { get; set; } = new();
     /// <summary>Per-phone settings when several phones use this agent: a name and which pages each one shows.</summary>
     public List<PhoneConfig> Phones { get; set; } = [];
     /// <summary>iCalendar feeds for the Agenda widget; the URLs are secrets and never go to the phone.</summary>
@@ -44,7 +45,7 @@ public sealed class AgentConfig
         display = Display,
         pages = PagesFor(deviceId).Select(p => new
         {
-            p.Id, p.Title, p.Icon, p.Enabled,
+            p.Id, p.Title, p.Icon, p.Enabled, p.IdleSec,
             widgets = (p.Widgets ?? []).Select(w => new
             {
                 w.Id, w.Type, w.X, w.Y, w.W, w.H,
@@ -53,6 +54,9 @@ public sealed class AgentConfig
             }),
         }),
         shortcuts = Shortcuts.Select(s => new { s.Id, s.Label, s.Icon, s.Color, toggle = s.Toggle || s.Cmd == "builtin:mute" }),
+        // names only (for the Rules widget); what a rule matches on stays here
+        rules = Rules.Select(r => new { r.Id, r.Name, r.Enabled, r.When }),
+        charge = new { Charge.Enabled, Charge.Min, Charge.Max },
     };
 
     /// <summary>Ending processes is allowed when an enabled page has a processes widget that allows it.</summary>
@@ -102,6 +106,19 @@ public sealed class DisplayConfig
     public bool Pin { get; set; }
     /// <summary>The panel is the phone's home app: it starts after a reboot and Home returns to it.</summary>
     public bool HomeScreen { get; set; }
+
+    /// <summary>Over USB, turn off Android's screen saver (it starts on the dock / charger) and keep the phone awake while it is plugged in.</summary>
+    public bool KeepAwake { get; set; } = true;
+    /// <summary>The page the panel returns to (idle return, Back); null = the first page.</summary>
+    public string? HomePage { get; set; }
+    /// <summary>Seconds the panel counts down ("Switching to … in 3") before a rule or the idle return changes the page; 0 = at once.</summary>
+    public int SwitchCountdownSec { get; set; } = 3;
+    /// <summary>Rules wait until the panel has not been touched for this many seconds, so they never pull a page away from under your finger.</summary>
+    public int TouchGraceSec { get; set; } = 20;
+    /// <summary>At least this many seconds between two automatic page switches, so rules firing one after another do not bounce the screen.</summary>
+    public int MinDwellSec { get; set; } = 15;
+    /// <summary>A rule keeps its page at most this many minutes, then the idle return may take over; 0 = as long as the rule lasts.</summary>
+    public int HoldMaxMin { get; set; } = 30;
 }
 
 public sealed class LanConfig
@@ -138,6 +155,8 @@ public sealed class PageConfig
     public string Title { get; set; } = "";
     public string Icon { get; set; } = "";
     public bool Enabled { get; set; } = true;
+    /// <summary>Return home after this many idle seconds on this page; null = the display setting, 0 = stay.</summary>
+    public int? IdleSec { get; set; }
     /// <summary>Widgets on a 12 x 6 grid.</summary>
     public List<WidgetConfig>? Widgets { get; set; }
 
@@ -190,9 +209,41 @@ public sealed class RuleConfig
     public string? Key { get; set; }
     public string? PushValue { get; set; }
     public bool WhileActive { get; set; } = true;
+    /// <summary>Shortcut id for the "shortcut" action.</summary>
+    public string? Shortcut { get; set; }
 
-    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "mic-in-use", "camera-in-use", "obs-live", "calendar-event", "cpu-above", "idle", "time", "push"];
-    public static readonly string[] Actions = ["goto", "notify", "push"];
+    /// <summary>0-9; a page switch of a higher rule wins and is not replaced by a lower one while it lasts.</summary>
+    public int Priority { get; set; } = 5;
+    /// <summary>The condition has to hold this many seconds before the rule acts (0 = at once; the CPU rule defaults to 15).</summary>
+    public int ForSec { get; set; }
+    /// <summary>After acting, the rule waits this many minutes before it may act again.</summary>
+    public int CooldownMin { get; set; }
+    /// <summary>Only on these days ("mon,tue,wed,thu,fri"); null = every day.</summary>
+    public string? Days { get; set; }
+    /// <summary>Only in this time window ("09:00-18:00"); null = all day.</summary>
+    public string? During { get; set; }
+    /// <summary>Seconds the phone counts down before switching pages; null = the phone's setting, 0 = at once.</summary>
+    public int? CountdownSec { get; set; }
+    /// <summary>Push trigger: compare the value instead of "is on" (&gt;, &lt;, =, !=) with <see cref="Arg"/>.</summary>
+    public string? Op { get; set; }
+    public string? Arg { get; set; }
+
+    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "mic-in-use", "camera-in-use", "obs-live", "calendar-event",
+        "cpu-above", "idle", "time", "push", "quota-above", "review-requested", "ci-failed", "battery-low", "ping-high", "always"];
+    public static readonly string[] Actions = ["goto", "notify", "push", "shortcut"];
+}
+
+/// <summary>Charge guard: keep the phone's battery between Min and Max by switching its power supply.</summary>
+public sealed class ChargeConfig
+{
+    public bool Enabled { get; set; }
+    public int Min { get; set; } = 50;
+    public int Max { get; set; } = 80;
+    /// <summary>"ha" (a Home Assistant switch entity) or "shortcuts" (one shortcut for power on, one for off).</summary>
+    public string Method { get; set; } = "ha";
+    public string? Entity { get; set; }
+    public string? OnShortcut { get; set; }
+    public string? OffShortcut { get; set; }
 }
 
 public sealed class ObsConfig
@@ -330,6 +381,11 @@ public sealed partial class ConfigStore(string path)
         c.Night ??= new();
         c.Display ??= new();
         c.Display.IdleReturnSec = Math.Clamp(c.Display.IdleReturnSec, 0, 3600);
+        c.Display.SwitchCountdownSec = Math.Clamp(c.Display.SwitchCountdownSec, 0, 30);
+        c.Display.TouchGraceSec = Math.Clamp(c.Display.TouchGraceSec, 0, 600);
+        c.Display.MinDwellSec = Math.Clamp(c.Display.MinDwellSec, 0, 600);
+        c.Display.HoldMaxMin = Math.Clamp(c.Display.HoldMaxMin, 0, 1440);
+        c.Display.HomePage = string.IsNullOrWhiteSpace(c.Display.HomePage) ? null : c.Display.HomePage.Trim();
         c.Lan ??= new();
         c.Updates ??= new();
         c.Claude ??= new();
@@ -369,6 +425,12 @@ public sealed partial class ConfigStore(string path)
         c.Calendars = (c.Calendars ?? []).Where(x => x is not null).Take(20).ToList();
         foreach (var cal in c.Calendars) { cal.Name = cal.Name?.Trim() ?? ""; cal.Url = cal.Url?.Trim() ?? ""; }
 
+        c.Charge ??= new();
+        c.Charge.Min = Math.Clamp(c.Charge.Min, 5, 95);
+        c.Charge.Max = Math.Clamp(c.Charge.Max, c.Charge.Min + 5, 100);
+        c.Charge.Method = c.Charge.Method == "shortcuts" ? "shortcuts" : "ha";
+        c.Charge.Entity = string.IsNullOrWhiteSpace(c.Charge.Entity) ? null : c.Charge.Entity.Trim();
+
         var ruleIds = new HashSet<string>();
         c.Rules = (c.Rules ?? []).Where(r => r is not null && RuleConfig.Triggers.Contains(r.When) && RuleConfig.Actions.Contains(r.Then)).Take(50).ToList();
         foreach (var r in c.Rules)
@@ -379,8 +441,16 @@ public sealed partial class ConfigStore(string path)
             var unique = id;
             for (var i = 2; !ruleIds.Add(unique); i++) unique = $"{id}-{i}";
             r.Id = unique;
-            if (r.Value is { } v) r.Value = Math.Clamp(v, 0, r.When == "idle" ? 1440 : 100);
+            if (r.Value is { } v) r.Value = Math.Clamp(v, 0, r.When switch { "idle" => 1440, "ping-high" => 10000, _ => 100 });
             r.Level = r.Level is "ok" or "warn" or "error" ? r.Level : "info";
+            r.Priority = Math.Clamp(r.Priority, 0, 9);
+            r.ForSec = Math.Clamp(r.ForSec, 0, 3600);
+            r.CooldownMin = Math.Clamp(r.CooldownMin, 0, 1440);
+            if (r.CountdownSec is { } cd) r.CountdownSec = Math.Clamp(cd, 0, 30);
+            r.Days = RuleEngine.NormalizeDays(r.Days);
+            r.During = string.IsNullOrWhiteSpace(r.During) ? null : r.During.Trim();
+            r.Op = r.Op is ">" or "<" or "=" or "!=" ? r.Op : null;
+            r.Shortcut = string.IsNullOrWhiteSpace(r.Shortcut) ? null : r.Shortcut.Trim();
         }
         return c;
     }
@@ -403,6 +473,7 @@ public sealed partial class ConfigStore(string path)
             if (string.IsNullOrWhiteSpace(p.Title)) p.Title = tpl?.Title ?? "Page";
             if (string.IsNullOrWhiteSpace(p.Icon)) p.Icon = tpl?.Icon ?? "▫️";
             p.Title = p.Title.Trim();
+            if (p.IdleSec is { } idleSec) p.IdleSec = Math.Clamp(idleSec, 0, 86400);
             var id = Slug(string.IsNullOrWhiteSpace(p.Id) ? (tpl?.Id ?? p.Title) : p.Id);
             if (id == "") id = "page";
             var unique = id;

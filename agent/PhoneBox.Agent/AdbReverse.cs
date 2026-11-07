@@ -11,6 +11,7 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
     public const string PanelActivity = "net.oxog.phonebox.deskpanel/.MainActivity";
     private const string HomeAlias = "net.oxog.phonebox.deskpanel/.HomeAlias";
     private readonly HashSet<string> _homeSet = [];
+    private readonly HashSet<string> _awakeSet = [];
     private volatile string[] _missingApp = [];
 
     /// <summary>Connected phones that do not have the PhoneBox app yet (installed from Settings, e.g. after winget / Scoop).</summary>
@@ -101,6 +102,22 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
             }
         }
         else _homeSet.Clear();
+        // Settings › Display › keep awake: Android's screen saver (Daydream) starts on the dock or charger and covers the
+        // panel; turn it off and keep the screen on while plugged in (plain adb settings, no root).
+        if (cfg.Get().Display.KeepAwake)
+        {
+            foreach (var d in devices.Where(d => !_awakeSet.Contains(d) && !_missingApp.Contains(d)))
+            {
+                await Adb(adb, $"-s {d} shell settings put secure screensaver_enabled 0", ct);
+                await Adb(adb, $"-s {d} shell settings put secure screensaver_activate_on_dock 0", ct);
+                await Adb(adb, $"-s {d} shell settings put secure screensaver_activate_on_sleep 0", ct);
+                await Adb(adb, $"-s {d} shell settings put global stay_on_while_plugged_in 7", ct);
+                _awakeSet.Add(d);
+                log.LogInformation("{Device}: screen saver off, stays awake while plugged in", d);
+            }
+        }
+        else _awakeSet.Clear();
+        _awakeSet.IntersectWith(devices);
         Report($"phone connected: {Devices}");
     }
 

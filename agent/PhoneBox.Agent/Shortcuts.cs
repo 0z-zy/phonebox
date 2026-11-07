@@ -33,7 +33,7 @@ public static class Shortcuts
         return map;
     }
 
-    private static bool? State(Shortcut sc, PushStore? push, AudioControl? audio)
+    public static bool? State(Shortcut sc, PushStore? push, AudioControl? audio)
     {
         if (sc.Cmd == "builtin:mute" && sc.StateKey is null) return audio?.Snapshot()?.Muted;
         if (sc.StateKey is not null)

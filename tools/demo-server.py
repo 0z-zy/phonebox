@@ -91,6 +91,7 @@ def state(since=None):
     dur = 214_000
     return {
         'update': None, 'ts': now_ms(), 'host': 'DESK-PC', 'cfgVersion': CFG_VERSION[0], 'pushVersion': PUSH_VERSION[0],
+        'rules': [], 'rulesPaused': None,
         'evSeq': EVENTS[-1]['seq'] if EVENTS else 0, 'events': [e for e in EVENTS if since is not None and e['seq'] > since],
         'pc': {
             'cpu': max(1, wave(37, 8, 46, noise=6)), 'cpuName': 'AMD Ryzen 9 7950X 16-Core Processor', 'cpuTemp': wave(60, 52, 68),
@@ -292,6 +293,8 @@ def api(method, path, query, body):
             CFG_VERSION[0] += 1
             return js({'version': CFG_VERSION[0]})
         return js(CONFIG)
+    if path == '/api/charge':
+        return js({'phone': {'level': 72, 'plugged': True, 'temp': 29, 'at': now_ms() - 20000}, 'power': None, 'switchedAt': None, 'error': None})
     if path == '/api/info':
         return js({'version': 'demo', 'configPath': r'%APPDATA%\PhoneBox\config.json', 'logPath': r'%LOCALAPPDATA%\PhoneBox\agent.log',
                    'adb': r'C:\platform-tools\adb.exe', 'connected': True, 'devices': ['DEMO0001']})

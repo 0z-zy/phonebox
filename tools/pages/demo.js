@@ -18,7 +18,7 @@
     ['snip', 'Snip', '✂️', '#14b8a6'], ['taskmgr', 'Task Manager', '📊', '#22c55e'], ['mute', 'Mute', '🔇', '#f59e0b'],
     ['screenoff', 'Screen Off', '🌙', '#8b5cf6'], ['lock', 'Lock', '🔒', '#ef4444'], ['settings', 'Settings', '⚙️', '#94a3b8'],
   ].map(([id, label, icon, color]) => ({ id, label, icon, color, cmd: id === 'mute' ? 'builtin:mute' : 'demo' }));
-  const PAGES = ['home', 'dashboard', 'ai', 'work', 'system', 'procs', 'deck', 'music', 'status', 'ambient', 'world', 'daily', 'markets', 'feeds', 'focus', 'calm', 'clock'];
+  const PAGES = ['home', 'dashboard', 'ai', 'work', 'system', 'procs', 'deck', 'music', 'status', 'ambient', 'world', 'daily', 'markets', 'feeds', 'focus', 'calm', 'clock', 'automation', 'planner', 'nightstand'];
 
   let catalog = null;
   async function loadCatalog() {
@@ -52,6 +52,14 @@
         }) };
       }),
       shortcuts: SHORTCUTS,
+      charge: { enabled: true, min: 50, max: 80, method: 'ha', entity: 'switch.phone_charger' },
+      rules: [
+        { id: 'claude-needs-me', name: 'Claude needs me', enabled: true, when: 'session-waiting', then: 'goto', page: 'ai', whileActive: true, priority: 8 },
+        { id: 'music', name: 'Music', enabled: true, when: 'media-playing', match: 'Spotify', then: 'goto', page: 'music', whileActive: true, priority: 2 },
+        { id: 'in-a-meeting', name: 'In a meeting', enabled: true, when: 'calendar-event', then: 'push', key: 'onair', pushValue: '{detail}', whileActive: true },
+        { id: 'review-requested', name: 'Review requested', enabled: true, when: 'review-requested', then: 'notify', text: '{detail}', whileActive: false, days: 'mon,tue,wed,thu,fri', during: '09:00-18:00' },
+        { id: 'evenings', name: 'Evenings', enabled: true, when: 'time', match: '22:00-07:00', then: 'goto', page: 'calm', whileActive: true, priority: 2 },
+      ],
     };
     store.set('pb-demo-config', c);
     return c;
@@ -77,6 +85,7 @@
       { label: 'Webhooks', value: 'done', level: 'ok' }, 'Water the plants'] }, at: now() - 600e3 },
   };
   let pushVersion = 1;
+  let rulesPaused = 0;
   let approvals = [];
   const SAMPLE_PROMPTS = [
     { tool: 'Run a command', detail: 'git push origin main --force-with-lease', description: 'Push the rebased branch', project: 'api-gateway' },
@@ -103,7 +112,7 @@
   function state(since) {
     const dur = 214000;
     return {
-      update: null, ts: now(), host: 'DESK-PC', cfgVersion: cfgVersion(), pushVersion, evSeq: seq,
+      update: null, ts: now(), host: 'DESK-PC', cfgVersion: cfgVersion(), pushVersion, evSeq: seq, rules: ['music'], rulesPaused: rulesPaused > now() ? rulesPaused : null,
       events: since == null ? [] : events.filter((e) => e.seq > since),
       pc: {
         cpu: Math.max(1, wave(37, 8, 46, 0, 6)), cpuName: 'AMD Ryzen 9 7950X 16-Core Processor', cpuTemp: wave(60, 52, 68),
@@ -296,7 +305,7 @@
     if (path === '/api/rules/test' && method === 'POST') {
       // runs the rule's action once, like the agent's Test button
       const r = parse(body) || {};
-      if (r.then === 'goto' && r.page) emit('goto', { page: r.page });
+      if (r.then === 'goto' && r.page) emit('goto', { page: r.page, rule: r.id || 'test', name: r.name || null, priority: r.priority ?? 5, countdown: r.countdownSec ?? null, hold: false });
       else if (r.then === 'notify') emit('notify', { title: r.name || 'PhoneBox', text: (r.text || 'test').replace('{detail}', 'test'), level: r.level || 'info' });
       else if (r.then === 'push' && r.key) {
         const value = r.pushValue ?? true;
@@ -305,6 +314,12 @@
       }
       return json({ ok: true });
     }
+    if (path === '/api/rules/pause' && method === 'POST') {
+      const m = q.has('minutes') ? +q.get('minutes') : 60;
+      rulesPaused = m > 0 ? now() + m * 60e3 : 0;
+      return json({ pausedUntil: rulesPaused || null });
+    }
+    if (path === '/api/charge') return json({ phone: { level: 72, plugged: true, temp: 29, at: now() - 20e3 }, power: null, switchedAt: null, error: null });
     if (path === '/api/notify' && method === 'POST') { const d = parse(body); return json(emit('notify', typeof d === 'object' && d ? d : { text: String(d) })); }
     if (path.startsWith('/api/goto/') && method === 'POST') return json(emit('goto', { page: decodeURIComponent(path.slice(10)) }));
     if (path === '/api/refresh' && method === 'POST') return json(emit('refresh'));

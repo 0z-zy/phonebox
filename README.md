@@ -99,7 +99,7 @@ with its web server on port 8085 for the CPU temperature.
 
 ## Pages & templates
 
-Every page is a 12 × 6 grid. Start a page from one of the 18 templates (or from scratch) and change anything.
+Every page is a 12 × 6 grid. Start a page from one of the 23 templates (or from scratch) and change anything.
 
 | | |
 |---|---|
@@ -118,11 +118,15 @@ Every page is a 12 × 6 grid. Start a page from one of the 18 templates (or from
 | **Music** — a big now-playing card | **Shortcuts** — Stream Deck–style keys |
 | <img src="docs/screenshots/music.png" alt="Music"> | <img src="docs/screenshots/deck.png" alt="Shortcuts"> |
 
-More templates: **Clock**, **Focus** (pomodoro + note), **Calm** (breathing), **DevOps** (command widgets).
+More templates: **Clock**, **Focus** (pomodoro + note), **Calm** (breathing), **DevOps** (command widgets),
+**Nightstand** (word clock, moon, battery care), **Planner** (next up, month, agenda, checklist), **Automation** (rules,
+on air, pushed values, inbox), **Weekend** and **Deep work**.
 
 **Getting around.** Swipe; press the phone's **volume keys** to flip pages; tap the page dots (or long-press an empty
-spot) for an overview of all pages and jump straight to one. Webhooks can switch pages too. The panel returns to
-the first page when idle, dims to a clock at night and keeps the screen on.
+spot) for an overview of all pages and jump straight to one. Webhooks and rules can switch pages too; they count down
+first (*"switching to AI in 3…"*, with Stay and Go now) and never pull a page away while you are using the panel. The
+panel returns to the home page when idle (each page can stay longer, or for good), can dim to a clock at night and
+keeps the screen on.
 
 <p align="center"><img src="docs/screenshots/overview.png" width="600" alt="Page overview"></p>
 
@@ -130,9 +134,9 @@ the first page when idle, dims to a clock at night and keeps the screen on.
 
 | Category | Widgets |
 |---|---|
-| **Time** | Clock (with status line and weather) · Analog clock (any time zone) · World clocks · Calendar · Time progress (day / week / month / year) · Countdown · Pomodoro · Quick timer · Stopwatch |
-| **Weather & sky** | Weather · Forecast (hourly / 7 days) · Sun & moon (daylight left, UV, moon phase) · Air quality (European AQI, PM2.5, PM10, O₃, NO₂) |
-| **Computer** | On air (microphone / camera / OBS) · OBS Studio (live, recording, scenes) · Device batteries (headphones, mice, keyboards) · Docker (containers, start / stop) · Metric tile · Gauge · Chart · Memory & disks · Top processes · Processes · Now playing · Volume · Shortcut grid · Big button · **Command** (PowerShell output, refreshed every N seconds) |
+| **Time** | Clock (with status line and weather) · Analog clock (any time zone) · **Word clock** · World clocks · Calendar · **Next up** · Time progress (day / week / month / year) · Countdown · Pomodoro · Quick timer · Stopwatch |
+| **Weather & sky** | Weather · Forecast (hourly / 7 days) · Sun & moon (daylight left, UV, moon phase) · **Moon** · Air quality (European AQI, PM2.5, PM10, O₃, NO₂) |
+| **Computer** | **Rules** (which hold, pause) · **Battery care** · On air (microphone / camera / OBS) · OBS Studio (live, recording, scenes) · Device batteries (headphones, mice, keyboards) · Docker (containers, start / stop) · Metric tile · Gauge · Chart · Memory & disks · Top processes · Processes · Now playing · Volume · Shortcut grid · Big button · **Command** (PowerShell output, refreshed every N seconds) |
 | **AI & code** | AI quotas · Quota ring · AI sessions · GitHub |
 | **Personal** | **Agenda** (Google / Outlook / iCloud calendars) · Note · Checklist (resets daily) · Counter · Breathe · Quote · Title · Phone battery |
 | **Web & data** | **Custom HTML** (your own widget, sandboxed) · **Home Assistant** (entities, tap to switch) · **Pushed value** · **Notifications** (both fed by [webhooks](#webhooks)) · Hacker News · Exchange rates (ECB) · Crypto prices · Image / webcam |
@@ -176,6 +180,7 @@ curl -X POST "http://127.0.0.1:8765/api/push/door?ttl=600" -d open              
 curl -X POST http://127.0.0.1:8765/api/notify -H "Content-Type: application/json" \
      -d '{"title":"Deploy","text":"Production is live","level":"ok","page":"feeds"}' # toast + vibration (+ switch page)
 curl -X POST http://127.0.0.1:8765/api/goto/music                                     # switch the phone to a page (id or number)
+curl -X POST "http://127.0.0.1:8765/api/goto/music?countdown=0"                        # …without the on-screen countdown
 curl -X POST http://127.0.0.1:8765/api/refresh                                        # refresh quotas/GitHub and the panel now (?reload=1 reloads it)
 ```
 
@@ -209,12 +214,32 @@ for senders that cannot set headers). That key opens only the webhook endpoints,
 | the CPU stays above a percentage for 15 s | |
 | you have been away from the keyboard for N minutes | |
 | it is between two times (`22:00-07:00`) | |
-| a pushed value is on (a webhook from Home Assistant, a doorbell…) | |
+| a pushed value is on, or above / below / equal to a value (a webhook from Home Assistant, a doorbell…) | run a shortcut |
+| an AI quota is above a percentage | |
+| a GitHub review is requested · CI fails on my pull request | |
+| a device battery is low · the network is slow or unreachable | |
+| always (with the days and hours below, for schedules) | |
+
+Every rule can also be limited to **some days** and **some hours**, act only when its condition **lasts N seconds**,
+**rest** for a while before acting again, and has a **priority** and its own **countdown** for page switches.
+
+**Page switches are calm.** The phone counts down before a rule changes the page (*"Claude needs me — switching to
+AI in 3…"*, tap **Stay** to keep the page or **Go now**), waits while you are using the panel, keeps a minimum time
+between two automatic switches and lets the higher-priority rule go first; rules that end before their turn are
+dropped, so a burst of rules never bounces the screen back and forth. Settings › General › Page switching sets the
+countdown, how long to wait after a touch, the minimum time between switches, the home page and how long a rule may
+keep its page. The phone's overview (and the Rules widget) pauses all rules for an hour.
 
 With **only while it lasts**, the effect ends with the condition: the phone goes back to the page it was on (unless
 you moved on yourself) and stays on the rule's page instead of returning home when idle; a pushed value is removed
 again. The editor starts from examples (Claude needs me → AI page, music → Music page, on air during calls, CPU busy,
-away → Ambient, evenings → Calm, doorbell) and has a Test button for each rule.
+away → Ambient, evenings → Calm, doorbell, quota warning, review requested, CI failed, workday mornings, low battery,
+too warm) and has a Test button for each rule.
+
+**Battery care** (Settings › General) keeps the phone's battery between two levels, 50–80 % by default, so a panel
+that is always plugged in lasts longer. Phones cannot stop charging without root, so PhoneBox switches the power
+where it comes from: a smart plug in Home Assistant, or two shortcuts (for example `uhubctl` for a USB hub with
+switchable ports). The panel keeps running over Wi-Fi while the USB power is off.
 
 ## Wi-Fi & Tailscale
 

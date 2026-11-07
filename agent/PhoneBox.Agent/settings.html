@@ -144,6 +144,12 @@ table.items td.val { font-family: Consolas, monospace; font-size: 12px; max-widt
 .rule input.grow { flex: 1 1 180px; }
 .rule.off { opacity: .55; }
 .rule .live { font-size: 12px; color: var(--accent); font-weight: 600; }
+.rule .ropts { border-top: 1px solid var(--line); padding-top: 8px; display: grid; gap: 8px; }
+.rule .ropts summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
+.rule .ropts[open] summary { margin-bottom: 4px; }
+.rule .days { display: inline-flex; gap: 3px; }
+.rule .day { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 7px; padding: 3px 7px; font-size: 12px; cursor: pointer; }
+.rule .day.on { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
 .presets { display: flex; flex-wrap: wrap; gap: 8px; }
 .phone-row { border-top: 1px solid var(--line); padding: 10px 0; }
 .phone-row:first-child { border-top: 0; padding-top: 0; }
@@ -265,6 +271,10 @@ dd { margin: 0; word-break: break-all; }
         <h3>Add a rule</h3>
         <div class="presets" id="rulePresets"></div>
       </div>
+      <div class="card row" style="gap:10px;align-items:center">
+        <span id="rulesPausedState" class="hint" style="flex:1">Page switches count down on the phone and wait while you use it (General › Page switching).</span>
+        <button class="btn sm" id="rulesPauseBtn">Pause all rules for 1 hour</button>
+      </div>
       <div id="ruleList"></div>
     </section>
 
@@ -349,7 +359,24 @@ dd { margin: 0; word-break: break-all; }
         <label class="check"><input type="checkbox" data-bind="display.autoBrightness"> Brightness follows the room (light sensor)</label>
         <label class="check"><input type="checkbox" data-bind="display.nightWhenDark"> Show the night screen whenever the room is dark</label>
         <label class="check"><input type="checkbox" data-bind="display.proximityWake"> A hand near the phone wakes the night screen</label>
-        <div class="field" style="max-width:260px;margin-top:12px"><label>Return to the first page after idle seconds (0 = never)</label><input type="number" min="0" max="3600" data-bind="display.idleReturnSec" data-type="int"></div>
+      </div>
+
+      <div class="card">
+        <h3>Page switching</h3>
+        <p class="hint" style="margin:0 0 12px">How rules, webhooks and the idle return change the page. Instead of jumping, the phone shows
+          <i>“Claude needs me — switching to AI in 3…”</i> with <b>Stay</b> and <b>Go now</b>, then fades over. It never pulls a page away while
+          you are using the panel, and rules that fire one after another wait their turn instead of bouncing the screen back and forth.</p>
+        <div class="grid2">
+          <div class="field"><label>Home page</label><select id="homePageSel" onchange="cfg.display.homePage = this.value || null; changed(); renderPageEditor()"></select>
+            <span class="hint">Where the idle return and the Back key go.</span></div>
+          <div class="field"><label>Back home after (seconds without a touch, 0 = never)</label><input type="number" min="0" max="3600" data-bind="display.idleReturnSec" data-type="int">
+            <span class="hint">Each page can override this (page editor › Back home after).</span></div>
+          <div class="field"><label>Countdown before switching (seconds, 0 = at once)</label><input type="number" min="0" max="30" data-bind="display.switchCountdownSec" data-type="int"></div>
+          <div class="field"><label>Don't interrupt for (seconds after I touch the panel)</label><input type="number" min="0" max="600" data-bind="display.touchGraceSec" data-type="int"></div>
+          <div class="field"><label>At least (seconds between two automatic switches)</label><input type="number" min="0" max="600" data-bind="display.minDwellSec" data-type="int"></div>
+          <div class="field"><label>A rule keeps its page at most (minutes, 0 = while it lasts)</label><input type="number" min="0" max="1440" data-bind="display.holdMaxMin" data-type="int">
+            <span class="hint">After that the panel goes home when nobody touches it.</span></div>
+        </div>
       </div>
 
       <div class="card">
@@ -357,6 +384,26 @@ dd { margin: 0; word-break: break-all; }
         <p class="hint" style="margin:0 0 12px">Keep the phone on the panel. Neither needs root.</p>
         <label class="check"><input type="checkbox" data-bind="display.pin"> Pin the panel: Home and Recents stay on it (Android asks once; hold Back and Overview together to unpin)</label>
         <label class="check"><input type="checkbox" data-bind="display.homeScreen"> Use the panel as the phone's home screen: it starts after a reboot and Home returns to it (turn off to get your launcher back)</label>
+        <label class="check"><input type="checkbox" data-bind="display.keepAwake"> Keep the phone awake: turn off Android's screen saver (it starts on the charger) and keep the screen on while plugged in (set over USB)</label>
+      </div>
+
+      <div class="card">
+        <h3>Battery care</h3>
+        <p class="hint" style="margin:0 0 12px">A phone that is plugged in all the time wears its battery out. PhoneBox can keep it between two
+          levels by switching the phone's power on and off. Phones cannot stop charging by themselves without root, so the power is switched
+          where it comes from: a <b>smart plug in Home Assistant</b> (the phone on its own charger), or two <b>shortcuts</b>, for example
+          <code>uhubctl</code> for a USB hub with switchable ports. Without USB power the panel keeps running over Wi-Fi.</p>
+        <div class="row" style="margin-bottom:12px"><label class="switch"><input type="checkbox" data-bind="charge.enabled"><span></span></label> Keep the battery between
+          <input type="number" min="5" max="95" data-bind="charge.min" data-type="int" style="width:70px"> % and
+          <input type="number" min="10" max="100" data-bind="charge.max" data-type="int" style="width:70px"> %</div>
+        <div class="grid2">
+          <div class="field"><label>Switch the power with</label><select data-bind="charge.method"><option value="ha">a Home Assistant switch (smart plug)</option><option value="shortcuts">two shortcuts (power on / power off)</option></select></div>
+          <div class="field" id="chargeHa"><label>Switch entity</label><input type="text" data-bind="charge.entity" placeholder="switch.phone_charger" spellcheck="false"></div>
+          <div class="field" id="chargeOn" hidden><label>Shortcut: power on</label><select id="chargeOnSel" onchange="cfg.charge.onShortcut = this.value || null; changed()"></select></div>
+          <div class="field" id="chargeOff" hidden><label>Shortcut: power off</label><select id="chargeOffSel" onchange="cfg.charge.offShortcut = this.value || null; changed()"></select></div>
+        </div>
+        <div class="row" style="gap:8px"><button class="btn sm" onclick="chargeTest('off')">Test: power off</button><button class="btn sm" onclick="chargeTest('on')">Test: power on</button>
+          <span class="hint" id="chargeState"></span></div>
       </div>
 
       <div class="card">
@@ -615,7 +662,17 @@ function renderPages() {
   renderPageEditor();
 }
 
+const fmtIdle = (s) => (!s ? 'never' : s < 60 ? `${s} s` : s % 60 ? `${Math.round(s / 6) / 10} min` : `${s / 60} min`);
+const isHome = (p) => (cfg.display.homePage ? cfg.display.homePage === p.id : cfg.pages.find((x) => x.enabled !== false) === p);
+function fillHomeSelect() {
+  const sel = $('homePageSel');
+  if (!sel) return;
+  sel.replaceChildren(h('option', { value: '' }, 'The first page'), ...cfg.pages.filter((p) => p.id).map((p) => h('option', { value: p.id, selected: p.id === cfg.display.homePage }, `${p.icon || ''} ${p.title}`.trim())));
+  sel.value = cfg.display.homePage || '';
+}
+
 function renderPageEditor() {
+  fillHomeSelect();
   const p = curPage();
   $('stage').hidden = !p;
   if (!p) { $('peHead').replaceChildren(h('p', { class: 'lead' }, 'No pages. Add one with "New page".')); $('peRest').replaceChildren(); return; }
@@ -639,6 +696,13 @@ function renderPageEditor() {
         h('button', { class: 'btn sm', title: 'Save this page to a file to share it or use it on another computer', onclick: () => exportPages([p], 'phonebox-page-' + (p.id || 'page')) }, 'Export page'),
         h('button', { class: 'btn sm', onclick: () => { p.widgets = []; selWidget = -1; renderPageEditor(); changed(); } }, 'Clear'),
         h('span', { class: 'spacer' }),
+        h('button', { class: 'btn sm' + (isHome(p) ? ' on' : ''), title: 'The page the panel comes back to (idle return, Back key)',
+          onclick: () => { if (!p.id) { toast('Save first so the page gets an id', true); return; } cfg.display.homePage = p.id; renderPageEditor(); changed(); } },
+          isHome(p) ? '🏠 Home page' : '🏠 Make home page'),
+        h('label', { class: 'hint', title: 'Return to the home page when nobody touched the panel for this long' }, 'Back home after ',
+          h('select', { onchange: (e) => { p.idleSec = e.target.value === '' ? null : +e.target.value; changed(); } },
+            ...[['', `default (${fmtIdle(cfg.display.idleReturnSec ?? 90)})`], ['0', 'never'], ['30', '30 s'], ['60', '1 min'], ['120', '2 min'], ['300', '5 min'], ['900', '15 min'], ['3600', '1 hour']]
+              .map(([v, l]) => h('option', { value: v, selected: String(p.idleSec ?? '') === v }, l)))),
         h('button', { class: 'btn sm danger', disabled: cfg.pages.length === 1, onclick: () => {
           if (!confirm(`Delete the page "${p.title}"?`)) return;
           cfg.pages.splice(selPage, 1); selWidget = -1; renderPages(); changed();
@@ -1022,9 +1086,17 @@ const TRIGGERS = {
   'cpu-above': { label: 'the CPU is busy', value: '% (for 15 s)', def: 85 },
   idle: { label: 'I am away from the PC', value: 'minutes', def: 5 },
   time: { label: 'it is between', match: '22:00-07:00' },
-  push: { label: 'a pushed value is on', match: 'key, e.g. doorbell' },
+  push: { label: 'a pushed value', match: 'key, e.g. doorbell' },
+  'quota-above': { label: 'an AI quota is above', value: '%', def: 80, match: 'any (or: claude|codex)' },
+  'review-requested': { label: 'a GitHub review is requested', match: 'any repo (or: api|web)' },
+  'ci-failed': { label: 'CI fails on my pull request', match: 'any repo (or: api|web)' },
+  'battery-low': { label: 'a device battery is below', value: '%', def: 20, match: 'any device (or: mouse|headset)' },
+  'ping-high': { label: 'the network is slow', value: 'ms (or unreachable)', def: 150 },
+  always: { label: 'always (use the days and hours below)' },
 };
-const ACTIONS = { goto: 'show the page', notify: 'show a notification', push: 'push a value' };
+const ACTIONS = { goto: 'show the page', notify: 'show a notification', push: 'push a value', shortcut: 'run a shortcut' };
+const DAYS = [['mon', 'Mo'], ['tue', 'Tu'], ['wed', 'We'], ['thu', 'Th'], ['fri', 'Fr'], ['sat', 'Sa'], ['sun', 'Su']];
+const PRIORITIES = { 2: 'low', 5: 'normal', 8: 'high' };
 const pageId = (...ids) => ids.find((id) => cfg.pages.some((p) => p.id === id)) || cfg.pages[0]?.id || '';
 const RULE_PRESETS = [
   ['✳️ Claude needs me → AI page', () => ({ name: 'Claude needs me', when: 'session-waiting', then: 'goto', page: pageId('ai', 'work'), whileActive: true })],
@@ -1037,6 +1109,12 @@ const RULE_PRESETS = [
   ['🌙 Away → ambient page', () => ({ name: 'Away', when: 'idle', value: 10, then: 'goto', page: pageId('ambient', 'clock', 'calm'), whileActive: true })],
   ['🕙 Evenings → calm page', () => ({ name: 'Evenings', when: 'time', match: '22:00-07:00', then: 'goto', page: pageId('calm', 'clock', 'ambient'), whileActive: true })],
   ['🔔 Doorbell → notification', () => ({ name: 'Doorbell', when: 'push', match: 'doorbell', then: 'notify', text: 'Someone is at the door', level: 'warn', whileActive: false })],
+  ['🎯 Quota above 80 % → warning', () => ({ name: 'Quota', when: 'quota-above', value: 80, then: 'notify', text: '{detail}', level: 'warn', whileActive: false, cooldownMin: 60 })],
+  ['👀 Review requested → work page', () => ({ name: 'Review requested', when: 'review-requested', then: 'goto', page: pageId('work', 'devops'), whileActive: false, priority: 2, cooldownMin: 30, days: 'mon,tue,wed,thu,fri', during: '09:00-18:00' })],
+  ['❌ CI failed → notification', () => ({ name: 'CI failed', when: 'ci-failed', then: 'notify', text: '{detail}', level: 'error', whileActive: false })],
+  ['🌅 Workday mornings → daily page', () => ({ name: 'Morning', when: 'always', during: '08:30-09:30', days: 'mon,tue,wed,thu,fri', then: 'goto', page: pageId('daily', 'home'), whileActive: true, priority: 2 })],
+  ['🔋 Mouse battery low', () => ({ name: 'Battery low', when: 'battery-low', value: 15, then: 'notify', text: '{detail} — time to charge', level: 'warn', whileActive: false, cooldownMin: 240 })],
+  ['🌡️ Too warm (webhook value)', () => ({ name: 'Too warm', when: 'push', match: 'temperature', op: '>', arg: '28', then: 'notify', text: 'It is {detail} °C', level: 'warn', whileActive: false, cooldownMin: 60 })],
   ['➕ Empty rule', () => ({ name: '', when: 'session-waiting', then: 'goto', page: pageId('home'), whileActive: true })],
 ];
 let activeRules = [];
@@ -1061,6 +1139,8 @@ function ruleCard(r, i) {
 
   const cond = [];
   if (t.match) cond.push(text('match', t.match, 'grow'));
+  if (r.when === 'push') cond.push(sel(r.op || 'on', { on: 'is on', '>': 'is above', '<': 'is below', '=': 'equals', '!=': 'is not' }, (v) => set('op', v === 'on' ? null : v, true)),
+    r.op ? text('arg', 'value', '') : null);
   if (t.value) cond.push(h('input', { type: 'number', min: 0, style: 'width:90px', value: r.value ?? t.def, oninput: (e) => set('value', e.target.value === '' ? null : +e.target.value) }), h('span', { class: 'hint' }, t.value));
 
   const act = [];
@@ -1069,6 +1149,26 @@ function ruleCard(r, i) {
   if (r.then === 'notify') act.push(text('text', 'text ({detail} = what happened)', 'grow'),
     sel(r.level || 'info', { info: 'info', ok: 'ok', warn: 'warning', error: 'error' }, (v) => set('level', v)));
   if (r.then === 'push') act.push(text('key', 'key, e.g. onair'), text('pushValue', 'value (default: true)', 'grow'));
+  if (r.then === 'shortcut') act.push(h('select', { onchange: (e) => set('shortcut', e.target.value || null) }, h('option', { value: '' }, '— pick a shortcut —'),
+    ...(cfg.shortcuts || []).map((s) => h('option', { value: s.id, selected: s.id === r.shortcut }, `${s.icon || ''} ${s.label}`.trim()))));
+
+  const num = (key, min, max, width = 64) => h('input', { type: 'number', min, max, style: `width:${width}px`, value: r[key] ?? '', placeholder: '0',
+    oninput: (e) => set(key, e.target.value === '' ? (key === 'countdownSec' ? null : 0) : +e.target.value) });
+  const days = (r.days || '').split(',').filter(Boolean);
+  const dayBtns = h('span', { class: 'days' }, ...DAYS.map(([d, l]) => h('button', { class: 'day' + (!days.length || days.includes(d) ? ' on' : ''), title: 'Only on these days',
+    onclick: () => {
+      const cur = days.length ? days : DAYS.map(([x]) => x);
+      const next = cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d];
+      set('days', next.length === 7 || !next.length ? null : DAYS.map(([x]) => x).filter((x) => next.includes(x)).join(','), true);
+    } }, l)));
+  const opts = h('details', { class: 'ropts', open: !!(r.days || r.during || r.forSec || r.cooldownMin || (r.priority ?? 5) !== 5 || r.countdownSec != null) },
+    h('summary', {}, 'Options', h('span', { class: 'hint' }, ' ' + ruleSummary(r))),
+    h('div', { class: 'line' }, h('b', {}, 'Only'), dayBtns, h('span', { class: 'hint' }, 'between'), text('during', 'all day (or 09:00-18:00)')),
+    h('div', { class: 'line' }, h('b', {}, 'Wait'), h('span', { class: 'hint' }, 'act when it lasts'), num('forSec', 0, 3600), h('span', { class: 'hint' }, 's · then rest'), num('cooldownMin', 0, 1440),
+      h('span', { class: 'hint' }, 'min before it may act again')),
+    r.then === 'goto' ? h('div', { class: 'line' }, h('b', {}, 'Page'), h('span', { class: 'hint' }, 'priority'),
+      sel(String(r.priority ?? 5), PRIORITIES[r.priority ?? 5] ? PRIORITIES : { ...PRIORITIES, [r.priority]: String(r.priority) }, (v) => set('priority', +v)),
+      h('span', { class: 'hint' }, '· countdown'), num('countdownSec', 0, 30, 56), h('span', { class: 'hint' }, `s (empty = ${cfg.display.switchCountdownSec ?? 3} s, as in General)`)) : null);
 
   const live = activeRules.includes(r.id);
   return h('div', { class: 'card rule' + (r.enabled === false ? ' off' : '') },
@@ -1084,7 +1184,19 @@ function ruleCard(r, i) {
     h('div', { class: 'line' }, h('b', {}, 'When'), sel(r.when, TRIGGERS, (v) => { r.match = null; r.value = null; set('when', v, true); }), ...cond),
     h('div', { class: 'line' }, h('b', {}, 'Then'), sel(r.then, ACTIONS, (v) => set('then', v, true)), ...act),
     r.then !== 'notify' ? h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: r.whileActive !== false, onchange: (e) => set('whileActive', e.target.checked) }),
-      r.then === 'goto' ? 'Only while it lasts (then go back to the previous page)' : 'Only while it lasts (then remove the value)') : null);
+      r.then === 'goto' ? 'Only while it lasts (then go back to the previous page)' : r.then === 'shortcut' ? 'Only while it lasts (a toggle shortcut switches back off)' : 'Only while it lasts (then remove the value)') : null,
+    opts);
+}
+
+function ruleSummary(r) {
+  const parts = [];
+  if (r.days) parts.push(r.days.split(',').map((d) => d[0].toUpperCase() + d.slice(1, 2)).join(' '));
+  if (r.during) parts.push(r.during);
+  if (r.forSec) parts.push(`after ${r.forSec} s`);
+  if (r.cooldownMin) parts.push(`rest ${r.cooldownMin} min`);
+  if (r.then === 'goto' && (r.priority ?? 5) !== 5) parts.push(`${PRIORITIES[r.priority] || r.priority} priority`);
+  if (r.then === 'goto' && r.countdownSec != null) parts.push(r.countdownSec ? `${r.countdownSec} s countdown` : 'no countdown');
+  return parts.length ? '· ' + parts.join(' · ') : '· every day, at once';
 }
 
 // shows which rules hold right now while the Rules section is open
@@ -1093,10 +1205,46 @@ async function pollRules() {
   try {
     const s = await (await fetch('/api/state')).json();
     const next = s.rules || [];
+    rulesPausedUntil = s.rulesPaused || null;
+    $('rulesPauseBtn').textContent = rulesPausedUntil ? 'Resume rules' : 'Pause all rules for 1 hour';
+    $('rulesPausedState').textContent = rulesPausedUntil ? `⏸ Rules are paused until ${new Date(rulesPausedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+      : 'Page switches count down on the phone and wait while you use it (General › Page switching).';
     if (next.join() !== activeRules.join()) { activeRules = next; if (!document.activeElement?.closest?.('#ruleList')) renderRules(); }
   } catch (_) {}
 }
 setInterval(pollRules, 2000);
+let rulesPausedUntil = null;
+$('rulesPauseBtn').onclick = async () => {
+  await fetch(`/api/rules/pause?minutes=${rulesPausedUntil ? 0 : 60}`, { method: 'POST' });
+  pollRules();
+};
+
+// ---------------------------------------------------------------- battery care
+function renderCharge() {
+  cfg.charge ??= { enabled: false, min: 50, max: 80, method: 'ha' };
+  const sc = cfg.charge.method === 'shortcuts';
+  $('chargeHa').hidden = sc; $('chargeOn').hidden = $('chargeOff').hidden = !sc;
+  for (const [id, key] of [['chargeOnSel', 'onShortcut'], ['chargeOffSel', 'offShortcut']])
+    $(id).replaceChildren(h('option', { value: '' }, '— pick a shortcut —'), ...(cfg.shortcuts || []).map((s) => h('option', { value: s.id, selected: s.id === cfg.charge[key] }, `${s.icon || ''} ${s.label}`.trim())));
+}
+async function chargeTest(action) {
+  if (JSON.stringify(cfg) !== saved) { toast('Save first, then test', true); return; }
+  const r = await fetch(`/api/charge/test?action=${action}`, { method: 'POST' });
+  const j = await r.json().catch(() => ({}));
+  toast(r.ok ? `Power ${action}` : j.error || 'Could not switch', !r.ok);
+  pollCharge();
+}
+async function pollCharge() {
+  if (!$('general').classList.contains('on')) return;
+  try {
+    const s = await (await fetch('/api/charge')).json();
+    const p = s.phone;
+    const age = p ? Math.round((Date.now() - p.at) / 1000) : null;
+    $('chargeState').textContent = (p ? `Phone: ${p.level}% ${p.plugged ? '⚡ charging' : 'on battery'} (${age < 90 ? 'just now' : Math.round(age / 60) + ' min ago'})` : 'No report from the phone yet')
+      + (s.power ? ` · power ${s.power}` : '') + (s.error ? ` · ${s.error}` : '');
+  } catch (_) {}
+}
+setInterval(pollCharge, 5000);
 
 // ---------------------------------------------------------------- webhooks
 function renderWebhooks(lan) {
@@ -1309,6 +1457,7 @@ function bindForm() {
       if (p === 'adbPath' && val === '') val = null;
       setPath(cfg, p, val);
       $('nbv').textContent = Math.round(cfg.night.brightness * 100) + '%';
+      if (p === 'charge.method') renderCharge();
       changed();
     };
   });
@@ -1374,8 +1523,10 @@ async function load() {
   if (!catalog.widgets.length) catalog = await (await fetch('/api/catalog')).json();
   cfg = await (await fetch('/api/settings')).json();
   cfg.pages ??= []; cfg.shortcuts ??= []; cfg.rules ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false };
+  for (const [k, v] of Object.entries({ idleReturnSec: 90, switchCountdownSec: 3, touchGraceSec: 20, minDwellSec: 15, holdMaxMin: 30, keepAwake: true })) cfg.display[k] ??= v;
+  cfg.charge ??= { enabled: false, min: 50, max: 80, method: 'ha' };
   saved = JSON.stringify(cfg);
-  renderPages(); renderDeck(); renderRules(); renderCalendars(); bindForm(); changed(); loadInfo(); loadPhones();
+  renderPages(); renderDeck(); renderRules(); renderCalendars(); renderCharge(); bindForm(); changed(); loadInfo(); loadPhones();
 }
 
 async function save() {
@@ -1387,7 +1538,7 @@ async function save() {
 }
 
 $('save').onclick = save;
-$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); renderRules(); renderCalendars(); renderPhones(); bindForm(); changed(); };
+$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); renderRules(); renderCalendars(); renderPhones(); renderCharge(); bindForm(); changed(); };
 $('openPhone').onclick = async () => { await fetch('/api/phone/open', { method: 'POST' }); toast('Opening the panel on the phone'); };
 $('cityBtn').onclick = searchCity;
 function renderUpdate(u) {
@@ -1446,7 +1597,7 @@ $('whClear').onclick = async () => { if (!confirm('Delete all pushed values?')) 
 setInterval(loadPushed, 4000);
 $('citySearch').onkeydown = (e) => { if (e.key === 'Enter') searchCity(); };
 $('applyJson').onclick = () => {
-  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); renderRules(); renderCalendars(); renderPhones(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
+  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); renderRules(); renderCalendars(); renderPhones(); renderCharge(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
   catch (e) { $('jsonErr').textContent = e.message; }
 };
 document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (!$('save').disabled) save(); } });

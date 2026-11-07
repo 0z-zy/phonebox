@@ -51,7 +51,9 @@ export let cfg = PREVIEW ? { ...DEFAULT_CFG, pages: [] } : { ...DEFAULT_CFG, ...
 export let cfgVersion = null;
 export let online = null;
 export let lastTouch = Date.now();
+export let lastUserTouch = 0;     // last real touch or key (rules wait a while after it)
 export let wakeUntil = 0;
+export let rulesPaused = null;    // unix ms until which the agent's rules are paused
 export let nightOn = null;
 export let evSeq = null;          // last agent event seen (notifications, page switches…)
 export let pushVersion = null;
@@ -611,7 +613,7 @@ export function handleNotify(d) {
   D.notes = D.notes.slice(0, 30);
   store.set('notes', D.notes);
   emit('notes');
-  if (d.page != null) gotoPageRef(d.page);
+  if (d.page != null) requestPage({ page: d.page, name: d.title || null, countdown: d.countdown });
 }
 
 // ---------------------------------------------------------------- permission prompts (Claude Code hook → phone)
@@ -674,13 +676,13 @@ export function handleEvent(e) {
   if (PREVIEW && (e.kind === 'goto' || e.kind === 'back' || e.kind === 'reload')) return; // the editor picks the page
   if (e.kind === 'approval' || e.kind === 'approval-done') loadApprovals();
   else if (e.kind === 'notify' && e.data) handleNotify(e.data);
-  else if (e.kind === 'goto' && e.data) ruleGoto(e.data);
-  else if (e.kind === 'back' && e.data) { if (ruleHold && ruleHold.rule === e.data.rule) endHold(); }
+  else if (e.kind === 'goto' && e.data) requestPage(e.data);
+  else if (e.kind === 'back' && e.data) requestBack(e.data.rule);
   else if (e.kind === 'refresh') { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadWeather(true); loadCalendar(); }
   else if (e.kind === 'reload') location.reload();
 }
 
-export const WIDGET_ICONS = { clock: '🕒', weather: '⛅', forecast: '🌦️', media: '🎵', stat: '📈', gauge: '⏲️', chart: '📊', meters: '💾', quotas: '✳️', sessions: '🤖',
+export const WIDGET_ICONS = { rules: '⚡', chargecare: '🔋', nextup: '⏭️', moon: '🌙', wordclock: '🔤', clock: '🕒', weather: '⛅', forecast: '🌦️', media: '🎵', stat: '📈', gauge: '⏲️', chart: '📊', meters: '💾', quotas: '✳️', sessions: '🤖',
   github: '🐙', processes: '⚙️', shortcuts: '🎛️', button: '🔘', worldclock: '🌍', calendar: '📅', pomodoro: '🍅', countdown: '⏳', note: '📝', command: '💻',
   push: '📡', inbox: '📬', label: '🔤', analog: '🕰️', progress: '📆', stopwatch: '⏱️', timer: '⏲️', counter: '🔢', breathe: '🫁', quote: '💬',
   checklist: '✅', battery: '🔋', topprocs: '🔥', quotaring: '🎯', volume: '🔊', sun: '🌅', air: '🍃', hackernews: '📰', exchange: '💱', crypto: '🪙', image: '🖼️' };
@@ -797,25 +799,211 @@ export function goPage(i, instant = false) {
 }
 
 export function gotoPageRef(ref) {
-  const n = typeof ref === 'number' ? ref - 1 : /^\d+$/.test(String(ref)) ? +ref - 1 : pages.findIndex((p) => p.id === ref || p.title.toLowerCase() === String(ref).toLowerCase());
-  if (n < 0 || n >= pages.length) return -1;
+  const n = resolvePage(ref);
+  if (n < 0) return -1;
   lastTouch = Date.now();
   goPage(n, Math.abs(n - curPage) > 1);
   return n;
 }
 
-// An automation rule that switches pages "while active" holds its page (no idle return); when the rule ends the panel
-// goes back to the page it was on, unless you moved on yourself in the meantime.
-export let ruleHold = null; // { rule, page, from, at }
-export function ruleGoto(d) {
-  const from = ruleHold ? ruleHold.from : curPage;
-  const n = gotoPageRef(d.page);
-  if (n >= 0 && d.hold && d.rule) ruleHold = { rule: d.rule, page: n, from, at: Date.now() };
+export const resolvePage = (ref) => {
+  const n = typeof ref === 'number' ? ref - 1 : /^\d+$/.test(String(ref)) ? +ref - 1 : pages.findIndex((p) => p.id === ref || p.title.toLowerCase() === String(ref).toLowerCase());
+  return n >= 0 && n < pages.length ? n : -1;
+};
+export const homeIndex = () => { const id = cfg.display?.homePage; const i = id ? pages.findIndex((p) => p.id === id) : -1; return i >= 0 ? i : 0; };
+
+// ================================================================= calm page switching
+// Rules, webhooks and the idle return ask for a page instead of jumping to it. A request waits while you are using the
+// panel and while the last automatic switch is recent, then counts down on screen ("Switching to AI in 3…") so it can be
+// stopped, and fades over. Requests that come one after another are merged: the highest priority goes first, a rule
+// that ends before its turn is dropped, and a page that a rule holds is not taken over by a lower rule while it lasts.
+// A rule that holds its page "while active" keeps it (no idle return, up to display.holdMaxMin); when the rule ends the
+// panel goes back to the page it came from, unless you moved on yourself in the meantime.
+export let ruleHold = null;   // { rule, name, page, from, at, priority }
+export let navQueue = [];     // { kind: 'goto' | 'back' | 'home', rule, name, detail, page, hold, priority, countdown, at }
+let navCount = null;          // { req, until, total }
+let navTimer = 0;
+let lastAutoSwitch = 0;
+let lastNav = 0;              // last automatic switch (for the idle timer)
+const dsp = () => cfg.display || {};
+const pageLabel = (i) => { const p = pages[i]; return p ? `${p.icon || ''} ${p.title}`.trim() : ''; };
+
+export function requestPage(d) {
+  if (PREVIEW) return;
+  const page = resolvePage(d.page);
+  if (page < 0) return;
+  const rule = d.rule || null;
+  if (rule) {
+    // the rule ended and came back before its "back" ran: just stay
+    const back = navQueue.find((r) => r.kind === 'back' && r.rule === rule);
+    navQueue = navQueue.filter((r) => r.rule !== rule);
+    if (back && ruleHold?.rule === rule && curPage === ruleHold.page) { ruleHold.at = Date.now(); return pump(); }
+  }
+  navQueue.push({ kind: 'goto', rule, name: d.name || null, detail: d.detail || '', page, hold: !!(d.hold && rule),
+    priority: d.priority ?? 5, countdown: d.countdown, at: Date.now() });
+  soon();
 }
-export function endHold() {
-  const h = ruleHold;
-  ruleHold = null;
-  if (h && curPage === h.page && h.from !== h.page) { lastTouch = Date.now(); goPage(h.from, Math.abs(h.from - curPage) > 1); }
+
+// events that arrive together (several rules at once) are looked at together, a moment later
+function soon() { if (!navTimer) navTimer = setInterval(pump, 250); }
+
+export function requestBack(rule) {
+  if (PREVIEW || !rule) return;
+  // the rule ended before its turn: nothing to undo
+  const queued = navQueue.findIndex((r) => r.kind === 'goto' && r.rule === rule);
+  if (queued >= 0) { navQueue.splice(queued, 1); return pump(); }
+  if (!ruleHold || ruleHold.rule !== rule || navQueue.some((r) => r.kind === 'back' && r.rule === rule)) return;
+  navQueue.push({ kind: 'back', rule, name: ruleHold.name, page: ruleHold.from, priority: ruleHold.priority, at: Date.now() });
+  soon();
+}
+
+/** Seconds of no touch after which this page goes home (0 = stay). */
+const idleLimit = () => pages[curPage]?.idleSec ?? dsp().idleReturnSec ?? 90;
+function idleDue() {
+  const idle = idleLimit();
+  if (!(idle > 0)) return false;
+  const maxHold = (dsp().holdMaxMin ?? 30) * 60_000;
+  const held = ruleHold && curPage === ruleHold.page && (!maxHold || Date.now() - ruleHold.at < maxHold);
+  return !held && Date.now() - Math.max(lastTouch, lastNav) > idle * 1000
+    && (curPage !== homeIndex() || !!sheet || !$('overview').hidden);
+}
+
+function softGo(i) {
+  if (i === curPage) return;
+  if (Math.abs(i - curPage) === 1) { goPage(i); return; }
+  pager.classList.add('fade');
+  setTimeout(() => { goPage(i, true); pager.classList.remove('fade'); }, 320);
+}
+
+function perform(req) {
+  navQueue = navQueue.filter((r) => r !== req);
+  navCount = null;
+  if (req.kind === 'goto') {
+    // a rule taking over another rule's page inherits where that one came from
+    const from = ruleHold && curPage === ruleHold.page ? ruleHold.from : curPage;
+    navQueue = navQueue.filter((r) => r.kind !== 'back'); // whatever was going back is replaced by this
+    if (req.hold) ruleHold = { rule: req.rule, name: req.name, page: req.page, from, at: Date.now(), priority: req.priority };
+    else if (ruleHold && req.page !== ruleHold.page) ruleHold = null;
+    softGo(req.page);
+  } else if (req.kind === 'back') {
+    const h = ruleHold;
+    ruleHold = null;
+    if (h && curPage === h.page && h.from !== h.page) softGo(h.from);
+  } else {
+    ruleHold = null;
+    closeSheet(); closeOverview();
+    softGo(homeIndex());
+  }
+  if (req.kind !== 'home') lastAutoSwitch = Date.now();
+  lastNav = Date.now();
+  renderNav();
+  if (navQueue.length) setTimeout(pump, 0);
+}
+
+/** Drops a request (the Stay button). A dropped rule page also gives up its "back". */
+function dismiss(req) {
+  haptic();
+  navQueue = navQueue.filter((r) => r !== req);
+  if (req.kind === 'home') lastTouch = Date.now();
+  navCount = null;
+  pump();
+}
+
+function nextRequest() {
+  const hold = ruleHold && curPage === ruleHold.page ? ruleHold : null;
+  navQueue = navQueue.filter((r) => (r.kind === 'back' ? hold && hold.rule === r.rule : r.kind === 'home' ? idleDue() : true));
+  // already there: a rule just takes the page over
+  for (const r of navQueue.filter((r) => r.kind === 'goto' && r.page === curPage)) {
+    if (r.hold && (!hold || r.priority >= hold.priority)) ruleHold = { rule: r.rule, name: r.name, page: r.page, from: hold ? hold.from : curPage, at: Date.now(), priority: r.priority };
+    navQueue = navQueue.filter((x) => x !== r);
+  }
+  const ending = hold && navQueue.some((r) => r.kind === 'back' && r.rule === hold.rule);
+  const blocked = (r) => r.kind === 'goto' && hold && !ending && r.priority < hold.priority;
+  const order = { goto: 0, back: 1, home: 2 };
+  return navQueue.filter((r) => !blocked(r)).sort((a, b) => order[a.kind] - order[b.kind] || b.priority - a.priority || a.at - b.at)[0] || null;
+}
+
+/** Why a request has to wait, or '' when it may go. */
+function waitReason(req) {
+  if (!$('approval').hidden) return 'after the permission prompt';
+  if (req.kind === 'home') return '';
+  const grace = (dsp().touchGraceSec ?? 20) * 1000;
+  if (Date.now() - lastUserTouch < grace) return 'waits until you are done';
+  if (sheet || !$('overview').hidden) return 'waits until you are done';
+  const dwell = (dsp().minDwellSec ?? 15) * 1000 - (Date.now() - lastAutoSwitch);
+  if (dwell > 0) return `in ${Math.ceil(dwell / 1000)} s`;
+  return '';
+}
+
+export function pump() {
+  const req = nextRequest();
+  if (!req) { navCount = null; renderNav(); clearInterval(navTimer); navTimer = 0; return; }
+  if (!navTimer) navTimer = setInterval(pump, 250);
+  const why = waitReason(req);
+  if (why) { navCount = null; renderNav(req, why); return; }
+  const seconds = nightOn ? 0 : req.countdown ?? dsp().switchCountdownSec ?? 3;
+  if (!navCount || navCount.req !== req) {
+    if (seconds <= 0) return perform(req);
+    navCount = { req, until: Date.now() + seconds * 1000, total: seconds };
+    buzz('0,40');
+  }
+  if (Date.now() >= navCount.until) return perform(req);
+  renderNav(req);
+}
+
+let navShown = null;
+function renderNav(req = null, why = '') {
+  const card = $('navCard'), chip = $('navChip');
+  if (!req) { card.classList.remove('on'); chip.classList.remove('on'); navShown = null; return; }
+  const name = req.name || (req.kind === 'home' ? 'Nobody around' : req.kind === 'back' ? 'Done' : 'Page switch');
+  const target = req.kind === 'home' ? pageLabel(homeIndex()) : pageLabel(req.page);
+  const more = navQueue.length > 1 ? ` +${navQueue.length - 1}` : '';
+  if (why) {
+    card.classList.remove('on');
+    chip.classList.add('on');
+    navShown = null;
+    $('ncText').textContent = `${name} → ${target}${more}`;
+    $('ncWhy').textContent = why;
+    $('ncGo').onclick = () => { haptic(); perform(req); };
+    $('ncX').onclick = () => dismiss(req);
+    return;
+  }
+  chip.classList.remove('on');
+  if (navShown !== navCount) {
+    navShown = navCount;
+    $('nvName').textContent = name;
+    $('nvLine').textContent = req.kind === 'goto' ? `Switching to ${target}` : `Back to ${target}`;
+    $('nvDetail').textContent = req.detail && req.detail !== 'test' ? req.detail : more ? `${navQueue.length - 1} more waiting` : '';
+    const ring = $('nvRing');
+    ring.style.animation = 'none';
+    void ring.getBoundingClientRect();
+    ring.style.animation = `nav-ring ${Math.max(0.1, (navCount.until - Date.now()) / 1000)}s linear forwards`;
+    $('nvStay').onclick = () => dismiss(req);
+    $('nvGo').onclick = () => { haptic(); perform(req); };
+    card.classList.add('on');
+  }
+  $('nvNum').textContent = Math.max(1, Math.ceil((navCount.until - Date.now()) / 1000));
+}
+
+/** Overview: pause the agent's rules for an hour, or resume them. */
+export async function toggleRulesPause() {
+  haptic();
+  const paused = rulesPaused && rulesPaused > Date.now();
+  try {
+    const r = await api(`/rules/pause?minutes=${paused ? 0 : 60}`, 'POST', 4000);
+    rulesPaused = r.pausedUntil || null;
+    if (!rulesPaused) navQueue = navQueue.filter((x) => x.kind === 'home');
+    toast(rulesPaused ? 'Rules paused for an hour' : 'Rules are back on', 'ok');
+  } catch (_) { toast('The PC did not answer', 'warn'); }
+  renderRulesBtn();
+}
+export function renderRulesBtn() {
+  const b = $('ovRules');
+  if (!b) return;
+  const paused = rulesPaused && rulesPaused > Date.now();
+  b.hidden = PREVIEW || !online;
+  b.classList.toggle('on', !!paused);
+  b.textContent = paused ? `⏸ Rules paused until ${new Date(rulesPaused).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })} · resume` : '⏸ Pause rules 1 h';
 }
 
 export let titleTimer = 0;
@@ -855,6 +1043,7 @@ export function openOverview() {
     return t;
   };
   $('ovGrid').replaceChildren(...pages.map(tile));
+  renderRulesBtn();
   // several paired computers: switch between them here (a USB cable always wins)
   let pcs = [];
   try { pcs = bridge?.pcs ? JSON.parse(bridge.pcs()) : []; } catch (_) {}
@@ -874,6 +1063,7 @@ export function openOverview() {
 window.openOverview = openOverview;
 export function closeOverview() { $('overview').hidden = true; }
 $('overview').addEventListener('click', closeOverview);
+$('ovRules').addEventListener('click', (e) => { e.stopPropagation(); toggleRulesPause(); });
 $('dots').addEventListener('click', openOverview);
 
 // Long press on an empty part of a page opens the overview too.
@@ -889,7 +1079,7 @@ pager.addEventListener('pointermove', (e) => { if (pressAt && Math.hypot(e.clien
 
 /** Called by the Android shell (volume keys) and by arrow keys in a desktop browser. */
 window.onAndroidKey = (k) => {
-  lastTouch = Date.now();
+  lastTouch = lastUserTouch = Date.now();
   if (nightOn) { wakeUntil = Date.now() + 30_000; setNight(false); return; }
   if (!$('overview').hidden) closeOverview();
   if (k === 'next') goPage(curPage + 1 >= pages.length ? 0 : curPage + 1, true);
@@ -904,13 +1094,15 @@ window.onAndroidBack = () => {
   if (!$('approval').hidden) return; // answer it (or let it time out); Back must not dismiss a permission prompt
   if (!$('overview').hidden) closeOverview();
   else if (sheet) closeSheet();
-  else if (curPage !== 0) goPage(0, true);
+  else if (curPage !== homeIndex()) goPage(homeIndex(), true);
   else openOverview();
 };
 window.addEventListener('resize', () => { buildLayout(); goPage(curPage, true); });
 
-['pointerdown', 'touchstart'].forEach((ev) => document.addEventListener(ev, () => {
-  lastTouch = Date.now();
+['pointerdown', 'touchstart'].forEach((ev) => document.addEventListener(ev, (e) => {
+  if (e.target?.closest?.('#navCard, #navChip')) return;
+  lastTouch = lastUserTouch = Date.now();
+  if (navQueue.length) { navQueue = navQueue.filter((r) => r.kind !== 'home'); pump(); }
   if (nightOn) { wakeUntil = Date.now() + 30_000; setNight(false); }
 }, { passive: true, capture: true }));
 
@@ -972,10 +1164,9 @@ export function tick() {
   if (darkSince && Date.now() - darkSince > 30_000) darkRoom = true;
   const dark = darkRoom && cfg.display?.nightWhenDark === true;
   setNight((isNight(now) || dark) && Date.now() > wakeUntil);
-  const idle = cfg.display?.idleReturnSec ?? 90;
-  const held = ruleHold && curPage === ruleHold.page;
-  if (idle > 0 && !held && Date.now() - lastTouch > idle * 1000 && (curPage !== 0 || sheet || !$('overview').hidden)) {
-    closeSheet(); closeOverview(); goPage(0, true);
+  if (!PREVIEW && idleDue() && !navQueue.some((r) => r.kind === 'home')) {
+    if (curPage === homeIndex()) { closeSheet(); closeOverview(); lastNav = Date.now(); } // only a sheet to close
+    else { navQueue.push({ kind: 'home', at: Date.now(), priority: -1 }); pump(); }
   }
   if (!nightOn) emit('tick');
   setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
@@ -1065,7 +1256,9 @@ export function applyState(s) {
   if (evSeq != null) for (const e of s.events || []) if (e.seq > evSeq) handleEvent(e);
   evSeq = Math.max(evSeq ?? 0, s.evSeq ?? 0);
   // the "back" event can be missed while offline; the list of active rules settles it
-  if (ruleHold && Array.isArray(s.rules) && !s.rules.includes(ruleHold.rule) && Date.now() - ruleHold.at > 4000) endHold();
+  if (ruleHold && Array.isArray(s.rules) && !s.rules.includes(ruleHold.rule) && Date.now() - ruleHold.at > 8000) requestBack(ruleHold.rule);
+  rulesPaused = s.rulesPaused || null;
+  if (!$('overview').hidden) renderRulesBtn();
   {
     const pc = s.pc;
     if (pc) {
@@ -1138,3 +1331,14 @@ if (PREVIEW) {
   });
   window.parent.postMessage({ type: 'phonebox-preview-ready' }, location.origin);
 }
+
+// ---------------------------------------------------------------- battery report (the agent's charge guard)
+function reportBattery() {
+  if (PREVIEW || !bridge?.battery || !online) return;
+  try {
+    const b = JSON.parse(bridge.battery());
+    if (b.level >= 0) api(`/phone/battery?level=${b.level}&plugged=${!!b.plugged}&temp=${b.temp || 0}`, 'POST', 4000).catch(() => {});
+  } catch (_) {}
+}
+setInterval(reportBattery, 30_000);
+setTimeout(reportBattery, 5000);

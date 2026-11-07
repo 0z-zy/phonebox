@@ -1,4 +1,4 @@
-import { $, API, D, LOCALE, Q_STYLE, api, bridge, cfg, color, fillIcon, fmtDur, fmtMem, gotoPageRef, h, haptic, openSheet, paceInfo, pad, quotaProviders, store, tick, toast } from '../main.js';
+import { $, API, D, LOCALE, Q_STYLE, api, bridge, cfg, color, rulesPaused, toggleRulesPause, fillIcon, fmtDur, fmtMem, gotoPageRef, h, haptic, openSheet, paceInfo, pad, quotaProviders, store, tick, toast } from '../main.js';
 import { W } from '../registry.js';
 import { canKillAnywhere, dialEl, every } from './helpers.js';
 
@@ -456,5 +456,107 @@ W.volume = {
     down.addEventListener('click', op('op=down'));
     up.addEventListener('click', op('op=up'));
     return { update() { const a = D.state?.audio; if (a && !dragging) paint(a.volume, a.muted); } };
+  },
+};
+
+// The agent's automation rules: which hold right now, and a button to pause them all for an hour.
+const RULE_WHEN = { 'session-waiting': '✳️', 'session-busy': '⚙️', 'media-playing': '🎵', 'process-running': '🪟', 'mic-in-use': '🎙️', 'camera-in-use': '📷',
+  'obs-live': '🔴', 'calendar-event': '📆', 'cpu-above': '🔥', idle: '🌙', time: '🕙', push: '📡', 'quota-above': '🎯', 'review-requested': '👀',
+  'ci-failed': '❌', 'battery-low': '🔋', 'ping-high': '📶', always: '📅' };
+W.rules = {
+  needs: ['state'],
+  create(box, { o }) {
+    const list = h('div', 'ru-list'), btn = h('button', 'ru-pause');
+    box.append(h('div', 'w-title', o.title || 'Rules', btn), list);
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toggleRulesPause(); });
+    let key = '';
+    return {
+      update() {
+        const rules = (cfg.rules || []).filter((r) => r.enabled !== false);
+        const active = D.state?.rules || [];
+        const paused = rulesPaused && rulesPaused > Date.now();
+        const k = JSON.stringify([rules, active, paused]);
+        if (k === key) return;
+        key = k;
+        btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+        btn.hidden = !D.state;
+        box.classList.toggle('paused', !!paused);
+        if (!rules.length) { list.replaceChildren(h('div', 'empty', 'Add rules in Settings › Rules')); return; }
+        const sorted = [...rules].sort((a, b) => active.includes(b.id) - active.includes(a.id));
+        list.replaceChildren(...(paused ? [h('div', 'ru-note', `Paused until ${new Date(rulesPaused).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}`)] : []),
+          ...sorted.map((r) => h('div', 'ru-row' + (active.includes(r.id) && !paused ? ' on' : ''),
+            h('span', 'ru-ico', RULE_WHEN[r.when] || '⚡'), h('span', 'ru-name', r.name || r.when), h('i', 'ru-dot'))));
+      },
+    };
+  },
+};
+
+// The phone's battery with the charge guard's band (Settings › General › Battery care).
+W.chargecare = {
+  needs: ['tick'],
+  create(box) {
+    const C = 2 * Math.PI * 42;
+    box.innerHTML = '<div class="w-title">Battery care</div><div class="cc-body"><div class="cc-wrap"><svg viewBox="0 0 100 100" class="cc-ring">' +
+      '<circle class="cc-bg" cx="50" cy="50" r="42"/><circle class="cc-band" cx="50" cy="50" r="42"/><circle class="cc-fg" cx="50" cy="50" r="42"/></svg>' +
+      '<b class="cc-pct">—</b></div></div><div class="cc-sub"><span class="cc-state"></span> <span class="cc-text"></span></div>';
+    const q = (s) => box.querySelector(s);
+    const load = every(15_000, () => {
+      const ch = cfg.charge || {};
+      const min = ch.min ?? 50, max = ch.max ?? 80;
+      const band = q('.cc-band');
+      band.style.strokeDasharray = `${(C * (max - min)) / 100} ${C}`;
+      band.style.strokeDashoffset = String((-C * min) / 100);
+      band.style.opacity = ch.enabled ? '' : '0';
+      if (!bridge?.battery) { q('.cc-pct').textContent = '—'; q('.cc-text').textContent = 'Only on the phone'; return; }
+      let b;
+      try { b = JSON.parse(bridge.battery()); } catch (_) { return; }
+      if (!(b.level >= 0)) return;
+      q('.cc-fg').style.strokeDasharray = `${(C * b.level) / 100} ${C}`;
+      q('.cc-pct').textContent = b.level + '%';
+      q('.cc-state').textContent = b.plugged ? '⚡' : '🔋';
+      const col = b.level <= 20 ? '#ef4444' : ch.enabled && b.level > max ? '#f59e0b' : b.plugged ? '#22c55e' : 'rgb(var(--ambient))';
+      box.style.setProperty('--cc', col);
+      q('.cc-text').textContent = !ch.enabled ? `Battery care is off${b.temp ? ` · ${b.temp.toFixed(0)} °C` : ''}`
+        : b.plugged ? `Charges up to ${max}%` + (b.level >= max ? ' · power off soon' : '') : `Charges again at ${min}%`;
+    });
+    return { update: load };
+  },
+};
+
+// The next calendar event, big, with a countdown (or how much of the current one is left).
+W.nextup = {
+  needs: ['calendar', 'tick'],
+  create(box, { o }) {
+    const only = String(o.calendars || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const when = h('div', 'nu-when'), title = h('div', 'nu-title'), meta = h('div', 'nu-meta'), bar = h('i'), track = h('div', 'track nu-track', bar);
+    box.append(h('div', 'w-title', o.title || 'Next up'), when, title, meta, track);
+    let key = '';
+    const hm = (ms) => { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+    return {
+      update() {
+        const cal = D.calendar, now = Date.now();
+        const evs = (cal?.events || []).filter((e) => !e.allDay && e.end > now && (!only.length || only.includes(e.calendar.toLowerCase()))).sort((a, b) => a.start - b.start);
+        const cur = evs.find((e) => e.start <= now), next = evs.find((e) => e.start > now);
+        const ev = cur || next;
+        const k = JSON.stringify([ev?.start, ev?.title, Math.floor(now / 15000), !!cal]);
+        if (k === key) return;
+        key = k;
+        box.classList.toggle('now', !!cur);
+        track.hidden = !cur;
+        if (!ev) {
+          when.textContent = ''; meta.textContent = '';
+          title.textContent = !cal ? 'Loading…' : cal.updated || evs.length ? 'Nothing else today' : 'Add a calendar in Settings › General';
+          return;
+        }
+        const left = Math.round(((cur ? ev.end : ev.start) - now) / 60000);
+        const dur = left < 60 ? `${Math.max(1, left)} min` : `${Math.floor(left / 60)} h${left % 60 ? ' ' + (left % 60) + ' min' : ''}`;
+        const sameDay = new Date(ev.start).toDateString() === new Date().toDateString();
+        when.textContent = cur ? `now · ${dur} left` : sameDay || left < 12 * 60 ? `in ${dur}` : new Date(ev.start).toLocaleDateString(LOCALE, { weekday: 'long' });
+        title.textContent = ev.title;
+        meta.textContent = [`${hm(ev.start)}–${hm(ev.end)}`, ev.location, cur && next ? `then ${next.title} at ${hm(next.start)}` : ''].filter(Boolean).join(' · ');
+        if (cur) bar.style.width = Math.min(100, ((now - ev.start) / (ev.end - ev.start)) * 100) + '%';
+        box.style.setProperty('--nu', ev.color || 'rgb(var(--ambient))');
+      },
+    };
   },
 };

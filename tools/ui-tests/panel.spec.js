@@ -67,6 +67,9 @@ test('every widget in the catalogue builds and runs without errors', async ({ pa
 test('keys flip pages and the overview jumps to a page', async ({ page }) => {
   await page.goto('/panel/');
   await expect(page.locator('.w').first()).toBeVisible();
+  // the demo's settings are loaded (until then the built-in defaults may show the night screen after 00:30)
+  await expect.poll(() => page.locator('#dots i').count()).toBeGreaterThan(10);
+  await expect(page.locator('body')).not.toHaveClass(/night/);
   expect(await activeDot(page)).toBe(0);
   await page.keyboard.press('ArrowRight');
   await expect.poll(() => activeDot(page)).toBe(1);
@@ -87,11 +90,62 @@ test('a webhook notification shows a toast', async ({ page }) => {
   await expect(page.locator('#toast')).toContainText('main passed');
 });
 
-test('a webhook can switch pages', async ({ page }) => {
+test('a webhook switches pages after a countdown', async ({ page }) => {
   await page.goto('/panel/');
   await expect(page.locator('.w').first()).toBeVisible();
   await page.evaluate(() => window.PhoneBoxDemo.emit('goto', { page: 3 }));
-  await expect.poll(() => activeDot(page)).toBe(2);
+  await expect(page.locator('#navCard')).toHaveClass(/on/);
+  await expect(page.locator('#nvLine')).toContainText('Switching to');
+  expect(await activeDot(page)).toBe(0);                     // not yet: it counts down first
+  await expect.poll(() => activeDot(page), { timeout: 8000 }).toBe(2);
+  await expect(page.locator('#navCard')).not.toHaveClass(/on/);
+});
+
+test('Stay cancels a rule page switch', async ({ page }) => {
+  await page.goto('/panel/');
+  await expect(page.locator('.w').first()).toBeVisible();
+  await page.evaluate(() => window.PhoneBoxDemo.emit('goto', { page: 2, rule: 'music', name: 'Music', hold: true, countdown: 5 }));
+  await expect(page.locator('#nvName')).toHaveText('Music');
+  await page.locator('#nvStay').click();
+  await expect(page.locator('#navCard')).not.toHaveClass(/on/);
+  await page.waitForTimeout(1500);
+  expect(await activeDot(page)).toBe(0);
+});
+
+test('a rule waits while the panel is in use and then goes on request', async ({ page }) => {
+  await page.goto('/panel/');
+  await expect(page.locator('.w').first()).toBeVisible();
+  await page.mouse.click(5, 300);                             // somebody is using the panel
+  await page.evaluate(() => window.PhoneBoxDemo.emit('goto', { page: 4, rule: 'claude', name: 'Claude needs me', hold: true }));
+  await expect(page.locator('#navChip')).toHaveClass(/on/);
+  await expect(page.locator('#ncText')).toContainText('Claude needs me');
+  await expect(page.locator('#navCard')).not.toHaveClass(/on/);
+  await page.locator('#ncGo').click();
+  await expect.poll(() => activeDot(page)).toBe(3);
+});
+
+test('rules firing one after another do not bounce the screen', async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.goto('/panel/');
+  await expect(page.locator('.w').first()).toBeVisible();
+  // a rule that ends before its turn is dropped
+  await page.evaluate(() => {
+    window.PhoneBoxDemo.emit('goto', { page: 2, rule: 'flappy', hold: true, countdown: 2 });
+    window.PhoneBoxDemo.emit('back', { rule: 'flappy' });
+  });
+  await page.waitForTimeout(2500);
+  expect(await activeDot(page)).toBe(0);
+  // the higher of two rules goes first; the lower one waits for the minimum time between switches
+  await page.evaluate(() => {
+    window.PhoneBoxDemo.emit('goto', { page: 2, rule: 'low', name: 'Low', priority: 2, hold: true, countdown: 0 });
+    window.PhoneBoxDemo.emit('goto', { page: 5, rule: 'high', name: 'High', priority: 8, hold: true, countdown: 0 });
+  });
+  await expect.poll(() => activeDot(page)).toBe(4);
+  await page.waitForTimeout(1500);
+  expect(await activeDot(page)).toBe(4);                      // the lower rule does not take the page over
+  // the high rule ends: the low one (still on) gets its turn instead of going back and forth
+  await page.evaluate(() => window.PhoneBoxDemo.emit('back', { rule: 'high' }));
+  await expect.poll(() => activeDot(page), { timeout: 20000 }).toBe(1);
 });
 
 test('a Claude Code permission prompt can be answered', async ({ page }) => {
@@ -160,11 +214,28 @@ test('the live preview in the layout editor runs the real panel', async ({ page 
   await expect.poll(() => preview.locator('#dots i').evaluateAll((d) => d.findIndex((x) => x.classList.contains('on')))).toBe(2);
 });
 
+test('rule options and page switching settings are there', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.goto('/settings/#rules');
+  await page.locator('#rulePresets button', { hasText: 'Review requested' }).click();
+  const rule = page.locator('#ruleList .rule').last();
+  await expect(rule.locator('.ropts')).toHaveAttribute('open', '');
+  await expect(rule.locator('.ropts summary')).toContainText('09:00-18:00');
+  await expect(rule.locator('.day.on')).toHaveCount(5);
+  await rule.locator('.day', { hasText: 'Sa' }).click();
+  await expect(rule.locator('.day.on')).toHaveCount(6);
+  await page.goto('/settings/#general');
+  await expect(page.locator('#homePageSel option')).not.toHaveCount(0);
+  await expect(page.locator('[data-bind="display.switchCountdownSec"]')).toHaveValue(/\d/);
+});
+
 test('rules can be added from the examples', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 860 });
   await page.goto('/settings/#rules');
+  await expect(page.locator('#rulePresets button').first()).toBeVisible();
+  const before = await page.locator('#ruleList .rule').count();
   await page.locator('#rulePresets button').first().click();
-  await expect(page.locator('#ruleList .rule')).toHaveCount(1);
+  await expect(page.locator('#ruleList .rule')).toHaveCount(before + 1);
   await expect(page.locator('#save')).toBeEnabled();
 });
 
