@@ -11,8 +11,8 @@
     <RootNamespace>PhoneBox.Agent</RootNamespace>
     <Product>PhoneBox</Product>
     <Company>PhoneBox</Company>
-    <Description>PhoneBox desktop agent: feeds the PhoneBox Android desk panel over USB.</Description>
-    <Version>0.5.0</Version>
+    <Description>PhoneBox desktop agent: feeds the PhoneBox Android desk panel over USB or Wi-Fi.</Description>
+    <Version>0.6.0</Version>
     <ApplicationIcon>phonebox.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>

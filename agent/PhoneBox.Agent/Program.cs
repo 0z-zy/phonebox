@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using PhoneBox.Agent;
 
@@ -5,7 +6,12 @@ const int Port = 8765;
 string[] SameOrigins = [$"http://127.0.0.1:{Port}", $"http://localhost:{Port}"];
 
 // Single instance: a second launch opens the running instance's settings page and exits.
-using var single = new Mutex(true, @"Local\PhoneBox.Agent", out var firstInstance);
+// After a restart the previous instance may still be shutting down, so wait for it briefly.
+var single = new Mutex(false, @"Local\PhoneBox.Agent");
+var waitMs = args.Contains("--restart") ? 15_000 : 0;
+bool firstInstance;
+try { firstInstance = single.WaitOne(waitMs); }
+catch (AbandonedMutexException) { firstInstance = true; }
 if (!firstInstance)
 {
     try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"http://127.0.0.1:{Port}/") { UseShellExecute = true }); } catch { }
@@ -14,20 +20,29 @@ if (!firstInstance)
 
 AppPaths.EnsureConfig();
 var configPath = args.SkipWhile(a => a != "--config").Skip(1).FirstOrDefault() ?? AppPaths.ConfigPath;
+var configStore = new ConfigStore(configPath);
+configStore.PersistGenerated(); // keep the Wi-Fi token stable across restarts
+var lanCfg = configStore.Get().Lan;
+var lanCert = lanCfg.Enabled ? Lan.Certificate() : null;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
     ContentRootPath = AppContext.BaseDirectory,
 });
-builder.WebHost.UseUrls($"http://127.0.0.1:{Port}");
+builder.WebHost.ConfigureKestrel(k =>
+{
+    k.Listen(IPAddress.Loopback, Port);
+    // Wi-Fi / Tailscale: HTTPS with a pinned self-signed certificate, token required (see Lan.cs).
+    if (lanCert is not null) k.Listen(IPAddress.Any, lanCfg.Port, l => l.UseHttps(lanCert));
+});
 builder.Logging.ClearProviders();
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 builder.Logging.AddProvider(new FileLoggerProvider());
 builder.Logging.AddSimpleConsole(o => { o.SingleLine = true; o.TimestampFormat = "HH:mm:ss "; });
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
 
-builder.Services.AddSingleton(new ConfigStore(configPath));
+builder.Services.AddSingleton(configStore);
 builder.Services.AddSingleton<AudioControl>();
 AddMonitor<SystemMonitor>(builder.Services);
 AddMonitor<MediaMonitor>(builder.Services);
@@ -40,23 +55,69 @@ AddMonitor<AdbReverse>(builder.Services);
 builder.Services.AddHostedService<Tray>();
 
 var app = builder.Build();
+var restartRequested = false;
 
 // Security:
-//  - Listens on 127.0.0.1 only (not reachable from the network); the Host check blocks DNS rebinding.
-//  - The phone's local proxy sends no Origin header. From browsers only the settings page itself (same origin)
-//    is accepted; requests from any other site (CSRF) are rejected.
+//  - Local port 8765 listens on 127.0.0.1 only; the Host check blocks DNS rebinding. The phone's USB proxy sends
+//    no Origin header; from browsers only the settings page itself (same origin) is accepted (no CSRF).
+//  - The optional Wi-Fi port only serves the phone API, only over TLS, and only with the paired token.
 app.Use(async (ctx, next) =>
 {
-    var host = ctx.Request.Host.Host;
     var origin = ctx.Request.Headers.Origin.ToString();
-    if ((host != "127.0.0.1" && host != "localhost") || (origin != "" && !SameOrigins.Contains(origin)))
+    if (lanCert is not null && ctx.Connection.LocalPort == lanCfg.Port)
     {
-        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return;
+        if (origin != "" || !Lan.AllowedOverLan(ctx.Request.Path) || !Lan.Matches(ctx.Request.Headers.Authorization, configStore.Get().Lan.Token!))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+    }
+    else
+    {
+        var host = ctx.Request.Host.Host;
+        if ((host != "127.0.0.1" && host != "localhost") || (origin != "" && !SameOrigins.Contains(origin)))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
     }
     ctx.Response.Headers.CacheControl = "no-store";
     ctx.Response.Headers["X-Frame-Options"] = "DENY";
     await next();
+});
+
+// ---------------------------------------------------------------- Wi-Fi pairing (local / USB only)
+// The phone calls this through the USB tunnel and stores everything it needs to connect over Wi-Fi.
+app.MapGet("/api/pair", (ConfigStore cfg) =>
+{
+    var lan = cfg.Get().Lan;
+    if (!lan.Enabled || lanCert is null) return Results.Json(new { enabled = false });
+    return Results.Json(new
+    {
+        enabled = true,
+        pc = Environment.MachineName,
+        port = lanCfg.Port,
+        token = lan.Token,
+        fingerprint = Lan.Fingerprint(lanCert),
+        hosts = Lan.Addresses(),
+    });
+});
+
+app.MapGet("/api/lan", (ConfigStore cfg) => Results.Json(new
+{
+    configured = cfg.Get().Lan.Enabled,
+    active = lanCert is not null,
+    port = lanCfg.Port,
+    restartNeeded = cfg.Get().Lan.Enabled != (lanCert is not null) || (lanCert is not null && cfg.Get().Lan.Port != lanCfg.Port),
+    hosts = Lan.Addresses(),
+    fingerprint = lanCert is null ? null : Lan.Fingerprint(lanCert),
+}));
+
+app.MapPost("/api/restart", (IHostApplicationLifetime life) =>
+{
+    restartRequested = true;
+    life.StopApplication();
+    return Results.Ok();
 });
 
 // ---------------------------------------------------------------- settings UI (browser)
@@ -173,6 +234,12 @@ app.Lifetime.ApplicationStarted.Register(() =>
     app.Logger.LogInformation("PhoneBox agent {Version} ready on http://127.0.0.1:{Port} (config: {Path})", AppPaths.Version, Port, configPath));
 
 app.Run();
+
+// Restart requested from the settings page (e.g. Wi-Fi turned on): hand over to a fresh instance.
+single.ReleaseMutex();
+single.Dispose();
+if (restartRequested && Environment.ProcessPath is { } exe)
+    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, "--restart") { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory });
 
 static void AddMonitor<T>(IServiceCollection s) where T : class, IHostedService
 {

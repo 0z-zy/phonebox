@@ -144,6 +144,7 @@ dd { margin: 0; word-break: break-all; }
   <span class="pill" id="phone"><i></i><span>Phone…</span></span>
   <div class="spacer"></div>
   <span class="dirty-dot" title="Unsaved changes"></span>
+  <button class="btn primary" id="restartBtn" hidden title="Wi-Fi settings change after a restart">Restart to apply</button>
   <button class="btn" id="openPhone">Open on phone</button>
   <button class="btn" id="revert" disabled>Revert</button>
   <button class="btn primary" id="save" disabled>Save</button>
@@ -217,6 +218,19 @@ dd { margin: 0; word-break: break-all; }
           <div class="field"><label>Phone to use</label><select id="serial"></select><span class="hint">If several Android devices are connected, choose which one runs the panel.</span></div>
           <div class="field"><label>Path to adb.exe (empty = auto-detect)</label><input type="text" data-bind="adbPath" placeholder="auto-detected"><span class="hint" id="adbFound"></span></div>
         </div>
+      </div>
+      <div class="card">
+        <h3>Wi-Fi &amp; Tailscale</h3>
+        <div class="row" style="margin-bottom:8px"><label class="switch"><input type="checkbox" data-bind="lan.enabled"><span></span></label> Let the phone connect without the USB cable</div>
+        <p class="hint" style="margin:0 0 12px">Pairing happens over USB: after turning this on (and restarting), plug the phone in once.
+          The phone then talks HTTPS to this PC, trusts only this PC's certificate and has to present a secret key.
+          The phone and this PC must be on the same network &mdash; or both on <a href="https://tailscale.com" target="_blank" rel="noopener">Tailscale</a>, which also works from another place or across separate Wi-Fi networks.
+          Windows Firewall asks once &mdash; allow it (tick the network type Tailscale uses, too).</p>
+        <div class="grid2">
+          <div class="field"><label>Port</label><input type="number" min="1024" max="65535" data-bind="lan.port" data-type="int"></div>
+          <div class="field"><label>Addresses offered to the phone</label><div id="lanHosts" class="hint">—</div></div>
+        </div>
+        <div class="row"><button class="btn" id="lanRegen">New key (unpair phones)</button><span class="hint" id="lanStatus"></span></div>
       </div>
     </section>
 
@@ -533,6 +547,12 @@ async function loadInfo() {
     if (cur && !i.devices.includes(cur)) opts.push([cur, cur + ' (not connected)']);
     sel.replaceChildren(...opts.map(([v, l]) => h('option', { value: v, selected: v === cur }, l)));
     sel.onchange = () => { cfg.deviceSerial = sel.value || null; changed(); };
+    const lan = await (await fetch('/api/lan')).json();
+    $('lanHosts').textContent = lan.hosts.length
+      ? lan.hosts.map((a) => a.startsWith('100.') ? a + ' (Tailscale)' : a).join(', ')
+      : 'No LAN or Tailscale address found';
+    $('lanStatus').textContent = lan.active ? `Listening on port ${lan.port} (HTTPS)` : lan.configured ? 'Restart to start listening' : 'Off';
+    $('restartBtn').hidden = !lan.restartNeeded;
     $('info').replaceChildren(
       h('dt', {}, 'Version'), h('dd', {}, i.version),
       h('dt', {}, 'Settings file'), h('dd', {}, h('code', {}, i.configPath)),
@@ -544,7 +564,7 @@ async function loadInfo() {
 // ---------------------------------------------------------------- load / save
 async function load() {
   cfg = await (await fetch('/api/settings')).json();
-  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {};
+  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 };
   saved = JSON.stringify(cfg);
   renderPages(); renderDeck(); bindForm(); changed(); loadInfo();
 }
@@ -561,6 +581,22 @@ $('save').onclick = save;
 $('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); bindForm(); changed(); };
 $('openPhone').onclick = async () => { await fetch('/api/phone/open', { method: 'POST' }); toast('Opening the panel on the phone'); };
 $('cityBtn').onclick = searchCity;
+$('lanRegen').onclick = () => {
+  cfg.lan = { ...(cfg.lan || {}), token: '' };
+  changed();
+  toast('A new key is generated on save — plug the phone in once to pair again');
+};
+$('restartBtn').onclick = async () => {
+  if (!$('save').disabled) { toast('Save your changes first', true); return; }
+  toast('Restarting the agent…');
+  try { await fetch('/api/restart', { method: 'POST' }); } catch (_) {}
+  const started = Date.now();
+  const wait = async () => {
+    try { await fetch('/api/info', { cache: 'no-store' }); location.reload(); }
+    catch (_) { if (Date.now() - started < 30000) setTimeout(wait, 1000); else toast('The agent did not come back; check the log', true); }
+  };
+  setTimeout(wait, 1500);
+};
 $('citySearch').onkeydown = (e) => { if (e.key === 'Enter') searchCity(); };
 $('applyJson').onclick = () => {
   try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }

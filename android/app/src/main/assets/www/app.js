@@ -896,7 +896,9 @@ pager.addEventListener('scrollend', () => {
 function setOnline(on, host) {
   document.body.classList.toggle('offline', !on);
   $('pcDot').className = 'dot ' + (on ? 'on' : 'off');
-  $('pcName').textContent = on ? (host || 'PC') : 'PC not connected';
+  let via = '';
+  try { via = bridge ? bridge.transport() : ''; } catch (_) {}
+  $('pcName').textContent = on ? (host || 'PC') + (via === 'wifi' ? ' · Wi-Fi' : via === 'usb' ? ' · USB' : '') : 'PC not connected';
   if (on && online !== true) { loadConfig(); loadQuotas(); loadWork(); }
   online = on;
 }

@@ -12,6 +12,7 @@ public sealed class AgentConfig
     public WeatherConfig Weather { get; set; } = new();
     public NightConfig Night { get; set; } = new();
     public DisplayConfig Display { get; set; } = new();
+    public LanConfig Lan { get; set; } = new();
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
 
@@ -55,6 +56,15 @@ public sealed class DisplayConfig
     public int IdleReturnSec { get; set; } = 90;
     /// <summary>Vibrate when a session finishes or needs input.</summary>
     public bool Vibrate { get; set; } = true;
+}
+
+public sealed class LanConfig
+{
+    /// <summary>Also accept the phone over Wi-Fi (HTTPS + token, paired over USB). Requires an agent restart.</summary>
+    public bool Enabled { get; set; }
+    public int Port { get; set; } = 8766;
+    /// <summary>Shared secret handed to the phone over USB. Empty = generate a new one (forces re-pairing).</summary>
+    public string? Token { get; set; }
 }
 
 public sealed class PageConfig
@@ -159,6 +169,9 @@ public sealed partial class ConfigStore(string path)
         c.Night ??= new();
         c.Display ??= new();
         c.Display.IdleReturnSec = Math.Clamp(c.Display.IdleReturnSec, 0, 3600);
+        c.Lan ??= new();
+        c.Lan.Port = Math.Clamp(c.Lan.Port, 1024, 65535);
+        if (string.IsNullOrWhiteSpace(c.Lan.Token)) c.Lan.Token = NewToken();
         c.Night.Brightness = Math.Clamp(c.Night.Brightness, 0.01, 1);
 
         var pages = (c.Pages ?? []).Where(p => PageTypes.Contains(p.Type)).DistinctBy(p => p.Type).ToList();
@@ -179,6 +192,22 @@ public sealed partial class ConfigStore(string path)
             if (string.IsNullOrWhiteSpace(s.Cwd)) s.Cwd = null;
         }
         return c;
+    }
+
+    private static string NewToken() =>
+        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    /// <summary>Makes sure the generated Wi-Fi token is written to disk so it stays stable across restarts.</summary>
+    public void PersistGenerated()
+    {
+        var c = Get();
+        try
+        {
+            var onDisk = JsonSerializer.Deserialize<AgentConfig>(File.ReadAllText(path), ReadOpts);
+            if (onDisk?.Lan?.Token == c.Lan.Token) return;
+        }
+        catch { }
+        Save(JsonSerializer.Serialize(c, WriteOpts));
     }
 
     private static string Slug(string s) => NonSlug().Replace(s.ToLowerInvariant()

@@ -7,8 +7,8 @@
 <p align="center"><img src="docs/screenshots/home.png" width="760" alt="PhoneBox home page"></p>
 
 PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and a **Windows agent** that
-lives in the system tray and feeds it data over the USB cable (`adb reverse`). No Wi-Fi pairing, no cloud, no
-open network ports.
+lives in the system tray and feeds it data over the USB cable (`adb reverse`), or optionally over Wi-Fi / Tailscale
+after pairing once over USB. No cloud, no accounts.
 
 ## Pages
 
@@ -64,6 +64,17 @@ Double-click the tray icon (or open <http://127.0.0.1:8765>):
 
 Settings live in `%APPDATA%\PhoneBox\config.json`; the phone picks up changes within a few seconds.
 
+## Wi-Fi & Tailscale (optional)
+
+Turn on **Settings › General › Wi-Fi & Tailscale**, restart the agent when asked, and plug the phone in once. Over
+USB the phone receives the PC's addresses, a secret key and the fingerprint of the agent's self-signed TLS
+certificate. When the cable is unplugged it switches to `https://<pc>:8766` automatically and back to USB when it is
+plugged in again; the panel shows which one it uses.
+
+- The phone and the PC need to be on the same network. If they are not (separate Wi-Fi networks, another
+  building…), install [Tailscale](https://tailscale.com) on both: the agent offers its Tailscale address too.
+- Windows Firewall asks once when Wi-Fi is turned on; allow it for the network types you use.
+- The screen stays on, so the phone still needs a charger — just not necessarily the PC.
 ## How it works
 
 ```
@@ -85,6 +96,8 @@ Settings live in `%APPDATA%\PhoneBox\config.json`; the phone picks up changes wi
 
 - The agent listens on `127.0.0.1` only. Requests with a foreign `Host` header (DNS rebinding) or a cross-site
   `Origin` (CSRF) are rejected; only the settings page itself is accepted from browsers.
+- The optional Wi-Fi port (8766) only serves the panel API, only over TLS pinned to the paired certificate, and only
+  with the paired key. Settings, shortcut tests and pairing stay local. **New key** in the settings unpairs all phones.
 - The phone only ever sends a shortcut **id**; the commands are defined on the PC.
 - Ending processes is limited to your own session, never touches a list of Windows-critical processes, and can be
   switched off in the settings.

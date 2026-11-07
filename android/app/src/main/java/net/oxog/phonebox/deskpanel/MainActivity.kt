@@ -19,19 +19,17 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * Full-screen desk panel. The UI is plain HTML/JS bundled in assets/www.
- * The UI calls "/agent/..." URLs; they are intercepted here and forwarded over USB (adb reverse)
- * to the PhoneBox agent at 127.0.0.1:8765 on the computer. The WebView itself therefore never makes
- * local-network requests (no CORS, mixed-content or local-network-access issues).
+ * The UI calls "/agent/..." URLs; they are intercepted here and forwarded to the PhoneBox agent on the PC,
+ * over USB (adb reverse) or, once paired, over Wi-Fi / Tailscale (see AgentLink). The WebView itself therefore
+ * never makes local-network requests (no CORS, mixed-content or local-network-access issues).
  */
 class MainActivity : Activity() {
 
     private lateinit var web: WebView
+    private lateinit var link: AgentLink
 
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
@@ -43,6 +41,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        link = AgentLink(this)
 
         web = WebView(this)
         web.setBackgroundColor(0xFF000000.toInt())
@@ -75,31 +74,12 @@ class MainActivity : Activity() {
     private fun proxy(req: WebResourceRequest): WebResourceResponse {
         val path = req.url.encodedPath!!.removePrefix("/agent")
         val query = req.url.encodedQuery?.let { "?$it" } ?: ""
-        return try {
-            val c = URL("$AGENT$path$query").openConnection() as HttpURLConnection
-            c.requestMethod = req.method
-            c.connectTimeout = 800
-            c.readTimeout = 4000
-            c.useCaches = false
-            if (req.method == "POST") {
-                c.doOutput = true
-                c.setFixedLengthStreamingMode(0)
-                c.outputStream.close()
-            }
-            val code = c.responseCode
-            val body = (if (code >= 400) c.errorStream else c.inputStream) ?: ByteArrayInputStream(ByteArray(0))
-            val ct = c.contentType ?: "application/octet-stream"
-            val mime = ct.substringBefore(';').trim()
-            val charset = if (ct.contains("charset=")) ct.substringAfter("charset=").trim() else null
-            WebResourceResponse(mime, charset, code, if (code < 400) "OK" else "Error", NO_STORE, body)
-        } catch (e: Exception) {
-            WebResourceResponse(
-                "application/json", "utf-8", 503, "Agent Offline", NO_STORE,
-                ByteArrayInputStream("""{"error":"offline"}""".toByteArray())
-            )
-        }
+        val r = link.request(req.method, path + query)
+        val ct = r.contentType ?: "application/octet-stream"
+        val mime = ct.substringBefore(';').trim()
+        val charset = if (ct.contains("charset=")) ct.substringAfter("charset=").trim() else null
+        return WebResourceResponse(mime, charset, r.code, if (r.code < 400) "OK" else "Error", NO_STORE, r.body)
     }
-
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemUi()
@@ -168,13 +148,16 @@ class MainActivity : Activity() {
                 .toString()
         }
 
+        /** "usb", "wifi" or "none": how the last agent request was delivered. */
+        @JavascriptInterface
+        fun transport(): String = link.route.name.lowercase()
+
         @JavascriptInterface
         fun version(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
     }
 
     companion object {
         private const val ASSET_HOST = "appassets.androidplatform.net"
-        private const val AGENT = "http://127.0.0.1:8765"
         private val NO_STORE = mapOf("Cache-Control" to "no-store")
     }
 }
