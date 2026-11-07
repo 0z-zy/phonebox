@@ -37,6 +37,7 @@ class AgentLink(context: Context) {
     private val background = Executors.newSingleThreadExecutor()
     @Volatile private var lastPair = 0L
     @Volatile private var preferredHost = 0
+    @Volatile private var factory: Pair<String, SSLSocketFactory>? = null
 
     /** Forwards a request (method + path with query) to the agent over the best available route. */
     fun request(method: String, pathAndQuery: String): Reply {
@@ -68,13 +69,14 @@ class AgentLink(context: Context) {
         val pin = prefs.getString("fingerprint", null) ?: return null
         val port = prefs.getInt("port", 8766)
         if (hosts.isEmpty()) return null
-        val factory = pinnedFactory(pin)
+        // Reuse one socket factory per pinned certificate so HTTPS connections are kept alive between requests.
+        val f = factory?.takeIf { it.first == pin }?.second ?: pinnedFactory(pin).also { factory = pin to it }
         // Start with the address that worked last time.
         val order = hosts.indices.sortedBy { if (it == preferredHost) -1 else it }
         for (i in order) {
             try {
                 val c = URL("https://${hosts[i]}:$port$pathAndQuery").openConnection() as HttpsURLConnection
-                c.sslSocketFactory = factory
+                c.sslSocketFactory = f
                 c.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true } // identity is the pinned certificate
                 c.connectTimeout = 1500
                 c.setRequestProperty("Authorization", "Bearer $token")
