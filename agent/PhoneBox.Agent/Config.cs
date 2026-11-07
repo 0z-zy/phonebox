@@ -48,7 +48,8 @@ public sealed class AgentConfig
             widgets = (p.Widgets ?? []).Select(w => new
             {
                 w.Id, w.Type, w.X, w.Y, w.W, w.H,
-                options = w.Type == "command" ? w.Options?.Where(o => o.Key != "command").ToDictionary() : w.Options,
+                // command widgets: only what the panel shows; the scripts (command, commandUnix, …) stay on this computer
+                options = w.Type == "command" ? w.Options?.Where(o => o.Key is "title" or "interval").ToDictionary() : w.Options,
             }),
         }),
         shortcuts = Shortcuts.Select(s => new { s.Id, s.Label, s.Icon, s.Color, toggle = s.Toggle || s.Cmd == "builtin:mute" }),

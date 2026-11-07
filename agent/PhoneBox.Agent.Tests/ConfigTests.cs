@@ -85,7 +85,7 @@ public class ConfigTests
     public void ThePhoneNeverSeesCommands()
     {
         var c = Load("""
-        { "pages": [ { "id": "p", "title": "P", "widgets": [ { "type": "command", "x": 0, "y": 0, "w": 3, "h": 2, "options": { "command": "secret-script.ps1", "title": "T" } } ] } ],
+        { "pages": [ { "id": "p", "title": "P", "widgets": [ { "type": "command", "x": 0, "y": 0, "w": 3, "h": 2, "options": { "command": "secret-script.ps1", "commandUnix": "secret-unix.sh", "future": "secret-x", "title": "T" } } ] } ],
           "shortcuts": [ { "id": "s", "label": "S", "cmd": "secret.exe", "args": "--token abc" } ] }
         """);
         var json = JsonSerializer.Serialize(c.ToPublic());
