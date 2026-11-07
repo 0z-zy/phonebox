@@ -1706,6 +1706,43 @@ W.checklist = {
 };
 
 // ---------------------------------------------------------------- phone & PC
+// Battery levels of the PC's wireless devices (agent: BatteryMonitor) and, optionally, the panel phone itself.
+const BAT_ICONS = { headphones: '🎧', mouse: '🖱️', keyboard: '⌨️', controller: '🎮', laptop: '💻', pen: '🖊️', phone: '📱', other: '🔋' };
+W.batteries = {
+  needs: ['tick'],
+  create(box, { o }) {
+    const low = +o.low || 20;
+    let data = null, lastKey = '';
+    const list = h('div', 'bt-list');
+    box.append(h('div', 'w-title', o.title || 'Batteries'), list);
+    const load = async () => { try { data = await api('/batteries'); } catch (_) {} };
+    const render = () => {
+      const devices = [...(data?.devices || [])];
+      if (o.phone !== false && bridge) {
+        try { const b = JSON.parse(bridge.battery()); if (b.level >= 0) devices.push({ name: 'This phone', level: b.level, kind: 'phone', charging: b.plugged }); } catch (_) {}
+      }
+      const key = JSON.stringify([devices, box.clientHeight]);
+      if (key === lastKey) return;
+      lastKey = key;
+      if (!data && !devices.length) { list.replaceChildren(h('div', 'empty', 'Loading…')); return; }
+      if (!devices.length) { list.replaceChildren(h('div', 'empty', 'No wireless devices report a battery level')); return; }
+      list.replaceChildren(...devices.map((d) => {
+        const col = d.level <= low ? '#ef4444' : d.level <= low * 2 ? '#f59e0b' : '#22c55e';
+        const row = h('div', 'bt-row' + (d.level <= low ? ' low' : ''),
+          h('span', 'bt-ico', BAT_ICONS[d.kind] || '🔋'),
+          h('span', 'bt-name', d.name),
+          h('span', 'bt-bar', h('i')),
+          h('b', 'bt-pct', (d.charging ? '⚡' : '') + d.level + '%'));
+        row.style.setProperty('--c', col);
+        row.style.setProperty('--v', d.level / 100);
+        return row;
+      }));
+    };
+    const tick = every(30_000, async () => { await load(); render(); });
+    return { update: () => { tick(); render(); } };
+  },
+};
+
 // OBS Studio: live / recording state with timers, the current scene, and (when allowed) buttons and scene switching.
 W.obs = {
   needs: ['tick'],

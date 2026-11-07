@@ -20,6 +20,9 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**Device batteries.** A widget with the battery levels of wireless headphones, mice, keyboards and controllers
+(Windows: the Bluetooth battery that Settings shows; Linux: UPower; macOS: Magic devices and AirPods) and the phone.
+
 **OBS Studio.** Connect to OBS's WebSocket server (Settings › General); the OBS widget shows live and recording
 state with timers, the current scene and scene buttons, and can start or stop the stream and recording, switch
 scenes and mute the mic. The On air widget and rules also know when OBS is live.

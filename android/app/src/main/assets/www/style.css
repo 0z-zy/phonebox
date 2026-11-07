@@ -559,6 +559,16 @@ body.offline .offline-msg { display: flex; }
 .cl-i.done .cl-t { color: var(--muted); text-decoration: line-through; }
 
 /* ---------- battery, quota ring (dial widgets) ---------- */
+.w-batteries { padding: 9px 12px; display: flex; flex-direction: column; gap: 4px; }
+.w-batteries .w-title { color: #4ade80; }
+.bt-list { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: space-evenly; gap: 2px; }
+.bt-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(40px, 30%) 46px; align-items: center; gap: 8px; font-size: 14px; flex-shrink: 0; }
+.bt-ico { font-size: 17px; text-align: center; }
+.bt-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bt-bar { height: 7px; border-radius: 4px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.bt-bar i { display: block; height: 100%; width: calc(var(--v) * 100%); background: var(--c); border-radius: 4px; }
+.bt-pct { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+.bt-row.low .bt-pct { color: #fca5a5; }
 .w-obs { padding: 9px 10px; display: flex; flex-direction: column; gap: 7px; }
 .obs-top { display: flex; gap: 6px; }
 .obs-pill { flex: 1; display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .07); min-width: 0; }

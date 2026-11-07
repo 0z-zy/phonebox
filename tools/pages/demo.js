@@ -237,6 +237,12 @@
     if (path === '/api/calendar') return json(calendar());
     if (path === '/api/docker') return json(docker());
     if (path === '/api/obs') return json(obsState());
+    if (path === '/api/batteries') return json({ devices: [
+      { name: 'WH-1000XM5', level: 64, kind: 'headphones', charging: null },
+      { name: 'MX Master 3S', level: 85, kind: 'mouse', charging: null },
+      { name: 'MX Keys', level: 18, kind: 'keyboard', charging: null },
+      { name: 'Xbox Wireless Controller', level: 40, kind: 'controller', charging: null },
+    ] });
     if (path.startsWith('/api/obs/') && method === 'POST') {
       const action = path.slice(9);
       if (action === 'stream') obs.streamingSince = obs.streamingSince ? 0 : now();

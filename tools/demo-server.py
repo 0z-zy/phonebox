@@ -261,6 +261,13 @@ def api(method, path, query, body):
         if e and e['state'] in ('on', 'off'): e['state'] = 'off' if e['state'] == 'on' else 'on'
         elif e and e['state'] in ('locked', 'unlocked'): e['state'] = 'unlocked' if e['state'] == 'locked' else 'locked'
         return js({'ok': True})
+    if path == '/api/batteries':
+        return js({'devices': [
+            {'name': 'WH-1000XM5', 'level': 64, 'kind': 'headphones', 'charging': None},
+            {'name': 'MX Master 3S', 'level': 85, 'kind': 'mouse', 'charging': None},
+            {'name': 'MX Keys', 'level': 18, 'kind': 'keyboard', 'charging': None},
+            {'name': 'Xbox Wireless Controller', 'level': 40, 'kind': 'controller', 'charging': None},
+        ]})
     if path == '/api/docker':
         return js({'control': True, 'snapshot': {'available': True, 'error': None, 'containers': CONTAINERS, 'updated': int(time.time() * 1000)}})
     if path.startswith('/api/docker/') and method == 'POST':
