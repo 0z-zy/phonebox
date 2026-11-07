@@ -73,6 +73,8 @@ public sealed class LanConfig
     public int Port { get; set; } = 8766;
     /// <summary>Shared secret handed to the phone over USB. Empty = generate a new one (forces re-pairing).</summary>
     public string? Token { get; set; }
+    /// <summary>Separate key for the webhook API from other machines (push/notify/goto/refresh only). May appear in URLs.</summary>
+    public string? WebhookToken { get; set; }
 }
 
 public sealed class UpdateConfig
@@ -217,6 +219,7 @@ public sealed partial class ConfigStore(string path)
         if (string.IsNullOrWhiteSpace(c.Updates.Repo)) c.Updates.Repo = "ersinkoc/phonebox";
         c.Lan.Port = Math.Clamp(c.Lan.Port, 1024, 65535);
         if (string.IsNullOrWhiteSpace(c.Lan.Token)) c.Lan.Token = NewToken();
+        if (string.IsNullOrWhiteSpace(c.Lan.WebhookToken)) c.Lan.WebhookToken = NewToken();
         c.Night.Brightness = Math.Clamp(c.Night.Brightness, 0.01, 1);
 
         c.Pages = NormalizePages(c.Pages);
@@ -339,7 +342,7 @@ public sealed partial class ConfigStore(string path)
         try
         {
             var onDisk = JsonSerializer.Deserialize<AgentConfig>(File.ReadAllText(path), ReadOpts);
-            if (onDisk?.Lan?.Token == c.Lan.Token) return;
+            if (onDisk?.Lan?.Token == c.Lan.Token && onDisk?.Lan?.WebhookToken == c.Lan.WebhookToken) return;
         }
         catch { }
         Save(JsonSerializer.Serialize(c, WriteOpts));

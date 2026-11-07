@@ -60,8 +60,9 @@ curl -X POST http://127.0.0.1:8765/api/refresh                                  
 
 `GET /api/push` lists the values, `DELETE /api/push/<key>` removes one. Values survive restarts. From this PC no token
 is needed; with Wi-Fi enabled, other machines on the network or Tailscale can use the same endpoints on the HTTPS port
-with `Authorization: Bearer <token>` (or `?token=` for senders that cannot set headers). The settings page has a
-Webhooks section with copy-paste examples and test buttons.
+with the separate **webhook key** (`Authorization: Bearer <key>`, or `?token=<key>` for senders that cannot set
+headers). That key opens only the webhook endpoints, never the phone API, and can be replaced on its own. The settings
+page has a Webhooks section with the key, copy-paste examples and test buttons.
 
 ## Requirements
 

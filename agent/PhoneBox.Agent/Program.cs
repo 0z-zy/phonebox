@@ -68,9 +68,12 @@ app.Use(async (ctx, next) =>
     var origin = ctx.Request.Headers.Origin.ToString();
     if (lanCert is not null && ctx.Connection.LocalPort == lanCfg.Port)
     {
-        var token = configStore.Get().Lan.Token!;
-        var authorized = Lan.Matches(ctx.Request.Headers.Authorization, token)
-            || (Lan.IsWebhook(ctx.Request.Path) && Lan.MatchesQuery(ctx.Request.Query["token"], token)); // for senders that cannot set headers
+        // The phone's key opens the panel API; the separate webhook key opens only the webhook endpoints, in a header
+        // or, for senders that cannot set headers, in ?token= (URLs end up in logs, so it must not be the phone's key).
+        var lan = configStore.Get().Lan;
+        var authorized = Lan.Matches(ctx.Request.Headers.Authorization, lan.Token!)
+            || (Lan.IsWebhook(ctx.Request.Path) && (Lan.Matches(ctx.Request.Headers.Authorization, lan.WebhookToken!)
+                || Lan.MatchesQuery(ctx.Request.Query["token"], lan.WebhookToken!)));
         if (origin != "" || !Lan.AllowedOverLan(ctx.Request.Path) || !authorized)
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
