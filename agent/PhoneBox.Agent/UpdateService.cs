@@ -119,6 +119,38 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
         }
     }
 
+    /// <summary>
+    /// Installs the phone app on the connected phones that do not have it, from the GitHub release of this agent's
+    /// version (or the latest one): for agents installed on their own, e.g. with winget or Scoop.
+    /// </summary>
+    public async Task<string?> InstallAppAsync(CancellationToken ct = default)
+    {
+        var targets = adb.MissingApp;
+        if (targets.Length == 0) return "no connected phone is missing the app";
+        if (!await _gate.WaitAsync(0, ct)) return "an update is already running";
+        try
+        {
+            _state = "installing the phone app";
+            if (_latest is null) await CheckAsync(ct);
+            if (_latest?.Apk is null) return "could not find the phone app in the GitHub releases";
+            var apk = await DownloadAsync(_latest.Apk, $"PhoneBox-{_latest.Version}.apk", ct);
+            var adbExe = AdbReverse.FindAdb(cfg.Get().AdbPath) ?? throw new InvalidOperationException("adb not found");
+            foreach (var serial in targets)
+            {
+                var output = await Run(adbExe, $"-s {serial} install \"{apk}\"", ct);
+                if (!output.Contains("Success")) return $"installing on {serial} failed: {output.Trim().Split('\n').LastOrDefault()}";
+                log.LogInformation("phone app {Version} installed on {Serial}", _latest.Version, serial);
+            }
+            return null;
+        }
+        catch (Exception ex) { return ex.Message; }
+        finally
+        {
+            _state = "idle";
+            _gate.Release();
+        }
+    }
+
     private async Task UpdatePhoneAsync(CancellationToken ct)
     {
         _state = "updating phone app";

@@ -11,6 +11,10 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
     public const string PanelActivity = "net.oxog.phonebox.deskpanel/.MainActivity";
     private const string HomeAlias = "net.oxog.phonebox.deskpanel/.HomeAlias";
     private readonly HashSet<string> _homeSet = [];
+    private volatile string[] _missingApp = [];
+
+    /// <summary>Connected phones that do not have the PhoneBox app yet (installed from Settings, e.g. after winget / Scoop).</summary>
+    public string[] MissingApp => _missingApp;
     private const string Rule = "tcp:8765";
 
     private string _lastState = "";
@@ -69,9 +73,15 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
         SetDevices(devices);
         if (devices.Length == 0) { Report("no phone connected, waiting..."); return; }
 
+        _missingApp = _missingApp.Where(devices.Contains).ToArray();
         foreach (var d in devices)
         {
             var list = await Adb(adb, $"-s {d} reverse --list", ct);
+            if (list.Contains(Rule) && !_missingApp.Contains(d)) continue;
+            // is the app there at all? (the agent may have been installed on its own, with winget or Scoop)
+            var installed = (await Adb(adb, $"-s {d} shell pm path net.oxog.phonebox.deskpanel", ct)).Contains("package:");
+            _missingApp = installed ? _missingApp.Where(x => x != d).ToArray() : _missingApp.Union([d]).ToArray();
+            if (!installed) { Report($"{d}: the PhoneBox app is not installed (Settings › General › Install the phone app)"); continue; }
             if (list.Contains(Rule)) continue;
             await Adb(adb, $"-s {d} reverse {Rule} {Rule}", ct);
             // Newly plugged in: wake the screen and open the panel.

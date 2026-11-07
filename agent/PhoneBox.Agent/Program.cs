@@ -150,6 +150,9 @@ app.MapGet("/api/lan", (ConfigStore cfg) => Results.Json(new
 }));
 
 app.MapGet("/api/update", (UpdateService upd, ConfigStore cfg) => Results.Json(new { status = upd.Status(), auto = cfg.Get().Updates.Auto, installed = UpdateService.RunningInstalled }));
+// Settings › General: install the phone app on a phone that does not have it yet (local only).
+app.MapPost("/api/phone/install", async (UpdateService upd) =>
+    await upd.InstallAppAsync() is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));
 app.MapPost("/api/update/check", async (UpdateService upd) => { await upd.CheckAsync(); return Results.Json(upd.Status()); });
 app.MapPost("/api/update/apply", (UpdateService upd) => { _ = Task.Run(() => upd.ApplyAsync()); return Results.Accepted(); });
 
@@ -216,6 +219,7 @@ app.MapGet("/api/info", (AdbReverse adb, ConfigStore cfg) => Results.Json(new
     adb = AdbReverse.FindAdb(cfg.Get().AdbPath),
     connected = adb.Connected,
     devices = adb.AllDevices,
+    appMissing = adb.MissingApp,
 }));
 
 app.MapPost("/api/phone/open", async (AdbReverse adb) => { await adb.OpenPanelAsync(); return Results.Ok(); });

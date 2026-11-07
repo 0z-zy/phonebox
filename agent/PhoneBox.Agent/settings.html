@@ -373,7 +373,8 @@ dd { margin: 0; word-break: break-all; }
       <div class="card">
         <h3>Phone connection</h3>
         <div class="grid2">
-          <div class="field"><label>Phone to use</label><select id="serial"></select><span class="hint">If several Android devices are connected, choose which one runs the panel.</span></div>
+          <div class="field"><label>Phone to use</label><select id="serial"></select><span class="hint">If several Android devices are connected, choose which one runs the panel.</span>
+            <div class="row" id="appMissing" hidden style="margin-top:8px"><button class="btn primary sm" id="installApp">Install the phone app</button><span class="hint" id="appMissingText"></span></div></div>
           <div class="field"><label>Path to adb.exe (empty = auto-detect)</label><input type="text" data-bind="adbPath" placeholder="auto-detected"><span class="hint" id="adbFound"></span></div>
         </div>
       </div>
@@ -977,6 +978,17 @@ function renderCalendars() {
     h('input', { type: 'color', value: c.color || CAL_COLORS[i % CAL_COLORS.length], title: 'Colour', oninput: (e) => { c.color = e.target.value; changed(); } }),
     h('button', { class: 'btn sm danger', onclick: () => { cfg.calendars.splice(i, 1); renderCalendars(); changed(); } }, 'Remove'))));
 }
+$('installApp').onclick = async () => {
+  $('installApp').disabled = true;
+  $('appMissingText').textContent = 'downloading and installing… (allow it on the phone if it asks)';
+  try {
+    const r = await fetch('/api/phone/install', { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    $('appMissingText').textContent = r.ok ? 'Installed — the panel opens in a few seconds' : (j.error || 'Could not install it');
+  } catch (_) { $('appMissingText').textContent = 'Could not install it'; }
+  $('installApp').disabled = false;
+  setTimeout(loadInfo, 4000);
+};
 $('haTest').onclick = async () => {
   $('haState').textContent = 'checking…';
   try {
@@ -1329,6 +1341,8 @@ async function loadInfo() {
     pill.querySelector('span').textContent = i.connected ? 'Phone connected' : 'No phone connected';
     osName = i.os || 'windows';
     $('adbFound').textContent = i.adb ? 'Found: ' + i.adb : 'adb not found — ' + ({ linux: 'sudo apt install adb', macos: 'brew install android-platform-tools' }[osName] || 'winget install Google.PlatformTools');
+    $('appMissing').hidden = !(i.appMissing && i.appMissing.length);
+    if (i.appMissing?.length) $('appMissingText').textContent = `${i.appMissing.join(', ')} has no PhoneBox app yet`;
     const sel = $('serial');
     const cur = cfg.deviceSerial || '';
     const opts = [['', 'All connected devices'], ...i.devices.map((d) => [d, d])];

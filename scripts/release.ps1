@@ -26,3 +26,17 @@ Get-FileHash $assets -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower()) 
 $assets += Join-Path $root "dist\SHA256SUMS-$version.txt"
 gh release create "v$version" @assets `
     --title "PhoneBox $version" --generate-notes
+
+# Point the Scoop bucket and the winget manifests at the new release.
+$sha = (Get-FileHash (Join-Path $root "dist\PhoneBoxAgent-$version-win-x64.zip") -Algorithm SHA256).Hash.ToLower()
+$bucket = Join-Path $root 'bucket\phonebox.json'
+$json = Get-Content $bucket -Raw
+$json = $json -replace '"version": "[^"]*"', "`"version`": `"$version`"" `
+              -replace 'download/v\d[^/]*/PhoneBoxAgent-\d[^"]*-win-x64\.zip', "download/v$version/PhoneBoxAgent-$version-win-x64.zip" `
+              -replace '"hash": "[0-9a-f]{64}"', "`"hash`": `"$sha`""
+[IO.File]::WriteAllText($bucket, $json)
+python (Join-Path $root 'packaging\winget\make-manifests.py') $version $sha
+git -C $root add bucket/phonebox.json packaging/winget/manifests
+git -C $root commit -m "Scoop and winget manifests for $version"
+git -C $root push
+Write-Host "winget: submit packaging\winget\manifests\e\ersinkoc\PhoneBox\$version with 'wingetcreate submit <folder>'"

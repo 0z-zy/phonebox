@@ -62,6 +62,11 @@ or `webcal://` link) in Settings › General; the new Agenda widget lists the co
 next event. Recurring events, time zones and moved or cancelled occurrences are handled. A rule can react to "a
 calendar event is on" (e.g. show an on-air sign during meetings). The feed addresses never leave the computer.
 
+**Distribution.** A Scoop bucket in the repository (`scoop bucket add phonebox https://github.com/ersinkoc/phonebox`),
+winget manifests ready for winget-pkgs, and a release workflow that builds everything on GitHub, publishes it with
+checksums and updates both. Agents installed this way put the app on the phone from Settings › General ›
+*Install the phone app*.
+
 **Engineering.** Agent unit tests (`agent/PhoneBox.Agent.Tests`: config normalization and migration, Wi-Fi path rules
 and tokens, webhook keys, calendars, rules, Home Assistant and OBS against fake servers, key parsing) and browser tests
 of the panel and settings page against the web demo (`tools/ui-tests`, Playwright, including every widget in the

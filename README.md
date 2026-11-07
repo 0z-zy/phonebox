@@ -50,6 +50,17 @@ cd phonebox
 .\scripts\install.ps1 -Apk -Autostart   # agent + phone app, start with Windows (add -Serial <id> if several devices are connected)
 ```
 
+Or install just the agent with **Scoop** and let it put the app on the phone (settings › General › *Install the
+phone app*, with the phone plugged in):
+
+```powershell
+scoop bucket add phonebox https://github.com/ersinkoc/phonebox
+scoop install phonebox/phonebox          # needs the .NET 10 Desktop Runtime and adb (scoop install extras/windowsdesktop-runtime main/adb)
+```
+
+A winget package (`ersinkoc.PhoneBox`) is prepared in [`packaging/winget`](packaging/winget) for submission to
+winget-pkgs; once accepted it installs with `winget install ersinkoc.PhoneBox`.
+
 **Linux** (Ubuntu, Debian, Fedora, Arch…) **and macOS**
 
 ```sh
