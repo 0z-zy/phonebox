@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.4 — 2026-11-08
 
 **Calm page switching.** Rules, webhooks and the idle return no longer jump between pages. The phone shows
 *"Claude needs me — switching to AI in 3…"* with **Stay** and **Go now**, then fades over. It waits while you are
