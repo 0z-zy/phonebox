@@ -119,7 +119,7 @@ public class LanTests
     [InlineData("/api/ha/test", false)]
     [InlineData("/api/phones", false)]
     [InlineData("/api/rules/test", false)]
-    [InlineData("/panel/app.js", false)]
+    [InlineData("/panel/main.js", false)]
     [InlineData("/", false)]
     public void OnlyThePhoneApiIsReachableOverWifi(string path, bool allowed) => Assert.Equal(allowed, Lan.AllowedOverLan(new PathString(path)));
 

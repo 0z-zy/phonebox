@@ -62,7 +62,10 @@ or `webcal://` link) in Settings › General; the new Agenda widget lists the co
 next event. Recurring events, time zones and moved or cancelled occurrences are handled. A rule can react to "a
 calendar event is on" (e.g. show an on-air sign during meetings). The feed addresses never leave the computer.
 
-**Unit tests** for the agent (`agent/PhoneBox.Agent.Tests`, run in CI): calendar parsing and rule time windows.
+**Engineering.** Agent unit tests (`agent/PhoneBox.Agent.Tests`: config normalization and migration, Wi-Fi path rules
+and tokens, webhook keys, calendars, rules, Home Assistant and OBS against fake servers, key parsing) and browser tests
+of the panel and settings page against the web demo (`tools/ui-tests`, Playwright, including every widget in the
+catalogue), both in CI. The panel's 2,800-line `app.js` is now ES modules: `main.js` and `widgets/*.js`.
 
 **On air.** A new widget lights up while the computer's microphone or camera is in use (Windows: the same data
 as the taskbar's privacy icons; Linux: running capture streams and open video devices), or while a pushed value is on.

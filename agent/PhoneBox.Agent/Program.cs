@@ -172,7 +172,8 @@ app.MapGet("/panel/{*file}", (string? file, HttpRequest req) =>
 {
     if (string.IsNullOrEmpty(file) && !req.Path.Value!.EndsWith('/')) return Results.Redirect("/panel/" + req.QueryString);
     file = string.IsNullOrEmpty(file) ? "index.html" : file;
-    if (file.Contains('/') || file.Contains("..")) return Results.NotFound();
+    // index.html, main.js, style.css… and the widget modules in widgets/
+    if (!System.Text.RegularExpressions.Regex.IsMatch(file, @"^(widgets/)?[A-Za-z0-9_.-]+$") || file.Contains("..")) return Results.NotFound();
     var type = Path.GetExtension(file) switch
     {
         ".html" => "text/html; charset=utf-8",

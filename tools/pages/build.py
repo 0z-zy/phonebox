@@ -17,12 +17,12 @@ for name in ('index.html', 'demo.js'): shutil.copy(PAGES / name, out / name)
 for name in ('widgets.json', 'templates.json'): shutil.copy(AGENT / name, out / name)
 shutil.copy(AGENT / 'phonebox.ico', out / 'favicon.ico')
 
-# panel: the real assets, with the demo API loaded first
-for f in WWW.iterdir():
-    if f.is_file() and f.name != 'index.html': shutil.copy(f, out / 'panel' / f.name)
+# panel: the real assets (ES modules), with the demo API loaded first as a classic script
+shutil.copytree(WWW, out / 'panel', dirs_exist_ok=True, ignore=shutil.ignore_patterns('index.html'))
 html = (WWW / 'index.html').read_text(encoding='utf-8')
-assert '<script src="app.js">' in html
-(out / 'panel' / 'index.html').write_text(html.replace('<script src="app.js">', '<script src="../demo.js" data-panel></script>\n<script src="app.js">'), encoding='utf-8')
+tag = '<script type="module" src="main.js"></script>'
+assert tag in html
+(out / 'panel' / 'index.html').write_text(html.replace(tag, '<script src="../demo.js" data-panel></script>\n' + tag), encoding='utf-8')
 
 # settings page: the real one, with the demo API loaded before its script
 html = (AGENT / 'settings.html').read_text(encoding='utf-8')

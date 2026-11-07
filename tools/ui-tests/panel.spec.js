@@ -2,10 +2,15 @@
 // (DOM, keys, clicks) plus the demo's PhoneBoxDemo helper, never the panel's internals.
 const { test, expect } = require('@playwright/test');
 
-/** Fails the test on any console error or uncaught exception. */
+/** Fails the test on any console error or uncaught exception (outside services being down does not count). */
 function watchErrors(page) {
   const errors = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    const url = m.location()?.url || '';
+    if (/Failed to load resource/.test(m.text()) && url && !url.startsWith('http://127.0.0.1:8781')) return;
+    errors.push(m.text());
+  });
   page.on('pageerror', (e) => errors.push(String(e)));
   return errors;
 }
@@ -34,6 +39,29 @@ test('no widget fails to build on any page', async ({ page }) => {
   // a widget whose create() throws shows "<type>: <message>"
   const broken = await page.locator('.w > .empty').evaluateAll((els) => els.map((e) => e.textContent).filter((t) => /^[a-z]+: /.test(t)));
   expect(broken).toEqual([]);
+});
+
+test('every widget in the catalogue builds and runs without errors', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('/panel/');
+  // one page per widget type, at its default size, through the demo's stored settings
+  const count = await page.evaluate(async () => {
+    const widgets = await (await fetch('../widgets.json')).json();
+    const opts = (w) => Object.fromEntries((w.options || []).map((o) => [o.key, o.default]));
+    const pages = widgets.map((w, i) => ({ id: 'w' + i, title: w.name, icon: w.icon, enabled: true,
+      widgets: [{ id: w.type, type: w.type, x: 0, y: 0, w: w.w, h: w.h, options: opts(w) }] }));
+    const cfg = JSON.parse(localStorage.getItem('pb-demo-config') || 'null');
+    localStorage.setItem('pb-demo-config', JSON.stringify({ ...(cfg || {}), pages, shortcuts: cfg?.shortcuts || [] }));
+    return widgets.length;
+  });
+  await page.reload();
+  await expect(page.locator('#dots i')).toHaveCount(count);
+  // visit every page so each widget gets data and renders
+  for (let i = 0; i < count; i++) { await page.keyboard.press('ArrowRight'); await page.waitForTimeout(60); }
+  await page.waitForTimeout(1500);
+  const broken = await page.locator('.w > .empty').evaluateAll((els) => els.map((e) => e.textContent).filter((t) => /^[a-z]+: /.test(t)));
+  expect(broken).toEqual([]);
+  expect(errors).toEqual([]);
 });
 
 test('keys flip pages and the overview jumps to a page', async ({ page }) => {

@@ -312,8 +312,9 @@ pwsh tools/make-icon.ps1                     # regenerate the .ico
 The demo server needs only Python: size the browser window to 780 × 360 (the phone's screen in CSS pixels) and the
 panel behaves as on the phone, including webhooks (`curl -X POST http://127.0.0.1:8790/api/notify -d hello`).
 
-A widget is a `{ needs, create(box, ctx) → { update(kind) } }` entry in `W` in
-[`app.js`](android/app/src/main/assets/www/app.js), plus its styles in `style.css` and its catalogue entry
+The panel is plain ES modules: [`main.js`](android/app/src/main/assets/www/main.js) (core, pages, navigation, data
+from the agent) and the widgets in [`widgets/`](android/app/src/main/assets/www/widgets). A widget is a
+`{ needs, create(box, ctx) → { update(kind) } }` entry in the `W` registry, plus its styles in `style.css` and its catalogue entry
 (name, size, options) in [`widgets.json`](agent/PhoneBox.Agent/widgets.json), which drives the settings editor.
 Templates live in [`templates.json`](agent/PhoneBox.Agent/templates.json).
 

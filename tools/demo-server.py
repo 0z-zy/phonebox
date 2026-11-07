@@ -322,7 +322,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in ('/settings', '/settings/'): return self.send(200, 'text/html; charset=utf-8', (AGENT / 'settings.html').read_bytes())
         if path == '/favicon.ico': return self.send(200, 'image/x-icon', (AGENT / 'phonebox.ico').read_bytes())
         if path in ('/', '/index.html'):
-            html = (WWW / 'index.html').read_text(encoding='utf-8').replace('<script src="app.js">', FAKE_BRIDGE + '\n<script src="app.js">')
+            html = (WWW / 'index.html').read_text(encoding='utf-8').replace('<script type="module" src="main.js"></script>', FAKE_BRIDGE + '\n<script type="module" src="main.js"></script>')
             return self.send(200, 'text/html; charset=utf-8', html.encode())
         f = (WWW / path.lstrip('/')).resolve()
         if WWW in f.parents and f.is_file():

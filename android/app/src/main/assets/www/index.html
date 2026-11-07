@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<!-- Pages and widgets are built by app.js from the layout designed in the agent's settings page. -->
+<!-- Pages and widgets are built by main.js and widgets/*.js from the layout designed in the agent's settings page. -->
 <div id="pager"></div>
 
 <nav id="dots" title="All pages"></nav>
@@ -46,6 +46,6 @@
 <div id="offline">PC not connected</div>
 <div id="night"><div id="nClock">--:--</div><div id="nDate"></div></div>
 
-<script src="app.js"></script>
+<script type="module" src="main.js"></script>
 </body>
 </html>

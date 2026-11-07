@@ -80,7 +80,10 @@ class MainActivity : Activity(), SensorEventListener {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url
                 if (url.host == ASSET_HOST && url.path?.startsWith("/agent/") == true) return proxy(request)
-                return assetLoader.shouldInterceptRequest(url)
+                val r = assetLoader.shouldInterceptRequest(url)
+                // the panel is made of ES modules, which need a JavaScript MIME type
+                if (r != null && url.path?.endsWith(".js") == true) r.mimeType = "text/javascript"
+                return r
             }
         }
         web.addJavascriptInterface(Bridge(), "Android")
