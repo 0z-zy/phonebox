@@ -365,6 +365,30 @@ const h = (tag, attrs = {}, ...kids) => {
 
 const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#e5b84b', '#84cc16', '#22c55e', '#14b8a6', '#0ea5e9', '#2f80ed', '#6366f1', '#a855f7', '#ec4899', '#d97757', '#64748b', '#9ca3af'];
 const EMOJIS = ['⌨️', '💻', '📁', '📝', '🌐', '🎧', '🎵', '💬', '📧', '📅', '🧮', '⚙️', '✂️', '📊', '🔇', '🔊', '🌙', '🔒', '🚀', '🐙', '🐳', '🧪', '🛠️', '📦', '🎮', '📷', '🎙️', '⭐', '✳️', '🦊'];
+let osName = 'windows';
+const PRESETS_LINUX = [
+  ['', 'Pick a preset…'],
+  ['x-terminal-emulator', 'Terminal'],
+  ['xdg-open', 'Open a folder or file (args: path, ~ = home)'],
+  ['https://', 'Web address (URL in the command field)'],
+  ['gtk-launch', 'Desktop app (args: name of its .desktop file)'],
+  ['gnome-control-center', 'GNOME Settings'],
+  ['gnome-system-monitor', 'System Monitor'],
+  ['builtin:mute', 'Built-in: toggle mute'],
+  ['builtin:monitor-off', 'Built-in: turn monitors off (X11)'],
+  ['builtin:lock', 'Built-in: lock the session'],
+];
+const PRESETS_MACOS = [
+  ['', 'Pick a preset…'],
+  ['open', 'Open an app (args: -a "App Name") or a folder (args: path)'],
+  ['https://', 'Web address (URL in the command field)'],
+  ['shortcuts', 'Run a Shortcut (args: run "Name")'],
+  ['osascript', 'AppleScript (args: -e "…")'],
+  ['builtin:mute', 'Built-in: toggle mute'],
+  ['builtin:monitor-off', 'Built-in: sleep the display'],
+  ['builtin:lock', 'Built-in: lock (sleeps the display)'],
+];
+const presets = () => (osName === 'linux' ? PRESETS_LINUX : osName === 'macos' ? PRESETS_MACOS : PRESETS);
 const PRESETS = [
   ['', 'Pick a preset…'],
   ['wt.exe', 'Windows Terminal'],
@@ -803,7 +827,7 @@ function renderEditor() {
   markSwatch();
   const cmdIn = h('input', { type: 'text', value: s.cmd || '', placeholder: 'e.g. wt.exe, https://…, builtin:lock', oninput: (e) => upd('cmd', e.target.value, false) });
   const preset = h('select', { onchange: (e) => { if (e.target.value) { cmdIn.value = e.target.value; upd('cmd', e.target.value, false); cmdIn.focus(); } e.target.value = ''; } },
-    ...PRESETS.map(([v, l]) => h('option', { value: v }, l)));
+    ...presets().map(([v, l]) => h('option', { value: v }, l)));
 
   ed.append(
     h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '12px' } },
@@ -899,7 +923,8 @@ async function loadInfo() {
     const pill = $('phone');
     pill.className = 'pill' + (i.connected ? ' on' : '');
     pill.querySelector('span').textContent = i.connected ? 'Phone connected' : 'No phone connected';
-    $('adbFound').textContent = i.adb ? 'Found: ' + i.adb : 'adb not found — winget install Google.PlatformTools';
+    osName = i.os || 'windows';
+    $('adbFound').textContent = i.adb ? 'Found: ' + i.adb : 'adb not found — ' + ({ linux: 'sudo apt install adb', macos: 'brew install android-platform-tools' }[osName] || 'winget install Google.PlatformTools');
     const sel = $('serial');
     const cur = cfg.deviceSerial || '';
     const opts = [['', 'All connected devices'], ...i.devices.map((d) => [d, d])];

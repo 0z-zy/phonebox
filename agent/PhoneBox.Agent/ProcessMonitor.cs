@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+#if WINDOWS
 using System.Drawing.Imaging;
+#endif
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -24,6 +26,9 @@ public sealed record KillResult(int Killed, int Failed, string? Error);
 public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor sessions) : BackgroundService
 {
     // Processes Windows needs, or whose termination would break the user session.
+#if !WINDOWS
+    private static readonly HashSet<string> Protected = UnixProc.Protected;
+#else
     private static readonly HashSet<string> Protected = new(StringComparer.OrdinalIgnoreCase)
     {
         "System", "Idle", "Registry", "smss", "csrss", "wininit", "winlogon", "services", "lsass", "lsaiso",
@@ -33,6 +38,7 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
         "MsMpEng", "NisSrv", "smartscreen", "RuntimeBroker", "ApplicationFrameHost", "SystemSettingsBroker",
         "PhoneBoxAgent", "adb", "dotnet",
     };
+#endif
 
     private readonly int _session = Process.GetCurrentProcess().SessionId;
     private readonly int _selfPid = Environment.ProcessId;
@@ -117,7 +123,7 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
                     long mem = 0;
                     try { mem = p.WorkingSet64; } catch { }
 
-                    var locked = Protected.Contains(name) || p.SessionId != _session;
+                    var locked = Protected.Contains(name) || !Mine(p);
                     acc.TryGetValue(name, out var a);
                     acc[name] = (a.Count + 1, a.Cpu + cpu, a.Mem + mem, a.Locked || locked, a.Pid == 0 ? p.Id : a.Pid);
                 }
@@ -158,7 +164,7 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
                     try { started = new DateTimeOffset(p.StartTime).ToUnixTimeMilliseconds(); } catch { }
                     string? window = null;
                     try { window = string.IsNullOrWhiteSpace(p.MainWindowTitle) ? null : p.MainWindowTitle; } catch { }
-                    var locked = Protected.Contains(name) || p.SessionId != _session;
+                    var locked = Protected.Contains(name) || !Mine(p);
                     list.Add(new ProcInstance(p.Id, Math.Round(cpu.GetValueOrDefault(p.Id), 1), Math.Round(mem / 1048576.0),
                         started, claudeByPid.GetValueOrDefault(p.Id), window, _args.GetOrAdd(p.Id, ReadArgs), locked));
                 }
@@ -181,7 +187,7 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
         {
             using (p)
             {
-                if (p.SessionId != _session) { failed++; continue; }
+                if (!Mine(p)) { failed++; continue; }
                 try { p.Kill(); killed++; }
                 catch { failed++; }
             }
@@ -202,7 +208,7 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
         {
             var name = p.ProcessName;
             if (Protected.Contains(name)) return new(0, 0, $"{name} is protected and cannot be terminated");
-            if (p.SessionId != _session) return new(0, 0, "process belongs to another session");
+            if (!Mine(p)) return new(0, 0, "process belongs to another session or user");
             try
             {
                 p.Kill(entireProcessTree: true);
@@ -213,8 +219,21 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
         }
     }
 
+    /// <summary>Windows: same logon session as the agent. Linux / macOS: same user.</summary>
+    private bool Mine(Process p)
+    {
+#if WINDOWS
+        return p.SessionId == _session;
+#else
+        return UnixProc.IsOwn(p.Id);
+#endif
+    }
+
     public byte[]? Icon(string name) => _icons.GetOrAdd(name, n =>
     {
+#if !WINDOWS
+        return UnixProc.Icon(n, _meta.TryGetValue(n, out var um) ? um.Path : null);
+#else
         if (!_meta.TryGetValue(n, out var meta) || meta.Path is null) return null;
         try
         {
@@ -226,10 +245,16 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
             return ms.ToArray();
         }
         catch { return null; }
+#endif
     });
 
     private static (string Title, string? Path) ReadMeta(int pid, string name)
     {
+#if !WINDOWS
+        string? upath = null;
+        try { using var up = Process.GetProcessById(pid); upath = UnixProc.ImagePath(up); } catch { }
+        return (UnixProc.Title(name, upath), upath);
+#else
         var path = ImagePath(pid);
         var title = name;
         if (path is not null)
@@ -242,8 +267,10 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
             catch { }
         }
         return (title, path);
+#endif
     }
 
+#if WINDOWS
     private static string? ImagePath(int pid)
     {
         var h = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
@@ -303,4 +330,7 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
 
     [DllImport("kernel32.dll")]
     private static extern bool CloseHandle(nint h);
+#else
+    private static string? ReadArgs(int pid) => UnixProc.Args(pid);
+#endif
 }

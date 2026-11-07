@@ -2,21 +2,21 @@
 
 <h1 align="center">PhoneBox</h1>
 
-<p align="center"><b>Turn an old Android phone into a desk panel for your Windows PC.</b><br>
+<p align="center"><b>Turn an old Android phone into a desk panel for your computer: Windows, Linux or macOS.</b><br>
 Widgets for your PC, AI coding sessions, music, weather and anything you push to it. USB or Wi-Fi, no cloud.</p>
 
 <p align="center">
   <a href="https://github.com/ersinkoc/phonebox/actions/workflows/build.yml"><img src="https://github.com/ersinkoc/phonebox/actions/workflows/build.yml/badge.svg" alt="build"></a>
   <a href="https://github.com/ersinkoc/phonebox/releases/latest"><img src="https://img.shields.io/github/v/release/ersinkoc/phonebox?label=release" alt="latest release"></a>
-  <img src="https://img.shields.io/badge/Windows%2010%2F11-.NET%2010-512bd4" alt="Windows 10/11, .NET 10">
+  <img src="https://img.shields.io/badge/Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-.NET%2010-512bd4" alt="Windows, Linux, macOS; .NET 10">
   <img src="https://img.shields.io/badge/Android-9%2B-3ddc84" alt="Android 9+">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
 <p align="center"><img src="docs/hero.png" width="900" alt="PhoneBox on three phones: status, home and ambient pages"></p>
 
-PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and a **Windows agent** that
-lives in the system tray and feeds it over the USB cable (or over Wi-Fi / Tailscale after pairing once). You design
+PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and an **agent** on the computer
+(Windows, Linux or macOS) that feeds it over the USB cable (or over Wi-Fi / Tailscale after pairing once). You design
 the pages in a visual editor on the PC: **41 widgets**, **18 templates**, as many pages as you like.
 
 - **Your PC at a glance**: CPU, GPU, RAM, disks, network and ping; the heaviest apps, with "end one instance / end all".
@@ -37,8 +37,10 @@ the pages in a visual editor on the PC: **41 widgets**, **18 templates**, as man
 
 ## Quick start
 
-You need Windows 10/11, an Android 9+ phone with
-[USB debugging](https://developer.android.com/studio/debug/dev-options) turned on, and:
+You need an Android 9+ phone with [USB debugging](https://developer.android.com/studio/debug/dev-options) turned on,
+the [.NET 10 SDK](https://dotnet.microsoft.com/download) and `adb`.
+
+**Windows 10/11**
 
 ```powershell
 winget install Microsoft.DotNet.SDK.10 Google.PlatformTools   # .NET 10 and adb
@@ -47,8 +49,37 @@ cd phonebox
 .\scripts\install.ps1 -Apk -Autostart   # agent + phone app, start with Windows (add -Serial <id> if several devices are connected)
 ```
 
-Plug the phone in: it wakes up and opens the panel. Double-click the tray icon (or open <http://127.0.0.1:8765>) for
-the settings. `.\scripts\uninstall.ps1 [-Purge] [-Apk]` removes everything again.
+**Linux** (Ubuntu, Debian, Fedora, Arch…) **and macOS**
+
+```sh
+sudo apt install adb playerctl          # Fedora: android-tools playerctl · macOS: brew install android-platform-tools
+git clone https://github.com/ersinkoc/phonebox
+cd phonebox
+./scripts/install.sh --apk --autostart  # agent + phone app; systemd user service (Linux) or launchd agent (macOS)
+```
+
+Plug the phone in: it wakes up and opens the panel. The settings are at <http://127.0.0.1:8765> (on Windows also
+from the tray icon). `scripts/uninstall.ps1 [-Purge] [-Apk]` / `scripts/uninstall.sh [--purge] [--apk]` remove
+everything again.
+
+<details><summary><b>What works where</b></summary>
+
+| | Windows | Linux | macOS |
+|---|---|---|---|
+| CPU, RAM, network, disks, ping | ✓ | ✓ | ✓ |
+| CPU temperature | LibreHardwareMonitor | ✓ (hwmon) | — |
+| NVIDIA GPU | ✓ | ✓ | — |
+| Now playing + controls | ✓ (any app) | ✓ (MPRIS via `playerctl`) | Spotify, Music |
+| Volume | ✓ | ✓ (`wpctl` / `pactl`) | ✓ |
+| Processes, end one / all | ✓ | ✓ (your own) | ✓ (your own) |
+| App icons | ✓ | ✓ (icon theme) | ✓ (app bundles) |
+| Shortcuts, lock, screen off | ✓ | ✓ (`loginctl`, `xset`) | ✓ (`open`, `pmset`) |
+| Command widgets | PowerShell | bash | zsh |
+| Claude / Codex quotas & sessions, GitHub, webhooks | ✓ | ✓ | ✓ (Claude token from the Keychain) |
+| Tray icon | ✓ | — (settings in the browser) | — |
+| Start at login | Startup folder | systemd user service | launchd agent |
+
+</details>
 
 Optional extras that light up more widgets: an NVIDIA GPU (`nvidia-smi`), the [GitHub CLI](https://cli.github.com)
 (`gh auth login`), Claude Code, Codex, and [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
@@ -112,7 +143,8 @@ Double-click the tray icon (or open <http://127.0.0.1:8765>):
   phone selection, Wi-Fi & Tailscale, updates.
 - **Advanced**: the raw JSON.
 
-Settings live in `%APPDATA%\PhoneBox\config.json`; the phone picks up changes within a few seconds.
+Settings live in `%APPDATA%\PhoneBox\config.json` (Linux: `~/.config/PhoneBox`, macOS: `~/Library/Application Support/PhoneBox`);
+the phone picks up changes within a few seconds.
 
 ## Webhooks
 
@@ -172,8 +204,8 @@ flowchart LR
     UI["Panel UI<br/>(WebView, assets/www)"] -->|"/agent/*"| Proxy["Native proxy<br/>(AgentLink)"]
     UI -->|weather, rates, HN| Web(("Public APIs"))
   end
-  subgraph PC["Windows PC"]
-    Agent["PhoneBox agent<br/>(.NET 10, tray)"]
+  subgraph PC["Windows / Linux / macOS"]
+    Agent["PhoneBox agent<br/>(.NET 10)"]
     Agent --- Mon["System, GPU, media, volume,<br/>processes, sessions, quotas, GitHub"]
     Agent --- Set["Settings page &<br/>layout editor"]
   end

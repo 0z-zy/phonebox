@@ -1,0 +1,51 @@
+{
+  // PhoneBox settings. Easiest to edit at http://127.0.0.1:8765.
+  // Manual edits are picked up on the next request; no restart needed.
+
+  // Only use the phone with this serial number (null = every connected Android device)
+  "deviceSerial": null,
+  // Path to adb.exe (null = searched in PATH, the Android SDK and winget locations)
+  "adbPath": null,
+
+  // Weather location (Open-Meteo, no API key required)
+  "weather": { "city": "Tallinn", "lat": 59.437, "lon": 24.745 },
+
+  // Night mode: between these times the screen dims and only the clock stays. Tap to wake it for 30 s.
+  "night": { "enabled": true, "start": "00:30", "end": "07:30", "brightness": 0.02 },
+
+  // Clock seconds, return to the first page after N idle seconds (0 = never), vibrate on session events,
+  // switch pages with the phone's volume keys
+  "display": { "showSeconds": true, "idleReturnSec": 90, "vibrate": true, "volumeKeys": true },
+
+  // Pages in the order they appear on the phone. Each page is a 12 x 6 grid of widgets; the settings page has a
+  // visual editor. { "template": "<id>" } creates a page from templates.json (home, ai, work, system, procs, deck,
+  // music, clock, focus, world, dashboard, devops, feeds, ambient, markets, daily, status, calm) and is replaced by
+  // its widgets on the first save.
+  "pages": [
+    { "template": "home" },
+    { "template": "ai" },
+    { "template": "work" },
+    { "template": "system" },
+    { "template": "procs" },
+    { "template": "deck" },
+    { "template": "music" },
+    { "template": "focus", "enabled": false },
+    { "template": "world", "enabled": false }
+  ],
+
+  // Shortcut keys. The phone only sends the "id"; commands live in this file only.
+  // cmd: a program, a URL, or builtin:lock | builtin:monitor-off | builtin:mute
+  "shortcuts": [
+    { "id": "terminal", "label": "Terminal", "icon": "⌨️", "color": "#4b5563", "cmd": "x-terminal-emulator" },
+    { "id": "files", "label": "Files", "icon": "📁", "color": "#e5b84b", "cmd": "xdg-open", "args": "~" },
+    { "id": "vscode", "label": "VS Code", "icon": "📝", "color": "#2f80ed", "cmd": "code" },
+    { "id": "browser", "label": "Browser", "icon": "🌐", "color": "#0ea5e9", "cmd": "https://github.com" },
+    { "id": "spotify", "label": "Spotify", "icon": "🎧", "color": "#1db954", "cmd": "spotify" },
+    { "id": "calc", "label": "Calculator", "icon": "🧮", "color": "#64748b", "cmd": "gnome-calculator" },
+    { "id": "settings", "label": "Settings", "icon": "⚙️", "color": "#94a3b8", "cmd": "gnome-control-center" },
+    { "id": "monitor", "label": "System Monitor", "icon": "📊", "color": "#22c55e", "cmd": "gnome-system-monitor" },
+    { "id": "mute", "label": "Mute", "icon": "🔇", "color": "#f59e0b", "cmd": "builtin:mute" },
+    { "id": "monitoroff", "label": "Screen Off", "icon": "🌙", "color": "#6366f1", "cmd": "builtin:monitor-off" },
+    { "id": "lock", "label": "Lock", "icon": "🔒", "color": "#ef4444", "cmd": "builtin:lock" }
+  ]
+}

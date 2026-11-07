@@ -23,7 +23,7 @@ public sealed class CommandRunner(ConfigStore cfg, ILogger<CommandRunner> log)
     {
         var w = cfg.Get().Pages.FirstOrDefault(p => p.Id == pageId)?.Widgets?.FirstOrDefault(x => x.Id == widgetId && x.Type == "command");
         if (w is null) return null;
-        var command = w.Str("command") ?? "";
+        var command = (!OperatingSystem.IsWindows() ? w.Str("commandUnix") : null) ?? w.Str("command") ?? "";
         var interval = Math.Clamp(w.Int("interval") ?? 30, 5, 86400);
         var key = $"{pageId}/{widgetId}:{command.GetHashCode()}";
         var cached = _results.GetValueOrDefault(key);
@@ -41,7 +41,8 @@ public sealed class CommandRunner(ConfigStore cfg, ILogger<CommandRunner> log)
         var sw = Stopwatch.StartNew();
         try
         {
-            var psi = new ProcessStartInfo("powershell.exe")
+            var shell = OperatingSystem.IsWindows() ? "powershell.exe" : OperatingSystem.IsMacOS() ? "/bin/zsh" : File.Exists("/bin/bash") ? "/bin/bash" : "/bin/sh";
+            var psi = new ProcessStartInfo(shell)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -51,9 +52,11 @@ public sealed class CommandRunner(ConfigStore cfg, ILogger<CommandRunner> log)
                 StandardErrorEncoding = Encoding.UTF8,
                 WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             };
-            foreach (var a in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
-                         "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'; " + command })
-                psi.ArgumentList.Add(a);
+            string[] args = OperatingSystem.IsWindows()
+                ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+                   "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'; " + command]
+                : ["-lc", command]; // login shell: the user's PATH (docker, brew…) is available
+            foreach (var a in args) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi)!;
             var stdout = p.StandardOutput.ReadToEndAsync();
             var stderr = p.StandardError.ReadToEndAsync();

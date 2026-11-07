@@ -49,7 +49,8 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
         if (adb is null)
         {
             SetDevices([]);
-            Report("adb not found: run 'winget install Google.PlatformTools' or set adbPath in the settings");
+            Report("adb not found: " + (OperatingSystem.IsWindows() ? "run 'winget install Google.PlatformTools'"
+                : OperatingSystem.IsMacOS() ? "run 'brew install android-platform-tools'" : "run 'sudo apt install adb' (or your distribution's package)") + " or set adbPath in the settings");
             return;
         }
 
@@ -97,6 +98,15 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
     {
         if (!string.IsNullOrEmpty(configured) && File.Exists(configured)) return configured;
         var candidates = new List<string>();
+        if (!OperatingSystem.IsWindows())
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(':', StringSplitOptions.RemoveEmptyEntries))
+                candidates.Add(Path.Combine(dir, "adb"));
+            candidates.AddRange([Path.Combine(home, "Android", "Sdk", "platform-tools", "adb"), Path.Combine(home, "Library", "Android", "sdk", "platform-tools", "adb"),
+                "/opt/homebrew/bin/adb", "/usr/local/bin/adb", "/usr/bin/adb", "/usr/lib/android-sdk/platform-tools/adb"]);
+            return candidates.FirstOrDefault(File.Exists);
+        }
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             candidates.Add(Path.Combine(dir.Trim(), "adb.exe"));
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

@@ -32,7 +32,7 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
         _ = Task.Run(() => GpuLoop(ct), ct);
         _ = Task.Run(() => CpuTempLoop(ct), ct);
 
-        GetSystemTimes(out var idle0, out var kernel0, out var user0);
+        var (idle0, total0) = CpuTimes();
         var (rx0, tx0) = NetBytes();
         var t0 = Stopwatch.GetTimestamp();
         var tick = 0;
@@ -41,10 +41,10 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
         {
             await Task.Delay(1000, ct);
 
-            GetSystemTimes(out var idle1, out var kernel1, out var user1);
-            var total = (kernel1 - kernel0) + (user1 - user0);
+            var (idle1, total1) = CpuTimes();
+            var total = total1 - total0;
             double? cpu = total > 0 ? Math.Clamp(100.0 * (total - (idle1 - idle0)) / total, 0, 100) : null;
-            (idle0, kernel0, user0) = (idle1, kernel1, user1);
+            (idle0, total0) = (idle1, total1);
 
             var (rx1, tx1) = NetBytes();
             var t1 = Stopwatch.GetTimestamp();
@@ -55,16 +55,15 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
 
             if (tick++ % 15 == 0) _disks = ReadDisks();
 
-            var mem = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
-            GlobalMemoryStatusEx(ref mem);
+            var (memUsed, memTotal) = Memory();
             const double Gb = 1024d * 1024 * 1024;
 
             _snap = new PcSnapshot(
                 Cpu: cpu is { } c ? Math.Round(c, 1) : null,
                 CpuTemp: _cpuTemp,
                 CpuName: _cpuName,
-                RamUsedGb: Math.Round((mem.ullTotalPhys - mem.ullAvailPhys) / Gb, 1),
-                RamTotalGb: Math.Round(mem.ullTotalPhys / Gb, 1),
+                RamUsedGb: Math.Round(memUsed / Gb, 1),
+                RamTotalGb: Math.Round(memTotal / Gb, 1),
                 Gpu: _gpu,
                 NetDownBps: Math.Round(down),
                 NetUpBps: Math.Round(up),
@@ -103,10 +102,19 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
         }
     }
 
-    // CPU temperature comes from LibreHardwareMonitor's web server (port 8085), when it is running.
+    // CPU temperature: Windows from LibreHardwareMonitor's web server (port 8085), when it is running; Linux from hwmon.
     private async Task CpuTempLoop(CancellationToken ct)
     {
+#if !WINDOWS
+        while (!ct.IsCancellationRequested)
+        {
+            _cpuTemp = UnixSystem.CpuTemp();
+            await Task.Delay(_cpuTemp is null ? 30_000 : 2000, ct);
+        }
+        return;
+#else
         string[] names = ["Core (Tctl/Tdie)", "Tctl/Tdie", "CPU Package", "Tdie", "Tctl", "Core (Tdie)"];
+#pragma warning disable CS0162
         while (!ct.IsCancellationRequested)
         {
             var delay = TimeSpan.FromSeconds(2);
@@ -123,6 +131,7 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
             }
             await Task.Delay(delay, ct);
         }
+#endif
     }
 
     private static double? FindTemp(JsonElement node, string[] names)
@@ -147,6 +156,8 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
             if (ni.OperationalStatus != OperationalStatus.Up) continue;
             if (ni.NetworkInterfaceType is not (NetworkInterfaceType.Ethernet or NetworkInterfaceType.Wireless80211 or NetworkInterfaceType.GigabitEthernet)) continue;
             var d = ni.Description + " " + ni.Name;
+            if (!OperatingSystem.IsWindows() && (ni.Name.StartsWith("docker") || ni.Name.StartsWith("veth") || ni.Name.StartsWith("br-")
+                || ni.Name.StartsWith("virbr") || ni.Name.StartsWith("utun") || ni.Name.StartsWith("awdl") || ni.Name.StartsWith("llw"))) continue;
             if (d.Contains("Virtual", StringComparison.OrdinalIgnoreCase) || d.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase)
                 || d.Contains("vEthernet", StringComparison.OrdinalIgnoreCase) || d.Contains("VMware", StringComparison.OrdinalIgnoreCase)
                 || d.Contains("WSL", StringComparison.OrdinalIgnoreCase) || d.Contains("TAP", StringComparison.Ordinal)
@@ -165,20 +176,36 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
     private static IReadOnlyList<DiskInfo> ReadDisks()
     {
         const double Gb = 1024d * 1024 * 1024;
-        return DriveInfo.GetDrives()
-            .Where(d => d.DriveType == DriveType.Fixed && d.IsReady)
-            .Select(d => new DiskInfo(d.Name.TrimEnd('\\'), Math.Round((d.TotalSize - d.TotalFreeSpace) / Gb), Math.Round(d.TotalSize / Gb)))
+        var drives = DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed && d.IsReady && SafeSize(d) > 2 * Gb);
+        if (!OperatingSystem.IsWindows())
+            // Linux / macOS: real volumes only (no snaps, boot partitions or macOS system snapshots)
+            drives = drives.Where(d => d.Name == "/" || d.Name.StartsWith("/home") || d.Name.StartsWith("/mnt/") || d.Name.StartsWith("/media/")
+                                       || d.Name.StartsWith("/Volumes/") || d.Name.StartsWith("/data"))
+                .Where(d => !d.Name.Contains("/wsl") && !d.Name.Contains("docker") && !d.Name.StartsWith("/mnt/c") && d.Name.Length > 0)
+                .DistinctBy(d => (SafeSize(d), d.TotalFreeSpace / (1L << 30)));
+        return drives
+            .Select(d => new DiskInfo(DiskLabel(d.Name), Math.Round((d.TotalSize - d.TotalFreeSpace) / Gb), Math.Round(d.TotalSize / Gb)))
+            .Take(6)
             .ToList();
     }
 
+    private static long SafeSize(DriveInfo d) { try { return d.TotalSize; } catch { return 0; } }
+
+    private static string DiskLabel(string name) =>
+        OperatingSystem.IsWindows() ? name.TrimEnd('\\') : name == "/" ? "/" : Path.GetFileName(name.TrimEnd('/'));
+
     private static string ReadCpuName()
     {
+#if !WINDOWS
+        return UnixSystem.CpuName();
+#else
         try
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
             return (key?.GetValue("ProcessorNameString") as string)?.Trim() ?? "CPU";
         }
         catch { return "CPU"; }
+#endif
     }
 
     private static async Task<string> RunAsync(string file, string args, CancellationToken ct)
@@ -188,6 +215,20 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
         var output = await p.StandardOutput.ReadToEndAsync(ct);
         await p.WaitForExitAsync(ct);
         return output;
+    }
+
+#if WINDOWS
+    private static (long Idle, long Total) CpuTimes()
+    {
+        GetSystemTimes(out var idle, out var kernel, out var user);
+        return (idle, kernel + user); // kernel time includes idle time
+    }
+
+    private static (double Used, double Total) Memory()
+    {
+        var mem = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
+        GlobalMemoryStatusEx(ref mem);
+        return (mem.ullTotalPhys - mem.ullAvailPhys, mem.ullTotalPhys);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -202,4 +243,8 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
+#else
+    private static (long Idle, long Total) CpuTimes() => UnixSystem.CpuTimes();
+    private static (double Used, double Total) Memory() => UnixSystem.Memory();
+#endif
 }

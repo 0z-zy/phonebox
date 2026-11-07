@@ -155,9 +155,20 @@ public static class Idle
 {
     public static double Seconds()
     {
-        if (!OperatingSystem.IsWindows()) return 0;
+#if WINDOWS
         var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
         return GetLastInputInfo(ref info) ? (Environment.TickCount - (int)info.dwTime) / 1000.0 : 0;
+#else
+        if (OperatingSystem.IsMacOS())
+        {
+            // HIDIdleTime is in nanoseconds
+            var io = Sh.Run("ioreg", "-c", "IOHIDSystem", "-d", "4") ?? "";
+            var m = System.Text.RegularExpressions.Regex.Match(io, @"""HIDIdleTime"" = (\d+)");
+            return m.Success ? long.Parse(m.Groups[1].Value) / 1e9 : 0;
+        }
+        // X11 only (xprintidle); on Wayland this reports 0, i.e. "at the PC"
+        return double.TryParse(Sh.Run("xprintidle")?.Trim(), out var ms) ? ms / 1000 : 0;
+#endif
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -29,7 +29,7 @@ Start-Sleep -Milliseconds 500
 
 Write-Host "==> Publishing agent to $app"
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 10 SDK is required: winget install Microsoft.DotNet.SDK.10' }
-dotnet publish (Join-Path $root 'agent\PhoneBox.Agent') -c Release -o $app --nologo -v q --disable-build-servers
+dotnet publish (Join-Path $root 'agent\PhoneBox.Agent') -c Release -f net10.0-windows10.0.19041.0 -o $app --nologo -v q --disable-build-servers
 if (-not (Test-Path $exe)) { throw "publish failed: $exe not found" }
 
 # Leftover shortcut from the pre-PhoneBox "DeskAgent" prototype.

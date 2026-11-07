@@ -20,6 +20,7 @@ public static class Shortcuts
         {
             switch (sc.Cmd)
             {
+#if WINDOWS
                 case "builtin:lock":
                     LockWorkStation();
                     break;
@@ -30,9 +31,22 @@ public static class Shortcuts
                 case "builtin:mute":
                     Keys.Tap(Keys.VK_VOLUME_MUTE);
                     break;
+#else
+                case "builtin:lock":
+                    if (OperatingSystem.IsMacOS()) Unix("pmset", "displaysleepnow");
+                    else if (Sh.Run("loginctl", "lock-session") is null) Unix("xdg-screensaver", "lock");
+                    break;
+                case "builtin:monitor-off":
+                    if (OperatingSystem.IsMacOS()) Unix("pmset", "displaysleepnow");
+                    else Unix("xset", "dpms", "force", "off");
+                    break;
+                case "builtin:mute":
+                    new AudioControl().ToggleMute();
+                    break;
+#endif
                 default:
-                    var psi = new ProcessStartInfo(sc.Cmd, sc.Args ?? "") { UseShellExecute = true };
-                    if (!string.IsNullOrEmpty(sc.Cwd)) psi.WorkingDirectory = sc.Cwd;
+                    var psi = new ProcessStartInfo(Home(sc.Cmd), Home(sc.Args ?? "")) { UseShellExecute = true };
+                    if (!string.IsNullOrEmpty(sc.Cwd)) psi.WorkingDirectory = Home(sc.Cwd);
                     Process.Start(psi);
                     break;
             }
@@ -46,10 +60,22 @@ public static class Shortcuts
         }
     }
 
+    /// <summary>"~" at the start of a path means the home folder (Linux / macOS style).</summary>
+    private static string Home(string s) =>
+        s == "~" || s.StartsWith("~/") ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + s[1..] : s.Replace(" ~/", " " + Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/");
+
+#if WINDOWS
     [DllImport("user32.dll")] private static extern bool LockWorkStation();
     [DllImport("user32.dll")] private static extern bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
+#else
+    private static void Unix(string tool, params string[] args)
+    {
+        if (Sh.Run(tool, args) is null && Sh.Which(tool) is null) throw new InvalidOperationException($"{tool} is not installed");
+    }
+#endif
 }
 
+#if WINDOWS
 public static class Keys
 {
     public const byte VK_VOLUME_MUTE = 0xAD;
@@ -63,3 +89,4 @@ public static class Keys
 
     [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, nuint extra);
 }
+#endif

@@ -10,7 +10,7 @@ public sealed record UpdateStatus(string AgentVersion, string? AppVersion, strin
 
 /// <summary>
 /// Keeps the agent and the phone app up to date from GitHub releases (PhoneBox-&lt;v&gt;.apk and
-/// PhoneBoxAgent-&lt;v&gt;-win-x64.zip):
+/// PhoneBoxAgent-&lt;v&gt;-&lt;rid&gt;.zip, rid = win-x64, linux-x64, linux-arm64, osx-arm64 or osx-x64):
 ///  - phone: installed with "adb install -r" while the phone is on USB (no prompt on the phone). Android refuses
 ///    an APK signed with a different key, and the agent never uninstalls to force it.
 ///  - agent: files are swapped in place (running files are renamed to *.old, which Windows allows) and the agent
@@ -18,7 +18,8 @@ public sealed record UpdateStatus(string AgentVersion, string? AppVersion, strin
 /// </summary>
 public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicationLifetime life, ILogger<UpdateService> log) : BackgroundService
 {
-    private static readonly string InstallDir = Path.Combine(AppPaths.LocalDir, "app");
+    private static readonly string InstallDir = AppPaths.InstallDir;
+    private static readonly string ExeName = OperatingSystem.IsWindows() ? "PhoneBoxAgent.exe" : "PhoneBoxAgent";
     private static readonly string Downloads = Path.Combine(AppPaths.LocalDir, "updates");
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(5) };
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -32,7 +33,8 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
     public static volatile string? AppVersion;
 
     public static bool RunningInstalled =>
-        string.Equals(Path.GetFullPath(AppContext.BaseDirectory).TrimEnd('\\'), Path.GetFullPath(InstallDir).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+        string.Equals(Path.GetFullPath(AppContext.BaseDirectory).TrimEnd('\\', '/'), Path.GetFullPath(InstallDir).TrimEnd('\\', '/'),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     public UpdateStatus Status()
     {
@@ -78,7 +80,7 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
                 var name = a.GetProperty("name").GetString() ?? "";
                 var url = a.GetProperty("browser_download_url").GetString();
                 if (name.StartsWith("PhoneBox-", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase)) apk = url;
-                if (name.StartsWith("PhoneBoxAgent-", StringComparison.OrdinalIgnoreCase) && name.EndsWith("-win-x64.zip", StringComparison.OrdinalIgnoreCase)) zip = url;
+                if (name.StartsWith("PhoneBoxAgent-", StringComparison.OrdinalIgnoreCase) && name.EndsWith($"-{AppPaths.Rid}.zip", StringComparison.OrdinalIgnoreCase)) zip = url;
             }
             _latest = new Release(tag.TrimStart('v', 'V'), r.GetProperty("html_url").GetString(), apk, zip);
             _lastCheck = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -140,7 +142,7 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
         var staging = Path.Combine(Downloads, "agent-" + _latest.Version);
         if (Directory.Exists(staging)) Directory.Delete(staging, true);
         ZipFile.ExtractToDirectory(zip, staging);
-        if (!File.Exists(Path.Combine(staging, "PhoneBoxAgent.exe"))) throw new InvalidOperationException("the agent package has no PhoneBoxAgent.exe");
+        if (!File.Exists(Path.Combine(staging, ExeName))) throw new InvalidOperationException($"the agent package has no {ExeName}");
 
         foreach (var src in Directory.EnumerateFiles(staging, "*", SearchOption.AllDirectories))
         {
@@ -155,6 +157,8 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
             }
             File.Move(src, dst);
         }
+        if (!OperatingSystem.IsWindows()) // zip files do not keep the executable bit
+            File.SetUnixFileMode(Path.Combine(InstallDir, ExeName), (UnixFileMode)0b111_101_101);
         log.LogInformation("agent updated to {Version}, restarting", _latest.Version);
         _state = "restarting";
         AppRestart.Requested = true;

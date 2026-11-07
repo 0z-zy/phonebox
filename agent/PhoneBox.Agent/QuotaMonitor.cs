@@ -52,12 +52,17 @@ public sealed partial class QuotaMonitor(ILogger<QuotaMonitor> log) : Background
     private async Task<bool> RefreshClaude(CancellationToken ct)
     {
         var path = Path.Combine(Home, ".claude", ".credentials.json");
-        if (!File.Exists(path)) { _claude = null; return true; }
+        string? json = File.Exists(path) ? await File.ReadAllTextAsync(path, ct) : null;
+#if !WINDOWS
+        // macOS: Claude Code stores the credentials in the login Keychain instead of a file (read-only access).
+        if (json is null && OperatingSystem.IsMacOS()) json = Sh.Run("security", "find-generic-password", "-s", "Claude Code-credentials", "-w")?.Trim();
+#endif
+        if (string.IsNullOrEmpty(json)) { _claude = null; return true; }
 
         string plan = "Claude";
         try
         {
-            using var creds = JsonDocument.Parse(await File.ReadAllTextAsync(path, ct));
+            using var creds = JsonDocument.Parse(json);
             var o = creds.RootElement.GetProperty("claudeAiOauth");
             plan = PlanLabel(Str(o, "subscriptionType"), Str(o, "rateLimitTier"));
             var token = Str(o, "accessToken");

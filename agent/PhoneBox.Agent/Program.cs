@@ -5,6 +5,9 @@ using PhoneBox.Agent;
 const int Port = 8765;
 string[] SameOrigins = [$"http://127.0.0.1:{Port}", $"http://localhost:{Port}"];
 
+// Install scripts ask where the agent belongs (it differs per OS), then copy it there.
+if (args.Contains("--print-install-dir")) { Console.WriteLine(AppPaths.InstallDir); return; }
+
 // Single instance: a second launch opens the running instance's settings page and exits.
 // After a restart the previous instance may still be shutting down, so wait for it briefly.
 var single = new Mutex(false, @"Local\PhoneBox.Agent");
@@ -171,6 +174,7 @@ app.MapPost("/api/shortcuts/test", async (HttpRequest req, ILogger<Program> log)
 app.MapGet("/api/info", (AdbReverse adb, ConfigStore cfg) => Results.Json(new
 {
     version = AppPaths.Version,
+    os = AppPaths.Os,
     configPath = cfg.Path,
     logPath = AppPaths.LogPath,
     adb = AdbReverse.FindAdb(cfg.Get().AdbPath),

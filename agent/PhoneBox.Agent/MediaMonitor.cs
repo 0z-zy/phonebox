@@ -2,11 +2,6 @@ using Windows.Media.Control;
 
 namespace PhoneBox.Agent;
 
-public sealed record MediaSnapshot(string App, string Title, string Artist, string Album, bool Playing,
-    long PosMs, long DurMs, int ArtId, bool CanSeek);
-
-public sealed record AlbumArt(byte[] Bytes, string Mime);
-
 /// <summary>Watches and controls the current Windows media session (Spotify, browsers, ...).</summary>
 public sealed class MediaMonitor(ILogger<MediaMonitor> log) : BackgroundService
 {

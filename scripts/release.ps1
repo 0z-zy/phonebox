@@ -21,5 +21,8 @@ if (git -C $root status --porcelain) { throw 'commit your changes first' }
 
 & (Join-Path $PSScriptRoot 'build.ps1')
 git -C $root push
-gh release create "v$version" (Join-Path $root "dist\PhoneBox-$version.apk") (Join-Path $root "dist\PhoneBoxAgent-$version-win-x64.zip") `
+$assets = @(Join-Path $root "dist\PhoneBox-$version.apk") + (Get-ChildItem (Join-Path $root 'dist') -Filter "PhoneBoxAgent-$version-*.zip").FullName
+Get-FileHash $assets -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content (Join-Path $root "dist\SHA256SUMS-$version.txt")
+$assets += Join-Path $root "dist\SHA256SUMS-$version.txt"
+gh release create "v$version" @assets `
     --title "PhoneBox $version" --generate-notes

@@ -2,8 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace PhoneBox.Agent;
 
-public sealed record AudioSnapshot(int Volume, bool Muted);
-
 /// <summary>Master volume of the default playback device (Windows Core Audio).</summary>
 public sealed class AudioControl
 {
