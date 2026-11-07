@@ -1706,6 +1706,59 @@ W.checklist = {
 };
 
 // ---------------------------------------------------------------- phone & PC
+// OBS Studio: live / recording state with timers, the current scene, and (when allowed) buttons and scene switching.
+W.obs = {
+  needs: ['tick'],
+  create(box, { o }) {
+    let data = null, lastKey = '', fetchedAt = 0, busy = null;
+    const load = async () => { try { data = await api('/obs'); fetchedAt = Date.now(); } catch (_) {} };
+    const dur = (ms) => { const s = Math.floor(ms / 1000); return (s >= 3600 ? Math.floor(s / 3600) + ':' : '') + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60); };
+    const act = async (action, scene) => {
+      haptic();
+      busy = action + (scene || ''); render(true);
+      try {
+        const r = await fetch(`${API}/obs/${action}` + (scene ? '?scene=' + encodeURIComponent(scene) : ''), { method: 'POST', cache: 'no-store' });
+        if (!r.ok) toast((await r.json().catch(() => ({}))).error || 'OBS did not do it', 'err');
+      } catch (_) { toast('The PC did not answer', 'err'); }
+      setTimeout(async () => { await load(); busy = null; render(true); }, 600);
+    };
+    const render = (force = false) => {
+      const s = data?.snapshot;
+      const since = Date.now() - fetchedAt; // timers keep running between polls
+      const key = JSON.stringify([data, busy, Math.floor(Date.now() / 1000), box.clientHeight]);
+      if (!force && key === lastKey) return;
+      lastKey = key;
+      if (!data) { box.replaceChildren(h('div', 'empty', 'Loading…')); return; }
+      if (!data.enabled) { box.replaceChildren(h('div', 'w-title', 'OBS'), h('div', 'empty', 'Turn on OBS in Settings › General')); return; }
+      if (!s.connected) { box.replaceChildren(h('div', 'w-title', 'OBS'), h('div', 'empty', s.error || 'Connecting…')); return; }
+      const ctl = data.control;
+      const pill = (on, label, cls, time, action) => {
+        const el = h('div', 'obs-pill ' + cls + (on ? ' on' : '') + (ctl ? ' can' : '') + (busy === action ? ' busy' : ''), h('span', 'obs-led'), h('b', null, label), h('span', 'obs-time', on ? dur(time + since) : 'off'));
+        if (ctl) el.addEventListener('click', () => act(action));
+        return el;
+      };
+      const recLabel = s.recordPaused ? 'PAUSED' : 'REC';
+      const kids = [
+        h('div', 'obs-top', pill(s.streaming, 'LIVE', 'live', s.streamMs, 'stream'), pill(s.recording, recLabel, 'rec', s.recordPaused ? s.recordMs - since : s.recordMs, 'record')),
+        h('div', 'obs-scene', h('span', null, 'Scene'), h('b', null, s.scene || '—'),
+          s.micMuted != null ? h('span', 'obs-mic' + (s.micMuted ? ' muted' : ''), s.micMuted ? '🔇' : '🎙️') : null),
+      ];
+      if (o.scenes !== false && s.scenes.length) {
+        kids.push(h('div', 'obs-scenes', ...s.scenes.map((name) => {
+          const b = h('button', 'obs-sc' + (name === s.scene ? ' cur' : '') + (busy === 'scene' + name ? ' busy' : ''), name);
+          if (ctl && name !== s.scene) b.addEventListener('click', () => act('scene', name));
+          return b;
+        })));
+      }
+      box.replaceChildren(...kids);
+      const mic = box.querySelector('.obs-mic');
+      if (mic && ctl) mic.addEventListener('click', (e) => { e.stopPropagation(); act('mic'); });
+    };
+    const tick = every(2000, async () => { await load(); render(); });
+    return { update: () => { tick(); render(); } };
+  },
+};
+
 // Home Assistant entities through the agent (which holds the token). Tap a light, switch, scene… to switch it,
 // when the widget allows it.
 const HA_ICONS = {
@@ -1916,17 +1969,19 @@ W.onair = {
     return {
       update() {
         const p = D.state?.privacy;
-        const mic = src !== 'camera' && src !== 'push' && !!p?.mic;
-        const cam = src !== 'mic' && src !== 'push' && !!p?.camera;
+        const mic = (src === 'both' || src === 'mic') && !!p?.mic;
+        const cam = (src === 'both' || src === 'camera') && !!p?.camera;
+        const obs = D.state?.obs;
+        const obsLive = (src === 'both' || src === 'obs') && !!obs && (obs.streaming || (obs.recording && !obs.recordPaused));
         let pv = o.key ? D.push?.[o.key]?.data : null;
         if (pv && typeof pv === 'object' && 'value' in pv) pv = pv.value;
         const pushed = pv != null && pv !== false && pv !== 0 && !/^(|0|false|off|no)$/i.test(String(pv));
-        const on = mic || cam || pushed;
+        const on = mic || cam || obsLive || pushed;
         box.classList.toggle('on', on);
         const apps = [...new Set([...(mic ? p.micApps || [] : []), ...(cam ? p.cameraApps || [] : [])])];
         sub.textContent = on
-          ? [mic ? '🎙️' : '', cam ? '📷' : '', apps.join(', ') || (pushed && typeof pv === 'string' ? pv : '')].filter(Boolean).join(' ')
-          : src !== 'push' && p && p.mic == null ? 'Not detectable on this computer' : 'Off air';
+          ? [mic ? '🎙️' : '', cam ? '📷' : '', obsLive ? (obs.streaming ? 'OBS live' : 'OBS recording') : '', apps.join(', ') || (pushed && typeof pv === 'string' ? pv : '')].filter(Boolean).join(' ')
+          : (src === 'mic' || src === 'camera') && p && p.mic == null ? 'Not detectable on this computer' : 'Off air';
       },
     };
   },

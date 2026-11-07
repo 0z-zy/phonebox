@@ -306,6 +306,17 @@ dd { margin: 0; word-break: break-all; }
       </div>
 
       <div class="card">
+        <h3>OBS Studio</h3>
+        <div class="row" style="margin-bottom:8px"><label class="switch"><input type="checkbox" data-bind="obs.enabled"><span></span></label> Connect to OBS (for the <b>OBS</b> widget, the On air widget and rules)</div>
+        <p class="hint" style="margin:0 0 12px">In OBS: Tools › WebSocket Server Settings › <i>Enable WebSocket server</i>; copy the password from <i>Show Connect Info</i>.</p>
+        <div class="grid2">
+          <div class="field"><label>Address</label><input type="text" data-bind="obs.url" placeholder="ws://127.0.0.1:4455" spellcheck="false"></div>
+          <div class="field"><label>Password</label><input type="password" data-bind="obs.password" autocomplete="off"></div>
+        </div>
+        <div class="row"><button class="btn sm" id="obsTest">Test</button><span class="hint" id="obsState"></span></div>
+      </div>
+
+      <div class="card">
         <h3>Night mode</h3>
         <div class="row" style="margin-bottom:12px"><label class="switch"><input type="checkbox" data-bind="night.enabled"><span></span></label> Dim the screen at night and show only the clock</div>
         <div class="grid2">
@@ -855,6 +866,13 @@ $('haTest').onclick = async () => {
     $('haState').textContent = r.result;
   } catch (_) { $('haState').textContent = 'Could not check'; }
 };
+$('obsTest').onclick = async () => {
+  $('obsState').textContent = 'connecting…';
+  try {
+    const r = await (await fetch('/api/obs-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg.obs || {}) })).json();
+    $('obsState').textContent = r.result;
+  } catch (_) { $('obsState').textContent = 'Could not check'; }
+};
 $('calAdd').onclick = () => {
   cfg.calendars ??= [];
   cfg.calendars.push({ name: '', url: '', color: CAL_COLORS[cfg.calendars.length % CAL_COLORS.length] });
@@ -870,6 +888,7 @@ const TRIGGERS = {
   'mic-in-use': { label: 'the microphone is in use', match: 'any app (or: Zoom|Teams)' },
   'camera-in-use': { label: 'the camera is in use', match: 'any app (or: Zoom|Teams)' },
   'calendar-event': { label: 'a calendar event is on', match: 'any event (or: meeting|call)' },
+  'obs-live': { label: 'OBS is recording or streaming' },
   'cpu-above': { label: 'the CPU is busy', value: '% (for 15 s)', def: 85 },
   idle: { label: 'I am away from the PC', value: 'minutes', def: 5 },
   time: { label: 'it is between', match: '22:00-07:00' },
@@ -893,7 +912,7 @@ const RULE_PRESETS = [
 let activeRules = [];
 
 function renderRules() {
-  cfg.rules ??= []; cfg.calendars ??= []; cfg.homeAssistant ??= {};
+  cfg.rules ??= []; cfg.calendars ??= []; cfg.homeAssistant ??= {}; cfg.obs ??= { enabled: false, url: 'ws://127.0.0.1:4455' };
   $('rulePresets').replaceChildren(...RULE_PRESETS.map(([label, make]) => h('button', { class: 'btn', onclick: () => {
     cfg.rules.push({ id: '', enabled: true, ...make() });
     renderRules(); changed();

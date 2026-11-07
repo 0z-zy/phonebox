@@ -16,7 +16,7 @@ public sealed class HomeAssistantTests : IDisposable
 
     public HomeAssistantTests()
     {
-        var port = Random.Shared.Next(20000, 40000);
+        var port = TestPorts.Free();
         _url = $"http://127.0.0.1:{port}";
         _server.Prefixes.Add(_url + "/");
         _server.Start();

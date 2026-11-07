@@ -119,7 +119,17 @@
       ping: { ms: wave(13, 9, 16), avgMs: 12, lossPct: 0 },
       // the microphone is "in use" for 20 s of every minute, to show the On air widget
       privacy: (() => { const on = (now() / 1000) % 60 < 20; return { mic: on, camera: false, micApps: on ? ['Zoom'] : [], cameraApps: [] }; })(),
+      obs: { streaming: !!obs.streamingSince, recording: !!obs.recordingSince, recordPaused: obs.paused },
     };
+  }
+
+  // made-up OBS: streaming for a while, buttons and scenes work
+  const obs = { streamingSince: now() - 754e3, recordingSince: 0, paused: false, scene: 'Desk', mic: false };
+  function obsState() {
+    return { enabled: true, control: true, snapshot: {
+      connected: true, error: null, streaming: !!obs.streamingSince, streamMs: obs.streamingSince ? now() - obs.streamingSince : 0,
+      recording: !!obs.recordingSince, recordPaused: obs.paused, recordMs: obs.recordingSince ? now() - obs.recordingSince : 0,
+      scene: obs.scene, scenes: ['Desk', 'Camera', 'Screen share', 'BRB'], micMuted: obs.mic, micName: 'Mic/Aux' } };
   }
 
   // made-up Home Assistant entities; switching flips them
@@ -226,6 +236,16 @@
     if (path === '/api/quotas') return json(quotas());
     if (path === '/api/calendar') return json(calendar());
     if (path === '/api/docker') return json(docker());
+    if (path === '/api/obs') return json(obsState());
+    if (path.startsWith('/api/obs/') && method === 'POST') {
+      const action = path.slice(9);
+      if (action === 'stream') obs.streamingSince = obs.streamingSince ? 0 : now();
+      if (action === 'record') { obs.recordingSince = obs.recordingSince ? 0 : now(); obs.paused = false; }
+      if (action === 'pause') obs.paused = !obs.paused;
+      if (action === 'mic') obs.mic = !obs.mic;
+      if (action === 'scene') obs.scene = q.get('scene') || obs.scene;
+      return json({ ok: true });
+    }
     if (path === '/api/ha/states') return json(haStates((q.get('ids') || '').split(',').filter(Boolean)));
     if (path.startsWith('/api/ha/toggle/') && method === 'POST') { haToggle(decodeURIComponent(path.slice(15))); return json({ ok: true }); }
     if (path.startsWith('/api/docker/') && method === 'POST') {

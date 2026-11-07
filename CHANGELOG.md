@@ -20,6 +20,10 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**OBS Studio.** Connect to OBS's WebSocket server (Settings › General); the OBS widget shows live and recording
+state with timers, the current scene and scene buttons, and can start or stop the stream and recording, switch
+scenes and mute the mic. The On air widget and rules also know when OBS is live.
+
 **Home Assistant.** Add the address and a long-lived access token in Settings › General; the Home Assistant widget
 shows the entities you list (lights, switches, sensors, doors, locks, covers, scenes…) and switches them with a tap.
 The token stays on the computer and the phone can only reach the entities its widgets list.

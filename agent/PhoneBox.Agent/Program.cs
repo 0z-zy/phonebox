@@ -63,6 +63,7 @@ AddMonitor<UpdateService>(builder.Services);
 AddMonitor<PrivacyMonitor>(builder.Services);
 AddMonitor<CalendarMonitor>(builder.Services);
 AddMonitor<DockerMonitor>(builder.Services);
+AddMonitor<ObsMonitor>(builder.Services);
 AddMonitor<RuleEngine>(builder.Services);
 builder.Services.AddHostedService<Tray>();
 
@@ -275,6 +276,7 @@ object State(IServiceProvider sp, long? ev)
         ping = sp.GetRequiredService<PingMonitor>().Snapshot(),
         rules = sp.GetRequiredService<RuleEngine>().Active(),
         privacy = sp.GetRequiredService<PrivacyMonitor>().Snapshot(),
+        obs = sp.GetRequiredService<ObsMonitor>().Snapshot() is { Connected: true } o ? new { o.Streaming, o.Recording, o.RecordPaused } : null,
     };
 }
 
@@ -294,6 +296,18 @@ app.MapPost("/api/ha/toggle/{id}", async (string id, HomeAssistant ha) =>
 // Settings › General › Home Assistant › Test (local only)
 app.MapPost("/api/ha/test", async (HomeAssistantConfig body) =>
     Results.Json(new { result = await HomeAssistant.TestAsync(body.Url ?? "", body.Token ?? "") }));
+
+// OBS Studio (widget): state, scenes and the widget's buttons (only if a widget allows control).
+app.MapGet("/api/obs", (ObsMonitor obs, ConfigStore cfg) => Results.Json(new
+{
+    enabled = cfg.Get().Obs.Enabled,
+    snapshot = obs.Snapshot(),
+    control = cfg.Get().Pages.SelectMany(p => p.Widgets ?? []).Any(w => w.Type == "obs" && w.Bool("control") == true),
+}));
+app.MapPost("/api/obs/{action}", async (string action, string? scene, ObsMonitor obs) =>
+    await obs.ActAsync(action, scene) is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));
+// Settings › General › OBS › Test (local only: deliberately not under /api/obs, which the phone may reach over Wi-Fi)
+app.MapPost("/api/obs-test", async (ObsConfig body) => Results.Json(new { result = await ObsMonitor.TestAsync(body.Url, body.Password) }));
 
 // Settings › Rules › Test: runs a rule's action once (the rule may be unsaved).
 app.MapPost("/api/rules/test", (RuleConfig rule, RuleEngine rules) =>

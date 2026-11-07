@@ -22,6 +22,8 @@ public sealed class AgentConfig
     public List<CalendarSource> Calendars { get; set; } = [];
     /// <summary>Home Assistant address and long-lived access token (the token never goes to the phone).</summary>
     public HomeAssistantConfig HomeAssistant { get; set; } = new();
+    /// <summary>OBS Studio's WebSocket server (obs-websocket 5).</summary>
+    public ObsConfig Obs { get; set; } = new();
 
     /// <summary>The part sent to the phone: commands (shortcut cmd/args/cwd, command widget scripts) are never included.</summary>
     public object ToPublic() => new
@@ -154,7 +156,7 @@ public sealed class RuleConfig
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public bool Enabled { get; set; } = true;
-    /// <summary>session-waiting, session-busy, media-playing, process-running, mic-in-use, camera-in-use, calendar-event, cpu-above, idle, time, push.</summary>
+    /// <summary>session-waiting, session-busy, media-playing, process-running, mic-in-use, camera-in-use, obs-live, calendar-event, cpu-above, idle, time, push.</summary>
     public string When { get; set; } = "session-waiting";
     /// <summary>App / process names ("zoom|Teams"), a time window ("22:00-07:00") or a push key, depending on <see cref="When"/>.</summary>
     public string? Match { get; set; }
@@ -169,8 +171,15 @@ public sealed class RuleConfig
     public string? PushValue { get; set; }
     public bool WhileActive { get; set; } = true;
 
-    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "mic-in-use", "camera-in-use", "calendar-event", "cpu-above", "idle", "time", "push"];
+    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "mic-in-use", "camera-in-use", "obs-live", "calendar-event", "cpu-above", "idle", "time", "push"];
     public static readonly string[] Actions = ["goto", "notify", "push"];
+}
+
+public sealed class ObsConfig
+{
+    public bool Enabled { get; set; }
+    public string Url { get; set; } = "ws://127.0.0.1:4455";
+    public string? Password { get; set; }
 }
 
 public sealed class HomeAssistantConfig
@@ -305,6 +314,8 @@ public sealed partial class ConfigStore(string path)
             if (string.IsNullOrWhiteSpace(s.Args)) s.Args = null;
             if (string.IsNullOrWhiteSpace(s.Cwd)) s.Cwd = null;
         }
+        c.Obs ??= new();
+        if (string.IsNullOrWhiteSpace(c.Obs.Url)) c.Obs.Url = "ws://127.0.0.1:4455";
         c.HomeAssistant ??= new();
         c.HomeAssistant.Url = string.IsNullOrWhiteSpace(c.HomeAssistant.Url) ? null : c.HomeAssistant.Url.Trim().TrimEnd('/');
         c.HomeAssistant.Token = string.IsNullOrWhiteSpace(c.HomeAssistant.Token) ? null : c.HomeAssistant.Token.Trim();

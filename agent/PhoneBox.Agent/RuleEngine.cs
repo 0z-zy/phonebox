@@ -9,7 +9,7 @@ namespace PhoneBox.Agent;
 /// condition ends: the phone goes back to the page it was on and a pushed value is removed again.
 /// </summary>
 public sealed class RuleEngine(ConfigStore config, PushStore push, SessionMonitor sessions, MediaMonitor media, SystemMonitor system,
-    PrivacyMonitor privacy, CalendarMonitor calendar, ILogger<RuleEngine> log) : BackgroundService
+    PrivacyMonitor privacy, CalendarMonitor calendar, ObsMonitor obs, ILogger<RuleEngine> log) : BackgroundService
 {
     /// <summary>CPU spikes are normal; the CPU rule only fires when the load lasts this long.</summary>
     private const int CpuSustainSec = 15;
@@ -143,6 +143,11 @@ public sealed class RuleEngine(ConfigStore config, PushStore push, SessionMonito
                 var apps = (r.When == "mic-in-use" ? p?.MicApps : p?.CameraApps) ?? [];
                 var hit = apps.FirstOrDefault(a => names.Length == 0 || names.Any(n => a.Contains(n, StringComparison.OrdinalIgnoreCase)));
                 return hit is null ? (false, "") : (true, hit);
+            }
+            case "obs-live":
+            {
+                var o = obs.Snapshot();
+                return obs.Live ? (true, o.Streaming ? "OBS is streaming" : "OBS is recording") : (false, "");
             }
             case "calendar-event":
             {
