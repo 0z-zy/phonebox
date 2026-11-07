@@ -2207,12 +2207,14 @@ async function loadQuotas() {
   try { D.quotas = await api('/quotas'); emit('quotas'); } catch (_) {}
 }
 
+function applyWork(w) {
+  D.work = w;
+  notifyTransitions(w.sessions || []);
+  emit('work');
+}
+
 async function loadWork() {
-  try {
-    D.work = await api('/work');
-    notifyTransitions(D.work.sessions || []);
-    emit('work');
-  } catch (_) {}
+  try { applyWork(await api('/work')); } catch (_) {}
 }
 
 async function loadProcs() {
@@ -2236,16 +2238,16 @@ function setOnline(on) {
   if (changed) emit('state');
 }
 
-async function poll() {
-  try {
-    const s = await api('/state' + (evSeq != null ? '?ev=' + evSeq : ''));
-    D.state = s;
-    media = s.media ? { ...s.media, at: performance.now() } : null;
-    setOnline(true);
-    if (s.cfgVersion !== undefined && cfgVersion !== null && s.cfgVersion !== cfgVersion) loadConfig();
-    if (s.pushVersion !== undefined && s.pushVersion !== pushVersion) loadPush();
-    if (evSeq != null) for (const e of s.events || []) handleEvent(e);
-    evSeq = s.evSeq ?? evSeq;
+function applyState(s) {
+  lastStateAt = Date.now();
+  D.state = s;
+  media = s.media ? { ...s.media, at: performance.now() } : null;
+  setOnline(true);
+  if (s.cfgVersion !== undefined && cfgVersion !== null && s.cfgVersion !== cfgVersion) loadConfig();
+  if (s.pushVersion !== undefined && s.pushVersion !== pushVersion) loadPush();
+  if (evSeq != null) for (const e of s.events || []) if (e.seq > evSeq) handleEvent(e);
+  evSeq = Math.max(evSeq ?? 0, s.evSeq ?? 0);
+  {
     const pc = s.pc;
     if (pc) {
       pushHist('cpu', pc.cpu);
@@ -2258,9 +2260,28 @@ async function poll() {
       pushHist('gputemp', pc.gpu?.temp);
       pushHist('cputemp', pc.cpuTemp);
     }
-    emit('state');
-  } catch (_) {
-    setOnline(false);
+  }
+  emit('state');
+}
+
+// Live stream from the Android shell (see AgentStream.kt); polling below is the fallback when it is not running.
+let streamOn = false;
+let lastStateAt = 0;
+window.onAgentStream = (event, data) => {
+  if (event === 'open') { streamOn = true; return; }
+  if (event === 'close') { streamOn = false; return; }
+  let d;
+  try { d = JSON.parse(data); } catch (_) { return; }
+  if (event === 'state') applyState(d);
+  else if (event === 'work') applyWork(d);
+  else if (event === 'event' && d.seq > (evSeq ?? 0)) { evSeq = d.seq; handleEvent(d); }
+};
+const streaming = () => streamOn && Date.now() - lastStateAt < 3000;
+
+async function poll() {
+  if (!streaming()) {
+    try { applyState(await api('/state' + (evSeq != null ? '?ev=' + evSeq : ''))); }
+    catch (_) { if (!streaming()) setOnline(false); }
   }
   setTimeout(poll, 1000);
 }
@@ -2273,7 +2294,7 @@ loadWeather();
 setInterval(loadWeather, 15 * 60_000);
 setInterval(() => { if (!nightOn) emit('fast'); }, 250);
 setInterval(() => { if (online && anyNeeds('quotas')) loadQuotas(); }, 30_000);
-setInterval(() => { if (online && (anyNeeds('work'))) loadWork(); }, 3000);
+setInterval(() => { if (online && anyNeeds('work') && !streaming()) loadWork(); }, 3000);
 setInterval(() => { if (online && pageOf('procs')) loadProcs(); if (online && sheet) loadSheet(); }, 2000);
 setInterval(() => { if (online) loadConfig(); }, 60_000);
 poll();

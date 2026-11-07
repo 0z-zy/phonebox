@@ -31,6 +31,7 @@ class MainActivity : Activity() {
 
     private lateinit var web: WebView
     private lateinit var link: AgentLink
+    private lateinit var stream: AgentStream
     @Volatile private var volumeKeysFlipPages = true
 
     private val assetLoader by lazy {
@@ -44,6 +45,10 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         link = AgentLink(this)
+        stream = AgentStream(link) { event, data ->
+            val js = "window.onAgentStream && window.onAgentStream(${JSONObject.quote(event)}, ${JSONObject.quote(data)})"
+            runOnUiThread { web.evaluateJavascript(js, null) }
+        }
 
         web = WebView(this)
         web.setBackgroundColor(0xFF000000.toInt())
@@ -117,10 +122,12 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         web.onResume()
+        stream.start()
         hideSystemUi()
     }
 
     override fun onPause() {
+        stream.stop()
         web.onPause()
         super.onPause()
     }

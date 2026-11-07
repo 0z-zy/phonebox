@@ -221,20 +221,80 @@ app.MapPost("/api/refresh", (bool? reload, PushStore push) =>
 });
 
 // ---------------------------------------------------------------- phone panel API
-app.MapGet("/api/state", (long? ev, SystemMonitor sys, MediaMonitor media, AudioControl audio, PingMonitor ping, ConfigStore cfg, UpdateService upd, PushStore push) => Results.Json(new
+object State(IServiceProvider sp, long? ev)
 {
-    update = upd.Status() is { } u && (u.AppUpdate || u.AgentUpdate) ? new { latest = u.Latest, app = u.AppUpdate, agent = u.AgentUpdate } : null,
-    ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-    host = Environment.MachineName,
-    cfgVersion = cfg.Version,
-    pushVersion = push.Version,
-    evSeq = push.Seq,
-    events = ev is { } since ? push.Since(since) : [],
-    pc = sys.Snapshot(),
-    media = media.Snapshot(),
-    audio = audio.Snapshot(),
-    ping = ping.Snapshot(),
-}));
+    var upd = sp.GetRequiredService<UpdateService>();
+    var push = sp.GetRequiredService<PushStore>();
+    return new
+    {
+        update = upd.Status() is { } u && (u.AppUpdate || u.AgentUpdate) ? new { latest = u.Latest, app = u.AppUpdate, agent = u.AgentUpdate } : null,
+        ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        host = Environment.MachineName,
+        cfgVersion = sp.GetRequiredService<ConfigStore>().Version,
+        pushVersion = push.Version,
+        evSeq = push.Seq,
+        events = ev is { } since ? push.Since(since) : [],
+        pc = sp.GetRequiredService<SystemMonitor>().Snapshot(),
+        media = sp.GetRequiredService<MediaMonitor>().Snapshot(),
+        audio = sp.GetRequiredService<AudioControl>().Snapshot(),
+        ping = sp.GetRequiredService<PingMonitor>().Snapshot(),
+    };
+}
+
+app.MapGet("/api/state", (long? ev, HttpContext ctx) => Results.Json(State(ctx.RequestServices, ev)));
+
+// Live stream (server-sent events) for the phone: "state" every second, "event" as soon as one happens, "work" when it
+// changes. The Android shell keeps one connection open instead of polling; the panel falls back to polling without it.
+app.MapGet("/api/stream", async (HttpContext ctx, PushStore push, SessionMonitor sessions, GitHubMonitor gh, ILogger<Program> log) =>
+{
+    var ct = ctx.RequestAborted;
+    var isPhone = ctx.Request.Headers.ContainsKey("X-PhoneBox-App");
+    var via = ctx.Connection.LocalPort == Port ? "USB/local" : "Wi-Fi";
+    log.LogInformation("live stream opened ({Who}, {Via})", isPhone ? "phone" : "other client", via);
+    ctx.Response.ContentType = "text/event-stream";
+    ctx.Response.Headers["X-Accel-Buffering"] = "no";
+    var opts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+    async Task Send(string name, object data)
+    {
+        await ctx.Response.WriteAsync($"event: {name}\ndata: {JsonSerializer.Serialize(data, opts)}\n\n", ct);
+        await ctx.Response.Body.FlushAsync(ct);
+    }
+    using var wake = new SemaphoreSlim(0);
+    void OnEmit() { try { wake.Release(); } catch (ObjectDisposedException) { } }
+    push.Emitted += OnEmit;
+    try
+    {
+        var seq = push.Seq;
+        var lastWork = "";
+        var next = 0L;
+        var tick = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            foreach (var e in push.Since(seq)) { await Send("event", e); seq = e.Seq; }
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            if (now >= next)
+            {
+                if (isPhone) Interlocked.Exchange(ref ApprovalStore.PhoneLastSeen, now);
+                await Send("state", State(ctx.RequestServices, null));
+                if (tick++ % 2 == 0)
+                {
+                    var work = new { sessions = sessions.Snapshot(), github = gh.Snapshot() };
+                    var json = JsonSerializer.Serialize(work, opts);
+                    if (json != lastWork) { lastWork = json; await Send("work", work); }
+                }
+                next = now + 1000;
+            }
+            await wake.WaitAsync(TimeSpan.FromMilliseconds(Math.Max(5, next - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())), ct);
+        }
+    }
+    catch (OperationCanceledException) { }
+    catch (IOException) { }
+    finally
+    {
+        push.Emitted -= OnEmit;
+        log.LogInformation("live stream closed ({Via})", via);
+    }
+});
 
 // Claude Code PermissionRequest hook (local only): waits for Allow / Deny from the phone, prints nothing otherwise.
 app.MapPost(ClaudeHook.Endpoint, async (HttpRequest req, ConfigStore cfg, ApprovalStore approvals, SessionMonitor sessions) =>

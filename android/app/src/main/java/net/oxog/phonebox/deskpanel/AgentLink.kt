@@ -40,6 +40,13 @@ class AgentLink(context: Context) {
     @Volatile private var preferredHost = 0
     @Volatile private var factory: Pair<String, SSLSocketFactory>? = null
 
+    /** Opens a long-lived GET (the live stream) over the best route; null when the PC is unreachable. */
+    fun stream(path: String): Pair<Route, Reply>? {
+        usb("GET", path, STREAM_READ_TIMEOUT)?.let { route = Route.USB; return Route.USB to it }
+        wifi("GET", path, STREAM_READ_TIMEOUT)?.let { route = Route.WIFI; return Route.WIFI to it }
+        return null
+    }
+
     /** Forwards a request (method + path with query) to the agent over the best available route. */
     fun request(method: String, pathAndQuery: String): Reply {
         usb(method, pathAndQuery)?.let {
@@ -55,15 +62,15 @@ class AgentLink(context: Context) {
         return Reply(503, "application/json", ByteArrayInputStream("""{"error":"offline"}""".toByteArray()))
     }
 
-    private fun usb(method: String, pathAndQuery: String): Reply? = try {
+    private fun usb(method: String, pathAndQuery: String, readTimeout: Int = 4000): Reply? = try {
         val c = URL("$USB_BASE$pathAndQuery").openConnection() as HttpURLConnection
         c.connectTimeout = 400 // refused instantly when no adb reverse tunnel exists
-        send(c, method)
+        send(c, method, readTimeout)
     } catch (e: Exception) {
         null
     }
 
-    private fun wifi(method: String, pathAndQuery: String): Reply? {
+    private fun wifi(method: String, pathAndQuery: String, readTimeout: Int = 4000): Reply? {
         if (!prefs.getBoolean("enabled", false)) return null
         val hosts = prefs.getString("hosts", "")!!.split(',').filter { it.isNotBlank() }
         val token = prefs.getString("token", null) ?: return null
@@ -81,7 +88,7 @@ class AgentLink(context: Context) {
                 c.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true } // identity is the pinned certificate
                 c.connectTimeout = 1500
                 c.setRequestProperty("Authorization", "Bearer $token")
-                val r = send(c, method)
+                val r = send(c, method, readTimeout)
                 preferredHost = i
                 return r
             } catch (e: Exception) {
@@ -91,10 +98,10 @@ class AgentLink(context: Context) {
         return null
     }
 
-    private fun send(c: HttpURLConnection, method: String): Reply {
+    private fun send(c: HttpURLConnection, method: String, readTimeout: Int = 4000): Reply {
         c.requestMethod = method
         c.setRequestProperty("X-PhoneBox-App", appVersion) // lets the agent offer updates
-        c.readTimeout = 4000
+        c.readTimeout = readTimeout
         c.useCaches = false
         if (method == "POST") {
             c.doOutput = true
@@ -151,5 +158,7 @@ class AgentLink(context: Context) {
 
     companion object {
         private const val USB_BASE = "http://127.0.0.1:8765"
+        /** The agent sends "state" every second, so a silent connection for this long is dead. */
+        private const val STREAM_READ_TIMEOUT = 8000
     }
 }

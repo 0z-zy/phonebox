@@ -84,15 +84,20 @@ public sealed partial class PushStore
         Changed();
     }
 
+    /// <summary>Raised after an event is queued, so live streams can deliver it right away.</summary>
+    public event Action? Emitted;
+
     public PanelEvent Emit(string kind, JsonElement? data = null)
     {
+        PanelEvent e;
         lock (_evLock)
         {
-            var e = new PanelEvent(++_seq, kind, data?.Clone(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            e = new PanelEvent(++_seq, kind, data?.Clone(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             _events.AddLast(e);
             while (_events.Count > MaxEvents) _events.RemoveFirst();
-            return e;
         }
+        Emitted?.Invoke();
+        return e;
     }
 
     /// <summary>Events after <paramref name="seq"/>, at most a minute old (a phone that was away does not get a flood).</summary>
