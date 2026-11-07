@@ -893,11 +893,12 @@ async function importPages() {
   const dropped = pages.reduce((n, x) => n + x.widgets.length, 0) - clean.reduce((n, x) => n + x.widgets.length, 0);
   // Command widgets run their command on this computer once saved, and custom HTML can run shortcuts: a file from
   // someone else must not bring those in unseen. Show them and keep them only with an explicit yes.
-  const risky = clean.flatMap((p) => p.widgets.filter((w) => (w.type === 'command' && w.options?.command) || (w.type === 'html' && w.options?.html)));
+  const risky = clean.flatMap((p) => p.widgets.filter((w) => (w.type === 'command' && (w.options?.command || w.options?.commandUnix)) || (w.type === 'html' && w.options?.html)));
   if (risky.length) {
-    const list = risky.map((w) => w.type === 'command'
-      ? `• Command: ${String(w.options.command).slice(0, 160)}${w.options.commandUnix ? ` / ${String(w.options.commandUnix).slice(0, 80)}` : ''}`
-      : `• Custom HTML (${String(w.options.html).length} characters)`).join('\n');
+    const cut = (label, v) => { const t = String(v ?? ''); return t ? `• ${label}: ${t.length > 200 ? t.slice(0, 200) + ` … (${t.length} characters in all)` : t}` : null; };
+    const list = risky.flatMap((w) => w.type === 'command'
+      ? [cut('Command (Windows)', w.options.command), cut('Command (Linux / macOS)', w.options.commandUnix)].filter(Boolean)
+      : [`• Custom HTML (${String(w.options.html).length} characters)`]).join('\n');
     const keep = confirm(`This file contains ${risky.length} widget(s) that run code on this computer:\n\n${list}\n\nOK = import them as they are (only if you trust the file)\nCancel = import them empty`);
     if (!keep) for (const w of risky) { w.options = { ...w.options }; delete w.options.command; delete w.options.commandUnix; if (w.type === 'html') w.options.html = ''; }
   }
