@@ -6,6 +6,7 @@ import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -234,6 +235,17 @@ class MainActivity : Activity(), SensorEventListener {
         fun setPinned(on: Boolean) = runOnUiThread {
             val pinned = getSystemService(ActivityManager::class.java).lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
             try { if (on && !pinned) startLockTask() else if (!on && pinned) stopLockTask() } catch (_: Exception) {}
+        }
+
+        /** "landscape" (default), "portrait" or "auto" (follow the phone). */
+        @JavascriptInterface
+        fun setOrientation(mode: String) = runOnUiThread {
+            val want = when (mode) {
+                "portrait" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                "auto" -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+                else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+            if (requestedOrientation != want) requestedOrientation = want
         }
 
         /** Offers the panel as a home app (see HomeAlias in the manifest); the agent can then make it the default. */

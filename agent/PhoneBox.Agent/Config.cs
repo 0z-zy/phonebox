@@ -72,6 +72,8 @@ public sealed class DisplayConfig
     public bool Vibrate { get; set; } = true;
     /// <summary>The phone's volume keys switch pages.</summary>
     public bool VolumeKeys { get; set; } = true;
+    /// <summary>landscape, portrait or auto (follow the phone). In portrait the widgets are arranged automatically.</summary>
+    public string Orientation { get; set; } = "landscape";
     /// <summary>default, amoled, midnight, warm or graphite.</summary>
     public string Theme { get; set; } = "default";
     /// <summary>Accent colour (background glow, page dots), e.g. "#2dd4bf".</summary>

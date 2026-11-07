@@ -2352,10 +2352,26 @@ let mounted = [];     // { pi, def, inst, ctx, dirty }
 let layoutKey = '';
 let curPage = 0;
 
+const isPortrait = () => window.innerHeight > window.innerWidth * 1.05;
+
+// Portrait: the same widgets packed into a 6-column grid in reading order. Their sizes in cells stay the same
+// (portrait cells are about as square as landscape ones); wider widgets shrink to 6 columns and the rows grow to fit.
+function portraitLayout(widgets) {
+  const cols = 6, occ = [], pos = new Map();
+  const free = (x, y, w, h) => { for (let r = y; r < y + h; r++) for (let c = x; c < x + w; c++) if (occ[r]?.[c]) return false; return true; };
+  const take = (x, y, w, h) => { for (let r = y; r < y + h; r++) { occ[r] ||= []; for (let c = x; c < x + w; c++) occ[r][c] = true; } };
+  for (const w of [...widgets].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const ww = Math.min(cols, w.w), hh = w.h;
+    search: for (let y = 0; y < 200; y++) for (let x = 0; x + ww <= cols; x++) if (free(x, y, ww, hh)) { take(x, y, ww, hh); pos.set(w, { x, y, w: ww, h: hh }); break search; }
+  }
+  return { pos, rows: Math.max(12, occ.length) };
+}
+
 function buildLayout() {
   const enabled = (cfg.pages || []).filter((p) => p.enabled !== false && Array.isArray(p.widgets));
   const next = enabled.length ? enabled : FALLBACK_PAGES;
-  const key = JSON.stringify([next, cfg.shortcuts, cfg.display?.showSeconds]);
+  const portrait = isPortrait();
+  const key = JSON.stringify([next, cfg.shortcuts, cfg.display?.showSeconds, portrait]);
   if (key === layoutKey) return;
   layoutKey = key;
   const prevId = pages[curPage]?.id;
@@ -2366,11 +2382,14 @@ function buildLayout() {
   pager.replaceChildren();
   pages.forEach((p, pi) => {
     const grid = h('div', 'grid');
+    const pl = portrait ? portraitLayout(p.widgets) : null;
+    if (pl) { grid.style.gridTemplateColumns = 'repeat(6, minmax(0, 1fr))'; grid.style.gridTemplateRows = `repeat(${pl.rows}, minmax(0, 1fr))`; }
     for (const w of p.widgets) {
       const def = W[w.type];
       if (!def) continue;
       const box = h('div', `w w-${w.type}${def.bare ? ' bare' : ' card'}`);
-      box.style.gridArea = `${w.y + 1} / ${w.x + 1} / span ${w.h} / span ${w.w}`;
+      const at = pl?.pos.get(w) || w;
+      box.style.gridArea = `${at.y + 1} / ${at.x + 1} / span ${at.h} / span ${at.w}`;
       grid.appendChild(box);
       const ctx = { page: p, w, o: w.options || {}, box };
       let inst;
@@ -2533,7 +2552,7 @@ window.onAndroidBack = () => {
   else if (curPage !== 0) goPage(0, true);
   else openOverview();
 };
-window.addEventListener('resize', () => goPage(curPage, true));
+window.addEventListener('resize', () => { buildLayout(); goPage(curPage, true); });
 
 ['pointerdown', 'touchstart'].forEach((ev) => document.addEventListener(ev, () => {
   lastTouch = Date.now();
@@ -2618,6 +2637,7 @@ function applyDisplay() {
   if (PREVIEW || !bridge) return;
   try { bridge.setVolumeKeys && bridge.setVolumeKeys(d.volumeKeys !== false); } catch (_) {}
   try { bridge.setPinned && bridge.setPinned(d.pin === true); } catch (_) {}
+  try { bridge.setOrientation && bridge.setOrientation(['portrait', 'auto'].includes(d.orientation) ? d.orientation : 'landscape'); } catch (_) {}
   try { bridge.setHomeScreen && bridge.setHomeScreen(d.homeScreen === true); } catch (_) {}
   applyBrightness(true);
 }

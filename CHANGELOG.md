@@ -20,6 +20,9 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**Portrait.** Settings › Display › Orientation: landscape, portrait or follow the phone. Pages are still designed in
+landscape; in portrait the panel arranges the widgets by itself, top to bottom in a 6-column grid.
+
 **Import and export.** Export all pages or one page to a file and import pages from a file (added or replacing
 the current ones) to share layouts or move them to another computer; Advanced can download and load the whole
 settings file.
