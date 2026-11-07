@@ -429,7 +429,10 @@ dd { margin: 0; word-break: break-all; }
       </div>
       <div class="card">
         <textarea class="json" id="json" spellcheck="false"></textarea>
-        <div class="row" style="margin-top:10px"><button class="btn" id="applyJson">Apply JSON</button><span class="hint" id="jsonErr" style="color:var(--danger)"></span></div>
+        <div class="row" style="margin-top:10px"><button class="btn" id="applyJson">Apply JSON</button>
+          <button class="btn" id="downloadJson">Download settings</button><button class="btn" id="uploadJson">Load a settings file…</button>
+          <span class="hint" id="jsonErr" style="color:var(--danger)"></span></div>
+        <p class="hint">The settings file includes your shortcut commands, tokens and keys: keep it private.</p>
       </div>
     </section>
   </main>
@@ -591,7 +594,10 @@ function renderPages() {
       h('span', { class: 'pt-n' }, String((p.widgets || []).length)));
     dragSort(row, cfg.pages, (from, to) => { selPage = to; renderPages(); changed(); });
     return row;
-  }), h('button', { class: 'btn', style: { width: '100%', marginTop: '8px' }, onclick: () => openTemplates(null) }, '＋ New page'));
+  }), h('button', { class: 'btn', style: { width: '100%', marginTop: '8px' }, onclick: () => openTemplates(null) }, '＋ New page'),
+    h('div', { class: 'row', style: { gap: '6px', marginTop: '8px' } },
+      h('button', { class: 'btn sm', style: { flex: '1' }, title: 'Save all pages to a file', onclick: () => exportPages(cfg.pages, 'phonebox-pages') }, '⭳ Export'),
+      h('button', { class: 'btn sm', style: { flex: '1' }, title: 'Load pages from a file', onclick: importPages }, '⭱ Import')));
   renderPageEditor();
 }
 
@@ -616,6 +622,7 @@ function renderPageEditor() {
       h('div', { class: 'row', style: { gap: '6px', marginTop: '10px' } },
         h('button', { class: 'btn sm', onclick: () => openTemplates(selPage) }, 'Replace with template…'),
         h('button', { class: 'btn sm', onclick: () => { const c = JSON.parse(JSON.stringify(p)); c.id = ''; c.title += ' copy'; cfg.pages.splice(selPage + 1, 0, c); selPage++; renderPages(); changed(); } }, 'Duplicate page'),
+        h('button', { class: 'btn sm', title: 'Save this page to a file to share it or use it on another computer', onclick: () => exportPages([p], 'phonebox-page-' + (p.id || 'page')) }, 'Export page'),
         h('button', { class: 'btn sm', onclick: () => { p.widgets = []; selWidget = -1; renderPageEditor(); changed(); } }, 'Clear'),
         h('span', { class: 'spacer' }),
         h('button', { class: 'btn sm danger', disabled: cfg.pages.length === 1, onclick: () => {
@@ -853,6 +860,52 @@ function openTemplates(index) {
   $('modal').hidden = false;
 }
 function closeModal() { $('modal').hidden = true; }
+
+// ---------------------------------------------------------------- import / export
+function download(name, obj) {
+  const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' })), download: name + '.json' });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function pickFile() {
+  return new Promise((resolve) => {
+    const input = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' } });
+    input.onchange = async () => { const f = input.files[0]; input.remove(); resolve(f ? await f.text() : null); };
+    document.body.appendChild(input); input.click();
+  });
+}
+// A page file: { "phonebox": "pages", "version": 1, "pages": [...] }. Command widgets keep their commands.
+function exportPages(pages, name) {
+  const withCommands = pages.some((p) => (p.widgets || []).some((w) => w.type === 'command' || w.type === 'html'));
+  download(name, { phonebox: 'pages', version: 1, exported: new Date().toISOString(), pages: JSON.parse(JSON.stringify(pages)) });
+  toast(withCommands ? 'Exported — it includes command / custom HTML widgets: check them before sharing' : 'Exported');
+}
+async function importPages() {
+  const text = await pickFile();
+  if (text == null) return;
+  let data;
+  try { data = JSON.parse(text); } catch (e) { toast('Not a JSON file: ' + e.message, true); return; }
+  // a page file, a whole settings file, a list of pages or a single page
+  const pages = Array.isArray(data) ? data : Array.isArray(data.pages) ? data.pages : data.widgets ? [data] : null;
+  if (!pages?.length || !pages.every((x) => x && typeof x === 'object' && Array.isArray(x.widgets))) { toast('No pages found in that file', true); return; }
+  const known = new Set(catalog.widgets.map((w) => w.type));
+  const clean = pages.map((x) => ({ ...JSON.parse(JSON.stringify(x)), id: '', widgets: x.widgets.filter((w) => known.has(w.type)).map((w) => ({ ...w, id: '' })) }));
+  const dropped = pages.reduce((n, x) => n + x.widgets.length, 0) - clean.reduce((n, x) => n + x.widgets.length, 0);
+  const replace = cfg.pages.length && confirm(`Import ${clean.length} page(s).\n\nOK = replace all ${cfg.pages.length} current pages\nCancel = add them after the current pages`);
+  if (replace) cfg.pages = clean; else cfg.pages.push(...clean);
+  selPage = replace ? 0 : cfg.pages.length - clean.length;
+  selWidget = -1;
+  renderPages(); changed();
+  toast(`Imported ${clean.length} page(s)` + (dropped ? ` (${dropped} unknown widget(s) left out)` : '') + ' — remember to save');
+}
+$('downloadJson').onclick = () => download('phonebox-settings', cfg);
+$('uploadJson').onclick = async () => {
+  const text = await pickFile();
+  if (text == null) return;
+  try { JSON.parse(text); } catch (e) { $('jsonErr').textContent = e.message; return; }
+  $('json').value = text;
+  $('applyJson').click();
+};
 
 // ---------------------------------------------------------------- calendars
 const CAL_COLORS = ['#60a5fa', '#f472b6', '#34d399', '#fbbf24', '#a78bfa', '#f87171'];

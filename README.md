@@ -136,7 +136,7 @@ Double-click the tray icon (or open <http://127.0.0.1:8765>):
 
 <p align="center"><img src="docs/screenshots/settings-editor.png" width="900" alt="The layout editor"></p>
 
-- **Pages**: add pages from templates, reorder, show/hide; arrange widgets on a phone-sized canvas (drag to move, drag
+- **Pages**: add pages from templates, reorder, show/hide, export and import them as files; arrange widgets on a phone-sized canvas (drag to move, drag
   the corner to resize) and set their options. The widget palette is grouped by category and searchable.
   **Live preview** swaps the canvas for the real panel with your unsaved changes and live data.
 - **Rules**: automations, see [Rules](#rules).
