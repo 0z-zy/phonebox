@@ -1,5 +1,0 @@
-2026-11-07 21:30:33 info Tray: settings: http://127.0.0.1:8765/  (no tray icon on this system; run PhoneBoxAgent again to open the settings)
-2026-11-07 21:30:33 info PhoneBoxAgent: PhoneBox agent 0.6.2 ready on http://127.0.0.1:8765 (config: .config/PhoneBox/config.json)
-2026-11-07 21:30:33 info MediaMonitor: media: install playerctl to show and control what is playing (sudo apt install playerctl)
-2026-11-07 21:30:33 info AdbReverse: adb not found: run 'sudo apt install adb' (or your distribution's package) or set adbPath in the settings
-2026-11-07 21:30:40 info Program: settings saved

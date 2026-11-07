@@ -29,3 +29,8 @@ extras/**/backup/
 # OS
 Thumbs.db
 .DS_Store
+
+# runtime data written by test runs of the agent (never commit settings or tokens)
+.config/
+.local/
+config.json.bak
