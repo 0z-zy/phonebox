@@ -1706,6 +1706,32 @@ W.checklist = {
 };
 
 // ---------------------------------------------------------------- phone & PC
+// Lights up while the PC's microphone or camera is in use (agent: PrivacyMonitor) or while a pushed value is on.
+W.onair = {
+  needs: ['state', 'push'],
+  create(box, { o }) {
+    const sign = h('div', 'oa-sign', o.text || 'ON AIR'), sub = h('div', 'oa-sub');
+    box.append(sign, sub);
+    const src = o.source || 'both';
+    return {
+      update() {
+        const p = D.state?.privacy;
+        const mic = src !== 'camera' && src !== 'push' && !!p?.mic;
+        const cam = src !== 'mic' && src !== 'push' && !!p?.camera;
+        let pv = o.key ? D.push?.[o.key]?.data : null;
+        if (pv && typeof pv === 'object' && 'value' in pv) pv = pv.value;
+        const pushed = pv != null && pv !== false && pv !== 0 && !/^(|0|false|off|no)$/i.test(String(pv));
+        const on = mic || cam || pushed;
+        box.classList.toggle('on', on);
+        const apps = [...new Set([...(mic ? p.micApps || [] : []), ...(cam ? p.cameraApps || [] : [])])];
+        sub.textContent = on
+          ? [mic ? '🎙️' : '', cam ? '📷' : '', apps.join(', ') || (pushed && typeof pv === 'string' ? pv : '')].filter(Boolean).join(' ')
+          : src !== 'push' && p && p.mic == null ? 'Not detectable on this computer' : 'Off air';
+      },
+    };
+  },
+};
+
 W.battery = {
   needs: ['tick'],
   create(box) {

@@ -150,7 +150,7 @@ public sealed class RuleConfig
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public bool Enabled { get; set; } = true;
-    /// <summary>session-waiting, session-busy, media-playing, process-running, cpu-above, idle, time, push.</summary>
+    /// <summary>session-waiting, session-busy, media-playing, process-running, mic-in-use, camera-in-use, cpu-above, idle, time, push.</summary>
     public string When { get; set; } = "session-waiting";
     /// <summary>App / process names ("zoom|Teams"), a time window ("22:00-07:00") or a push key, depending on <see cref="When"/>.</summary>
     public string? Match { get; set; }
@@ -165,7 +165,7 @@ public sealed class RuleConfig
     public string? PushValue { get; set; }
     public bool WhileActive { get; set; } = true;
 
-    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "cpu-above", "idle", "time", "push"];
+    public static readonly string[] Triggers = ["session-waiting", "session-busy", "media-playing", "process-running", "mic-in-use", "camera-in-use", "cpu-above", "idle", "time", "push"];
     public static readonly string[] Actions = ["goto", "notify", "push"];
 }
 

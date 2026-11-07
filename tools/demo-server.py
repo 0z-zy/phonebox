@@ -104,6 +104,8 @@ def state(since=None):
                   'posMs': int((t * 1000 + 61_000) % dur), 'playing': True, 'canSeek': True, 'artId': 1},
         'audio': {'volume': 42, 'muted': False},
         'ping': {'ms': wave(13, 9, 16), 'avgMs': 12, 'lossPct': 0},
+        # the microphone is "in use" for 20 s of every minute, to show the On air widget
+        'privacy': {'mic': t % 60 < 20, 'camera': False, 'micApps': ['Zoom'] if t % 60 < 20 else [], 'cameraApps': []},
     }
 
 

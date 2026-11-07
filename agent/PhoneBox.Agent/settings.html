@@ -819,6 +819,8 @@ const TRIGGERS = {
   'session-busy': { label: 'an AI session is working', match: 'any project (or: api|docs, codex)' },
   'media-playing': { label: 'music or video plays', match: 'any app (or: Spotify|Music)' },
   'process-running': { label: 'an app is running', match: 'zoom|Teams|obs64' },
+  'mic-in-use': { label: 'the microphone is in use', match: 'any app (or: Zoom|Teams)' },
+  'camera-in-use': { label: 'the camera is in use', match: 'any app (or: Zoom|Teams)' },
   'cpu-above': { label: 'the CPU is busy', value: '% (for 15 s)', def: 85 },
   idle: { label: 'I am away from the PC', value: 'minutes', def: 5 },
   time: { label: 'it is between', match: '22:00-07:00' },
@@ -829,7 +831,9 @@ const pageId = (...ids) => ids.find((id) => cfg.pages.some((p) => p.id === id)) 
 const RULE_PRESETS = [
   ['✳️ Claude needs me → AI page', () => ({ name: 'Claude needs me', when: 'session-waiting', then: 'goto', page: pageId('ai', 'work'), whileActive: true })],
   ['🎵 Music plays → music page', () => ({ name: 'Music', when: 'media-playing', match: 'Spotify', then: 'goto', page: pageId('music', 'home'), whileActive: true })],
-  ['🔴 On air during calls', () => ({ name: 'On air', when: 'process-running', match: osName === 'macos' ? 'zoom.us|Microsoft Teams|FaceTime' : 'zoom|Teams|ms-teams|Webex', then: 'push', key: 'onair', pushValue: 'On air', whileActive: true })],
+  ['🔴 On air while the mic is on', () => (osName === 'macos'
+    ? { name: 'On air', when: 'process-running', match: 'zoom.us|Microsoft Teams|FaceTime', then: 'push', key: 'onair', pushValue: 'On air', whileActive: true }
+    : { name: 'On air', when: 'mic-in-use', then: 'notify', text: '{detail} is using the microphone', level: 'warn', whileActive: false })],
   ['🔥 CPU busy → notification', () => ({ name: 'CPU busy', when: 'cpu-above', value: 90, then: 'notify', text: '{detail} for a while', level: 'warn', whileActive: false })],
   ['🌙 Away → ambient page', () => ({ name: 'Away', when: 'idle', value: 10, then: 'goto', page: pageId('ambient', 'clock', 'calm'), whileActive: true })],
   ['🕙 Evenings → calm page', () => ({ name: 'Evenings', when: 'time', match: '22:00-07:00', then: 'goto', page: pageId('calm', 'clock', 'ambient'), whileActive: true })],

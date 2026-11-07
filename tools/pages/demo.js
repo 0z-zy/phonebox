@@ -117,6 +117,8 @@
         posMs: (now() - START + 61000) % dur, playing: true, canSeek: true, artId: 1 },
       audio: { volume: 42, muted: false },
       ping: { ms: wave(13, 9, 16), avgMs: 12, lossPct: 0 },
+      // the microphone is "in use" for 20 s of every minute, to show the On air widget
+      privacy: (() => { const on = (now() / 1000) % 60 < 20; return { mic: on, camera: false, micApps: on ? ['Zoom'] : [], cameraApps: [] }; })(),
     };
   }
 

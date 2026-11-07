@@ -59,6 +59,7 @@ AddMonitor<GitHubMonitor>(builder.Services);
 AddMonitor<PingMonitor>(builder.Services);
 AddMonitor<AdbReverse>(builder.Services);
 AddMonitor<UpdateService>(builder.Services);
+AddMonitor<PrivacyMonitor>(builder.Services);
 AddMonitor<RuleEngine>(builder.Services);
 builder.Services.AddHostedService<Tray>();
 
@@ -270,6 +271,7 @@ object State(IServiceProvider sp, long? ev)
         audio = sp.GetRequiredService<AudioControl>().Snapshot(),
         ping = sp.GetRequiredService<PingMonitor>().Snapshot(),
         rules = sp.GetRequiredService<RuleEngine>().Active(),
+        privacy = sp.GetRequiredService<PrivacyMonitor>().Snapshot(),
     };
 }
 

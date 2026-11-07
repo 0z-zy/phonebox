@@ -20,6 +20,10 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**On air.** A new widget lights up while the computer's microphone or camera is in use (Windows: the same data
+as the taskbar's privacy icons; Linux: running capture streams and open video devices), or while a pushed value is on.
+Rules can react to the microphone and the camera too.
+
 **Phone sensors and kiosk.** Brightness can follow the room (light sensor), the night screen can come on whenever
 the room is dark, and a hand near the phone wakes it (proximity sensor). Screen pinning keeps Home and Recents on
 the panel, and the panel can become the phone's home app, so it starts by itself after a reboot; neither needs root.
