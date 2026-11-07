@@ -14,6 +14,7 @@ public sealed class AgentConfig
     public DisplayConfig Display { get; set; } = new();
     public LanConfig Lan { get; set; } = new();
     public UpdateConfig Updates { get; set; } = new();
+    public ClaudeConfig Claude { get; set; } = new();
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
 
@@ -82,6 +83,16 @@ public sealed class UpdateConfig
     /// <summary>Install new GitHub releases automatically (phone app over USB, agent in place).</summary>
     public bool Auto { get; set; } = true;
     public string Repo { get; set; } = "ersinkoc/phonebox";
+}
+
+public sealed class ClaudeConfig
+{
+    /// <summary>Show Claude Code permission prompts on the phone (needs the hook, see Settings › General).</summary>
+    public bool PhoneApprovals { get; set; } = true;
+    /// <summary>How long the phone may take before Claude Code asks in the terminal instead.</summary>
+    public int TimeoutSec { get; set; } = 90;
+    /// <summary>Only use the phone when the PC has been idle for a minute (you are away from the keyboard).</summary>
+    public bool OnlyWhenAway { get; set; }
 }
 
 public sealed class PageConfig
@@ -216,6 +227,8 @@ public sealed partial class ConfigStore(string path)
         c.Display.IdleReturnSec = Math.Clamp(c.Display.IdleReturnSec, 0, 3600);
         c.Lan ??= new();
         c.Updates ??= new();
+        c.Claude ??= new();
+        c.Claude.TimeoutSec = Math.Clamp(c.Claude.TimeoutSec, 10, 3600);
         if (string.IsNullOrWhiteSpace(c.Updates.Repo)) c.Updates.Repo = "ersinkoc/phonebox";
         c.Lan.Port = Math.Clamp(c.Lan.Port, 1024, 65535);
         if (string.IsNullOrWhiteSpace(c.Lan.Token)) c.Lan.Token = NewToken();

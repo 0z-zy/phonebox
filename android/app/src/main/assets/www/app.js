@@ -595,8 +595,64 @@ function handleNotify(d) {
   if (d.page != null) gotoPageRef(d.page);
 }
 
+// ---------------------------------------------------------------- permission prompts (Claude Code hook → phone)
+let approvals = [];
+let approvalShown = null;
+
+async function loadApprovals() {
+  try { approvals = (await api('/approvals')).items || []; } catch (_) { return; }
+  renderApproval();
+}
+
+function renderApproval() {
+  const a = approvals[0];
+  const box = $('approval');
+  if (!a) { box.hidden = true; approvalShown = null; return; }
+  if (approvalShown !== a.id) {
+    approvalShown = a.id;
+    lastTouch = Date.now();
+    if (nightOn) { wakeUntil = Date.now() + 60_000; setNight(false); }
+    buzz('0,120,80,120,80,240');
+    $('apAllow').disabled = $('apDeny').disabled = false;
+  }
+  $('apSource').textContent = a.source || 'Claude Code';
+  $('apProject').textContent = a.project || a.session || '';
+  $('apCount').textContent = approvals.length > 1 ? `1 of ${approvals.length}` : '';
+  $('apTool').textContent = a.tool;
+  $('apDesc').textContent = a.description || '';
+  $('apDetail').textContent = a.detail || '';
+  $('apDetail').hidden = !a.detail;
+  box.hidden = false;
+  tickApproval();
+}
+
+function tickApproval() {
+  const a = approvals[0];
+  if (!a || $('approval').hidden) return;
+  const left = a.expiresAt - Date.now();
+  $('apTime').textContent = left > 0 ? `otherwise asked in the terminal in ${fmtTime(left)}` : 'asking in the terminal…';
+  if (left < -3000) { approvals.shift(); renderApproval(); }
+}
+setInterval(tickApproval, 1000);
+
+async function decide(decision) {
+  const a = approvals[0];
+  if (!a) return;
+  haptic();
+  $('apAllow').disabled = $('apDeny').disabled = true;
+  try {
+    await api(`/approvals/${encodeURIComponent(a.id)}?decision=${decision}`, 'POST', 4000);
+    toast(`${decision === 'allow' ? 'Allowed' : 'Denied'}: ${a.tool}`, decision === 'allow' ? 'ok' : 'err');
+  } catch (_) { toast('Already answered in the terminal', 'warn'); }
+  approvals = approvals.filter((x) => x.id !== a.id);
+  renderApproval();
+}
+$('apAllow').addEventListener('click', () => decide('allow'));
+$('apDeny').addEventListener('click', () => decide('deny'));
+
 function handleEvent(e) {
-  if (e.kind === 'notify' && e.data) handleNotify(e.data);
+  if (e.kind === 'approval' || e.kind === 'approval-done') loadApprovals();
+  else if (e.kind === 'notify' && e.data) handleNotify(e.data);
   else if (e.kind === 'goto' && e.data) gotoPageRef(e.data.page);
   else if (e.kind === 'refresh') { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadWeather(true); }
   else if (e.kind === 'reload') location.reload();
@@ -2084,6 +2140,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape' || e.key === 'o') ($('overview').hidden ? openOverview() : closeOverview());
 });
 window.onAndroidBack = () => {
+  if (!$('approval').hidden) return; // answer it (or let it time out); Back must not dismiss a permission prompt
   if (!$('overview').hidden) closeOverview();
   else if (sheet) closeSheet();
   else if (curPage !== 0) goPage(0, true);
@@ -2173,7 +2230,7 @@ async function loadPush() {
 
 function setOnline(on) {
   document.body.classList.toggle('offline', !on);
-  if (on && online !== true) { loadConfig(); loadQuotas(); loadWork(); loadPush(); }
+  if (on && online !== true) { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadApprovals(); }
   const changed = online !== on;
   online = on;
   if (changed) emit('state');

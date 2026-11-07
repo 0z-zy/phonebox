@@ -262,6 +262,17 @@ dd { margin: 0; word-break: break-all; }
       </div>
 
       <div class="card">
+        <h3>Claude Code permission prompts</h3>
+        <p class="hint" style="margin:0 0 12px">When Claude Code asks for permission (run a command, edit a file…), the phone shows the request with
+          <b>Allow</b> and <b>Deny</b>. If the phone is not connected or nobody answers in time, Claude Code asks in the terminal as usual.
+          This needs a small hook in <code>~/.claude/settings.json</code>; PhoneBox adds it for you (a backup is kept next to the file).</p>
+        <div class="row" style="margin-bottom:12px"><button class="btn" id="hookBtn">Install hook</button><span class="hint" id="hookState"></span></div>
+        <div class="row" style="margin-bottom:8px"><label class="switch"><input type="checkbox" data-bind="claude.phoneApprovals"><span></span></label> Ask on the phone</div>
+        <label class="check"><input type="checkbox" data-bind="claude.onlyWhenAway"> Only when I am away from the PC (no keyboard or mouse for a minute)</label>
+        <div class="field" style="max-width:260px;margin-top:12px"><label>Seconds to answer before the terminal takes over</label><input type="number" min="10" max="3600" data-bind="claude.timeoutSec" data-type="int"></div>
+      </div>
+
+      <div class="card">
         <h3>Phone connection</h3>
         <div class="grid2">
           <div class="field"><label>Phone to use</label><select id="serial"></select><span class="hint">If several Android devices are connected, choose which one runs the panel.</span></div>
@@ -903,6 +914,10 @@ async function loadInfo() {
     $('restartBtn').hidden = !lan.restartNeeded;
     renderUpdate(await (await fetch('/api/update')).json());
     renderWebhooks(lan);
+    const hk = await (await fetch('/api/claude/hook')).json();
+    $('hookState').textContent = hk.installed ? 'Installed in ' + hk.path : 'Not installed';
+    $('hookBtn').textContent = hk.installed ? 'Remove hook' : 'Install hook';
+    $('hookBtn').dataset.installed = hk.installed ? '1' : '';
     $('info').replaceChildren(
       h('dt', {}, 'Version'), h('dd', {}, i.version),
       h('dt', {}, 'Settings file'), h('dd', {}, h('code', {}, i.configPath)),
@@ -915,7 +930,7 @@ async function loadInfo() {
 async function load() {
   if (!catalog.widgets.length) catalog = await (await fetch('/api/catalog')).json();
   cfg = await (await fetch('/api/settings')).json();
-  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' };
+  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false };
   saved = JSON.stringify(cfg);
   renderPages(); renderDeck(); bindForm(); changed(); loadInfo();
 }
@@ -969,6 +984,13 @@ $('restartBtn').onclick = async () => {
     catch (_) { if (Date.now() - started < 30000) setTimeout(wait, 1000); else toast('The agent did not come back; check the log', true); }
   };
   setTimeout(wait, 1500);
+};
+$('hookBtn').onclick = async () => {
+  const remove = !!$('hookBtn').dataset.installed;
+  const r = await fetch('/api/claude/hook', { method: remove ? 'DELETE' : 'POST' });
+  const j = await r.json().catch(() => ({}));
+  r.ok ? toast(remove ? 'Hook removed' : 'Hook installed — new Claude Code sessions pick it up') : toast(j.error || 'Could not change the hook', true);
+  loadInfo();
 };
 $('modalClose').onclick = closeModal;
 $('modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
