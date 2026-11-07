@@ -122,6 +122,19 @@
     };
   }
 
+  // made-up containers; start / stop / restart change them
+  const containers = [
+    { id: 'a1b2c3d4e5f6', name: 'shop-web-1', image: 'nginx:1.27', project: 'shop', state: 'running', status: 'Up 3 hours', health: null, cpu: 0.4, mem: '12MiB' },
+    { id: 'b2c3d4e5f6a1', name: 'shop-api-1', image: 'node:22-alpine', project: 'shop', state: 'running', status: 'Up 3 hours (healthy)', health: 'healthy', cpu: 6.2, mem: '148MiB' },
+    { id: 'c3d4e5f6a1b2', name: 'shop-db-1', image: 'postgres:17', project: 'shop', state: 'running', status: 'Up 3 hours', health: null, cpu: 1.1, mem: '86MiB' },
+    { id: 'd4e5f6a1b2c3', name: 'shop-worker-1', image: 'node:22-alpine', project: 'shop', state: 'running', status: 'Up 12 minutes (unhealthy)', health: 'unhealthy', cpu: 31.5, mem: '402MiB' },
+    { id: 'e5f6a1b2c3d4', name: 'redis', image: 'redis:7', project: null, state: 'exited', status: 'Exited (0) 2 days ago', health: null, cpu: null, mem: null },
+  ];
+  function docker() {
+    const live = containers.map((c) => c.state === 'running' && c.cpu != null ? { ...c, cpu: Math.max(0.1, c.cpu * (0.8 + Math.random() * 0.4)) } : c);
+    return { control: true, snapshot: { available: true, error: null, containers: live, updated: now() } };
+  }
+
   // made-up calendar around the current time: one meeting is on now
   function calendar() {
     const day = new Date(new Date().toDateString()).getTime(), H = 3600e3, M = 60e3, t = now();
@@ -194,6 +207,14 @@
     if (path === '/api/config') { const c = await config(); return json({ version: cfgVersion(), config: { ...c, shortcuts: c.shortcuts.map(({ id, label, icon, color }) => ({ id, label, icon, color })) } }); }
     if (path === '/api/quotas') return json(quotas());
     if (path === '/api/calendar') return json(calendar());
+    if (path === '/api/docker') return json(docker());
+    if (path.startsWith('/api/docker/') && method === 'POST') {
+      const [, , , id, action] = path.split('/');
+      const c = containers.find((x) => x.id === id);
+      if (c && action === 'stop') Object.assign(c, { state: 'exited', status: 'Exited (0) 1 second ago', cpu: null, mem: null, health: null });
+      if (c && (action === 'start' || action === 'restart')) Object.assign(c, { state: 'running', status: 'Up 1 second', cpu: 2, mem: '40MiB', health: null });
+      return json({ ok: true });
+    }
     if (path === '/api/work') return json(work());
     if (path === '/api/procs') return json(procs());
     if (path === '/api/procs/detail') return json(procDetail(q.get('name')));

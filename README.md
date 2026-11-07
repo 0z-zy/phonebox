@@ -121,7 +121,7 @@ the first page when idle, dims to a clock at night and keeps the screen on.
 |---|---|
 | **Time** | Clock (with status line and weather) · Analog clock (any time zone) · World clocks · Calendar · Time progress (day / week / month / year) · Countdown · Pomodoro · Quick timer · Stopwatch |
 | **Weather & sky** | Weather · Forecast (hourly / 7 days) · Sun & moon (daylight left, UV, moon phase) · Air quality (European AQI, PM2.5, PM10, O₃, NO₂) |
-| **Computer** | On air (microphone / camera in use) · Metric tile · Gauge · Chart · Memory & disks · Top processes · Processes · Now playing · Volume · Shortcut grid · Big button · **Command** (PowerShell output, refreshed every N seconds) |
+| **Computer** | On air (microphone / camera in use) · Docker (containers, start / stop) · Metric tile · Gauge · Chart · Memory & disks · Top processes · Processes · Now playing · Volume · Shortcut grid · Big button · **Command** (PowerShell output, refreshed every N seconds) |
 | **AI & code** | AI quotas · Quota ring · AI sessions · GitHub |
 | **Personal** | **Agenda** (Google / Outlook / iCloud calendars) · Note · Checklist (resets daily) · Counter · Breathe · Quote · Title · Phone battery |
 | **Web & data** | **Pushed value** · **Notifications** (both fed by [webhooks](#webhooks)) · Hacker News · Exchange rates (ECB) · Crypto prices · Image / webcam |

@@ -1706,6 +1706,63 @@ W.checklist = {
 };
 
 // ---------------------------------------------------------------- phone & PC
+// Docker / Podman containers on the PC. Tap one for start / stop / restart (when the widget allows it).
+W.docker = {
+  needs: ['tick'],
+  create(box, { o }) {
+    const filter = String(o.filter || '').toLowerCase();
+    let data = null, open = null, busy = null, lastKey = '';
+    const list = h('div', 'dk-list'), head = h('div', 'w-title', o.title || 'Docker', h('span', 'dk-count'));
+    box.append(head, list);
+    const act = async (c, action) => {
+      haptic();
+      busy = c.id; render(true);
+      try {
+        const r = await fetch(`${API}/docker/${encodeURIComponent(c.id)}/${action}`, { method: 'POST', cache: 'no-store' });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) toast(j.error || `Could not ${action} ${c.name}`, 'err');
+        else toast(`${c.name}: ${action === 'stop' ? 'stopped' : action === 'start' ? 'started' : 'restarted'}`, 'ok');
+      } catch (_) { toast('The PC did not answer', 'err'); }
+      busy = null; open = null;
+      await load(); render(true);
+    };
+    const load = async () => { try { data = await api('/docker'); } catch (_) {} };
+    const render = (force = false) => {
+      const snap = data?.snapshot;
+      const items = (snap?.containers || []).filter((c) => (o.stopped !== false || c.state === 'running')
+        && (!filter || c.name.toLowerCase().includes(filter) || (c.project || '').toLowerCase().includes(filter)));
+      const key = JSON.stringify([items, open, busy, box.clientHeight]);
+      if (!force && key === lastKey) return;
+      lastKey = key;
+      const running = items.filter((c) => c.state === 'running').length;
+      head.querySelector('.dk-count').textContent = snap?.available ? ` ${running}/${items.length}` : '';
+      if (!data) { list.replaceChildren(h('div', 'empty', 'Loading…')); return; }
+      if (!snap.available || (snap.error && !items.length)) { list.replaceChildren(h('div', 'empty', snap.error || 'Docker is not running')); return; }
+      if (!items.length) { list.replaceChildren(h('div', 'empty', filter ? `No containers match "${o.filter}"` : 'No containers')); return; }
+      list.replaceChildren(...items.map((c) => {
+        const st = c.health === 'unhealthy' ? 'bad' : c.state === 'running' ? (c.health === 'starting' ? 'warn' : 'ok') : c.state === 'restarting' || c.state === 'paused' ? 'warn' : 'off';
+        const row = h('div', 'dk-row ' + st + (open === c.id ? ' open' : ''),
+          h('span', 'dk-dot'),
+          h('span', 'dk-name', c.name, h('small', null, ' ' + (c.project ? c.project + ' · ' : '') + c.image.split('@')[0])),
+          h('span', 'dk-stat', busy === c.id ? '…' : c.state === 'running' ? (c.cpu != null ? `${c.cpu.toFixed(1)}%` + (c.mem ? ` · ${c.mem}` : '') : c.status) : c.status.replace(/ ago$/, '')));
+        row.addEventListener('click', () => {
+          if (!data.control) { toast('Turn on "Allow start / stop" in the widget settings on the PC'); return; }
+          haptic(); open = open === c.id ? null : c.id; render(true);
+        });
+        if (open !== c.id) return row;
+        const btn = (label, action, cls = '') => {
+          const b = h('button', 'dk-btn ' + cls, label);
+          b.addEventListener('click', (e) => { e.stopPropagation(); act(c, action); });
+          return b;
+        };
+        return h('div', 'dk-wrap', row, h('div', 'dk-acts', ...(c.state === 'running' ? [btn('↻ Restart', 'restart'), btn('■ Stop', 'stop', 'danger')] : [btn('▶ Start', 'start', 'go')])));
+      }));
+    };
+    const tick = every(4000, async () => { await load(); render(); });
+    return { update: () => { tick(); render(); } };
+  },
+};
+
 // Upcoming events from the calendars set up in the agent (ICS feeds). Small: the current / next event; larger: a
 // list grouped by day, with the event that is happening now highlighted.
 W.agenda = {

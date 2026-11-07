@@ -20,6 +20,9 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**Docker.** A Docker widget lists Docker or Podman containers with their state, health, CPU and memory; with
+"Allow start / stop" turned on in its settings, tap a container to start, stop or restart it.
+
 **Calendars.** Add iCalendar feeds (Google's secret iCal address, Outlook's published calendar, iCloud, any ICS
 or `webcal://` link) in Settings › General; the new Agenda widget lists the coming days or, when small, the current or
 next event. Recurring events, time zones and moved or cancelled occurrences are handled. A rule can react to "a

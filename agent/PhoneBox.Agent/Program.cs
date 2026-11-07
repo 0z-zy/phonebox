@@ -61,6 +61,7 @@ AddMonitor<AdbReverse>(builder.Services);
 AddMonitor<UpdateService>(builder.Services);
 AddMonitor<PrivacyMonitor>(builder.Services);
 AddMonitor<CalendarMonitor>(builder.Services);
+AddMonitor<DockerMonitor>(builder.Services);
 AddMonitor<RuleEngine>(builder.Services);
 builder.Services.AddHostedService<Tray>();
 
@@ -278,6 +279,11 @@ object State(IServiceProvider sp, long? ev)
 
 // Upcoming calendar events (Agenda widget); the feed URLs stay here.
 app.MapGet("/api/calendar", (CalendarMonitor cal) => Results.Json(cal.Snapshot()));
+
+// Docker / Podman containers (Docker widget); start / stop / restart only if a widget allows it.
+app.MapGet("/api/docker", (DockerMonitor docker) => Results.Json(new { snapshot = docker.Snapshot(), control = docker.ControlAllowed() }));
+app.MapPost("/api/docker/{id}/{action}", async (string id, string action, DockerMonitor docker) =>
+    await docker.ActAsync(id, action) is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));
 
 // Settings › Rules › Test: runs a rule's action once (the rule may be unsaved).
 app.MapPost("/api/rules/test", (RuleConfig rule, RuleEngine rules) =>

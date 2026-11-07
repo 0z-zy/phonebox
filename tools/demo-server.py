@@ -118,6 +118,15 @@ ART = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><defs>
     ''.join(f'<line x1="150" y1="170" x2="{-300 + i * 75}" y2="300"/>' for i in range(13)) + '</g></svg>'
 
 
+CONTAINERS = [
+    {'id': 'a1b2c3d4e5f6', 'name': 'shop-web-1', 'image': 'nginx:1.27', 'project': 'shop', 'state': 'running', 'status': 'Up 3 hours', 'health': None, 'cpu': 0.4, 'mem': '12MiB'},
+    {'id': 'b2c3d4e5f6a1', 'name': 'shop-api-1', 'image': 'node:22-alpine', 'project': 'shop', 'state': 'running', 'status': 'Up 3 hours (healthy)', 'health': 'healthy', 'cpu': 6.2, 'mem': '148MiB'},
+    {'id': 'c3d4e5f6a1b2', 'name': 'shop-db-1', 'image': 'postgres:17', 'project': 'shop', 'state': 'running', 'status': 'Up 3 hours', 'health': None, 'cpu': 1.1, 'mem': '86MiB'},
+    {'id': 'd4e5f6a1b2c3', 'name': 'shop-worker-1', 'image': 'node:22-alpine', 'project': 'shop', 'state': 'running', 'status': 'Up 12 minutes (unhealthy)', 'health': 'unhealthy', 'cpu': 31.5, 'mem': '402MiB'},
+    {'id': 'e5f6a1b2c3d4', 'name': 'redis', 'image': 'redis:7', 'project': None, 'state': 'exited', 'status': 'Exited (0) 2 days ago', 'health': None, 'cpu': None, 'mem': None},
+]
+
+
 def calendar():
     # made-up calendar around the current time: one meeting is on now
     import datetime
@@ -234,6 +243,16 @@ def api(method, path, query, body):
     if path == '/api/art': return 200, 'image/svg+xml', ART.encode()
     if path == '/api/quotas': return js(quotas())
     if path == '/api/calendar': return js(calendar())
+    if path == '/api/docker':
+        return js({'control': True, 'snapshot': {'available': True, 'error': None, 'containers': CONTAINERS, 'updated': int(time.time() * 1000)}})
+    if path.startswith('/api/docker/') and method == 'POST':
+        _, _, _, cid, action = path.split('/')
+        for c in CONTAINERS:
+            if c['id'] == cid and action == 'stop':
+                c.update(state='exited', status='Exited (0) 1 second ago', cpu=None, mem=None, health=None)
+            elif c['id'] == cid and action in ('start', 'restart'):
+                c.update(state='running', status='Up 1 second', cpu=2.0, mem='40MiB', health=None)
+        return js({'ok': True})
     if path == '/api/work': return js(work())
     if path == '/api/procs': return js(procs())
     if path == '/api/procs/detail': return js(proc_detail(query.get('name', [''])[0]))
