@@ -46,6 +46,8 @@
     <EmbeddedResource Include="settings.html" LogicalName="settings.html" />
     <EmbeddedResource Include="widgets.json" LogicalName="widgets.json" />
     <EmbeddedResource Include="templates.json" LogicalName="templates.json" />
+    <!-- the phone's panel, served at /panel/ for the live preview in the layout editor -->
+    <EmbeddedResource Include="..\..\android\app\src\main\assets\www\*.*" LogicalName="www/%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

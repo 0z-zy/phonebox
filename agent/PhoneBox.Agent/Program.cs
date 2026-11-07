@@ -64,10 +64,20 @@ builder.Services.AddHostedService<Tray>();
 
 var app = builder.Build();
 
+// The panel in a desktop browser (the layout editor's live preview, /panel/) calls the API as /agent/api/..., the same
+// path the phone uses; on the local port that is simply /api/... Routing runs after this, so it sees the new path.
+app.Use((ctx, next) =>
+{
+    if (ctx.Connection.LocalPort == Port && ctx.Request.Path.StartsWithSegments("/agent/api", out var rest))
+        ctx.Request.Path = "/api" + rest;
+    return next(ctx);
+});
+
 // Security:
 //  - Local port 8765 listens on 127.0.0.1 only; the Host check blocks DNS rebinding. The phone's USB proxy sends
 //    no Origin header; from browsers only the settings page itself (same origin) is accepted (no CSRF).
 //  - The optional Wi-Fi port only serves the phone API, only over TLS, and only with the paired token.
+app.UseRouting();
 app.Use(async (ctx, next) =>
 {
     var origin = ctx.Request.Headers.Origin.ToString();
@@ -99,7 +109,8 @@ app.Use(async (ctx, next) =>
     if (ctx.Request.Headers.TryGetValue("X-PhoneBox-App", out var appVersion) && appVersion.ToString().Length is > 0 and < 32)
         UpdateService.AppVersion = appVersion.ToString();
     ctx.Response.Headers.CacheControl = "no-store";
-    ctx.Response.Headers["X-Frame-Options"] = "DENY";
+    // only the panel may be framed, and only by the settings page itself (the live preview)
+    ctx.Response.Headers["X-Frame-Options"] = ctx.Request.Path.StartsWithSegments("/panel") ? "SAMEORIGIN" : "DENY";
     await next();
 });
 
@@ -147,6 +158,21 @@ app.MapGet("/", () =>
     using var s = AppPaths.Resource("settings.html")!;
     using var r = new StreamReader(s);
     return Results.Content(r.ReadToEnd(), "text/html; charset=utf-8");
+});
+// The phone's panel (embedded at build time) for the live preview in the layout editor; local port only.
+app.MapGet("/panel/{*file}", (string? file, HttpRequest req) =>
+{
+    if (string.IsNullOrEmpty(file) && !req.Path.Value!.EndsWith('/')) return Results.Redirect("/panel/" + req.QueryString);
+    file = string.IsNullOrEmpty(file) ? "index.html" : file;
+    if (file.Contains('/') || file.Contains("..")) return Results.NotFound();
+    var type = Path.GetExtension(file) switch
+    {
+        ".html" => "text/html; charset=utf-8",
+        ".js" => "text/javascript; charset=utf-8",
+        ".css" => "text/css; charset=utf-8",
+        _ => "application/octet-stream",
+    };
+    return AppPaths.Resource("www/" + file) is { } s ? Results.Stream(s, type) : Results.NotFound();
 });
 app.MapGet("/favicon.ico", () => AppPaths.Resource("phonebox.ico") is { } s ? Results.Stream(s, "image/x-icon") : Results.NotFound());
 

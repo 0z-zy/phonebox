@@ -85,6 +85,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .pt-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pt-n { font-size: 11px; color: var(--muted); background: var(--panel-2); border-radius: 6px; padding: 0 6px; }
 .canvas-wrap { display: flex; justify-content: center; }
+.stage-bar { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 6px 13px; cursor: pointer; font: inherit; font-size: 13px; color: var(--text); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+#pageEditor.live .layout-hint { display: none; }
+.preview { position: relative; aspect-ratio: 780 / 360; overflow: hidden; border-radius: 10px; background: #000; }
+.preview iframe { position: absolute; left: 0; top: 0; width: 780px; height: 360px; border: 0; transform-origin: 0 0; }
 .phone { width: 100%; max-width: 860px; padding: 14px 18px; border-radius: 28px; background: #06080b; border: 1px solid #22262e; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
 .canvas { position: relative; aspect-ratio: 752 / 333; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(6, 1fr); gap: 6px; touch-action: none; }
 .canvas .cell { border-radius: 6px; background: rgba(255,255,255,.035); }
@@ -221,7 +228,17 @@ dd { margin: 0; word-break: break-all; }
         or tap the dots (or long-press a page) for an overview of all pages.</p>
       <div class="pages-layout">
         <div id="pageTabs"></div>
-        <div id="pageEditor"></div>
+        <div id="pageEditor">
+          <div id="peHead"></div>
+          <div id="stage">
+            <div class="stage-bar">
+              <div class="seg" id="stageSeg"><button data-v="layout" class="on">Layout</button><button data-v="live">Live preview</button></div>
+              <span class="hint" id="stageHint"></span>
+            </div>
+            <div class="canvas-wrap"><div class="phone"><div class="canvas" id="canvas"></div><div class="preview" id="previewBox" hidden></div></div></div>
+          </div>
+          <div id="peRest"></div>
+        </div>
       </div>
     </section>
 
@@ -451,6 +468,7 @@ function changed() {
   $('revert').disabled = !dirty;
   $('hdr').classList.toggle('is-dirty', dirty);
   $('json').value = JSON.stringify(cfg, null, 2);
+  queuePreview();
 }
 
 // ---------------------------------------------------------------- pages: visual layout editor
@@ -528,11 +546,11 @@ function renderPages() {
 
 function renderPageEditor() {
   const p = curPage();
-  const box = $('pageEditor');
-  if (!p) { box.replaceChildren(h('p', { class: 'lead' }, 'No pages. Add one with "New page".')); return; }
+  $('stage').hidden = !p;
+  if (!p) { $('peHead').replaceChildren(h('p', { class: 'lead' }, 'No pages. Add one with "New page".')); $('peRest').replaceChildren(); return; }
   p.widgets ??= [];
   const move = (d) => { const j = selPage + d; [cfg.pages[selPage], cfg.pages[j]] = [cfg.pages[j], cfg.pages[selPage]]; selPage = j; renderPages(); changed(); };
-  box.replaceChildren(
+  $('peHead').replaceChildren(
     h('div', { class: 'card' },
       h('div', { class: 'row', style: { gap: '10px' } },
         h('input', { type: 'text', class: 'icon-input', value: p.icon || '', maxlength: 8, title: 'Icon', oninput: (e) => { p.icon = e.target.value; changed(); renderTabsOnly(); } }),
@@ -552,9 +570,9 @@ function renderPageEditor() {
         h('button', { class: 'btn sm danger', disabled: cfg.pages.length === 1, onclick: () => {
           if (!confirm(`Delete the page "${p.title}"?`)) return;
           cfg.pages.splice(selPage, 1); selWidget = -1; renderPages(); changed();
-        } }, 'Delete page'))),
-    h('div', { class: 'canvas-wrap' }, h('div', { class: 'phone' }, h('div', { class: 'canvas', id: 'canvas' }))),
-    h('p', { class: 'hint', style: { margin: '6px 0 14px' } }, 'Drag a widget to move it, drag its corner to resize. Widgets cannot overlap. Click one to edit its options.'),
+        } }, 'Delete page'))));
+  $('peRest').replaceChildren(
+    h('p', { class: 'hint layout-hint', style: { margin: '6px 0 14px' } }, 'Drag a widget to move it, drag its corner to resize. Widgets cannot overlap. Click one to edit its options.'),
     h('div', { class: 'ed-cols' },
       h('div', { class: 'card', id: 'inspector' }),
       h('div', { class: 'card' }, h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '8px' } }, h('h3', { style: { margin: 0 } }, 'Add a widget'),
@@ -563,7 +581,47 @@ function renderPageEditor() {
   renderCanvas();
   renderPalette();
   renderInspector();
+  queuePreview();
 }
+
+// ---------------------------------------------------------------- live preview
+// The real panel (served by the agent at /panel/) in an iframe, fed the unsaved settings, so you see live data in the
+// layout you are editing. The iframe is created once and only hidden, so it does not reload while you edit.
+let stageMode = 'layout', previewFrame = null, previewReady = false, previewTimer = 0;
+try { stageMode = localStorage.getItem('pb-stage') === 'live' ? 'live' : 'layout'; } catch (_) {}
+
+function setStage(mode) {
+  stageMode = mode;
+  try { localStorage.setItem('pb-stage', mode); } catch (_) {}
+  for (const b of $('stageSeg').children) b.classList.toggle('on', b.dataset.v === mode);
+  const live = mode === 'live';
+  $('canvas').hidden = live;
+  $('previewBox').hidden = !live;
+  $('pageEditor').classList.toggle('live', live);
+  $('stageHint').textContent = live
+    ? 'The real panel with your unsaved changes and live data: tap and swipe it like the phone. Switch back to Layout to move widgets.'
+    : '';
+  if (live && !previewFrame) {
+    previewFrame = h('iframe', { src: '../panel/?preview=1', title: 'Live preview of the panel' });
+    $('previewBox').appendChild(previewFrame);
+    const fit = () => { previewFrame.style.transform = `scale(${$('previewBox').clientWidth / 780})`; };
+    new ResizeObserver(fit).observe($('previewBox'));
+    fit();
+  }
+  if (live) queuePreview();
+}
+
+function sendPreview() {
+  if (!cfg || !previewFrame || !previewReady || stageMode !== 'live') return;
+  previewFrame.contentWindow.postMessage({ type: 'phonebox-preview', config: JSON.parse(JSON.stringify(cfg)), page: selPage }, location.origin);
+}
+function queuePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(sendPreview, 120); }
+
+window.addEventListener('message', (e) => {
+  if (e.origin === location.origin && e.data?.type === 'phonebox-preview-ready') { previewReady = true; sendPreview(); }
+});
+for (const b of $('stageSeg').children) b.onclick = () => setStage(b.dataset.v);
+setStage(stageMode);
 
 function renderTabsOnly() {
   const tabs = $('pageTabs').querySelectorAll('.ptab');

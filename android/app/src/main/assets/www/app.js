@@ -9,6 +9,8 @@ const LOCALE = 'en-GB';
 const COLS = 12, ROWS = 6;
 const $ = (id) => document.getElementById(id);
 const bridge = typeof Android !== 'undefined' ? Android : null;
+// Live preview inside the agent's layout editor: the layout comes from the editor (unsaved), not from the agent.
+const PREVIEW = new URLSearchParams(location.search).has('preview') && window.parent !== window;
 
 /** Used until the agent has sent its settings once (first start without a connection). */
 const FALLBACK_PAGES = [{
@@ -35,7 +37,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} },
 };
 
-let cfg = { ...DEFAULT_CFG, ...store.get('cfg', {}) };
+let cfg = PREVIEW ? { ...DEFAULT_CFG, pages: [] } : { ...DEFAULT_CFG, ...store.get('cfg', {}) };
 let cfgVersion = null;
 let online = null;
 let lastTouch = Date.now();
@@ -600,6 +602,7 @@ let approvals = [];
 let approvalShown = null;
 
 async function loadApprovals() {
+  if (PREVIEW) return; // permission prompts are answered on the phone, not in the preview
   try { approvals = (await api('/approvals')).items || []; } catch (_) { return; }
   renderApproval();
 }
@@ -651,6 +654,7 @@ $('apAllow').addEventListener('click', () => decide('allow'));
 $('apDeny').addEventListener('click', () => decide('deny'));
 
 function handleEvent(e) {
+  if (PREVIEW && (e.kind === 'goto' || e.kind === 'back' || e.kind === 'reload')) return; // the editor picks the page
   if (e.kind === 'approval' || e.kind === 'approval-done') loadApprovals();
   else if (e.kind === 'notify' && e.data) handleNotify(e.data);
   else if (e.kind === 'goto' && e.data) ruleGoto(e.data);
@@ -2208,6 +2212,7 @@ function applyDisplay() {
 }
 
 async function loadConfig() {
+  if (PREVIEW) return;
   try {
     const r = await api('/config');
     const before = JSON.stringify(cfg);
@@ -2319,3 +2324,22 @@ setInterval(() => { if (online && anyNeeds('work') && !streaming()) loadWork(); 
 setInterval(() => { if (online && pageOf('procs')) loadProcs(); if (online && sheet) loadSheet(); }, 2000);
 setInterval(() => { if (online) loadConfig(); }, 60_000);
 poll();
+
+if (PREVIEW) {
+  let weatherKey = '';
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || e.data?.type !== 'phonebox-preview') return;
+    const c = e.data.config || {};
+    // no night screen and no idle return in the preview
+    cfg = { ...DEFAULT_CFG, ...c, night: { ...(c.night || {}), enabled: false }, display: { ...(c.display || {}), idleReturnSec: 0 } };
+    buildLayout();
+    const wk = JSON.stringify(cfg.weather);
+    if (wk !== weatherKey) { weatherKey = wk; loadWeather(); }
+    // the editor's page index counts hidden pages too; the panel only has the shown ones
+    const list = cfg.pages || [], sel = list[e.data.page];
+    const shown = (p) => p.enabled !== false && Array.isArray(p.widgets);
+    const i = sel && shown(sel) ? list.slice(0, e.data.page).filter(shown).length : -1;
+    if (i >= 0 && i !== curPage) goPage(i, true);
+  });
+  window.parent.postMessage({ type: 'phonebox-preview-ready' }, location.origin);
+}

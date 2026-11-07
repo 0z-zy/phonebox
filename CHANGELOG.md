@@ -17,6 +17,9 @@ Claude token from the macOS Keychain. `scripts/install.sh` sets it up as a syste
 at certain times or when a pushed value is on, show a page, a notification or push a value, optionally only while
 it lasts.
 
+**Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
+agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
+
 **Live demo.** <https://ersinkoc.github.io/phonebox/> runs the real panel and layout editor in the browser with
 made-up data.
 
