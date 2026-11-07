@@ -892,6 +892,14 @@ pager.addEventListener('scrollend', () => {
   else if (sheet) closeSheet();
 });
 
+// ---------------------------------------------------------------- updates
+function renderUpdate(u) {
+  const el2 = $('upd');
+  if (!u) { el2.textContent = ''; return; }
+  const via = (() => { try { return bridge ? bridge.transport() : ''; } catch (_) { return ''; } })();
+  el2.textContent = u.app && via !== 'usb' ? `⬆ ${u.latest}: plug in USB to update` : `⬆ ${u.latest} available`;
+}
+
 // ---------------------------------------------------------------- connection loop
 function setOnline(on, host) {
   document.body.classList.toggle('offline', !on);
@@ -911,6 +919,7 @@ async function poll() {
     renderPc(s.pc, s.ping);
     renderMedia(s.media);
     renderAudio(s.audio);
+    renderUpdate(s.update);
   } catch (_) {
     setOnline(false);
   }

@@ -232,6 +232,14 @@ dd { margin: 0; word-break: break-all; }
         </div>
         <div class="row"><button class="btn" id="lanRegen">New key (unpair phones)</button><span class="hint" id="lanStatus"></span></div>
       </div>
+      <div class="card">
+        <h3>Updates</h3>
+        <div class="row" style="margin-bottom:8px"><label class="switch"><input type="checkbox" data-bind="updates.auto"><span></span></label> Install new releases automatically</div>
+        <p class="hint" style="margin:0 0 12px">Checks <span id="updRepo"></span> on GitHub every 6 hours. The phone app is installed over USB without a prompt
+          on the phone; the agent replaces its own files and restarts.</p>
+        <dl id="updInfo"></dl>
+        <div class="row" style="margin-top:12px"><button class="btn" id="updCheck">Check now</button><button class="btn primary" id="updApply" hidden>Update now</button><span class="hint" id="updState"></span></div>
+      </div>
     </section>
 
     <section id="advanced">
@@ -553,6 +561,7 @@ async function loadInfo() {
       : 'No LAN or Tailscale address found';
     $('lanStatus').textContent = lan.active ? `Listening on port ${lan.port} (HTTPS)` : lan.configured ? 'Restart to start listening' : 'Off';
     $('restartBtn').hidden = !lan.restartNeeded;
+    renderUpdate(await (await fetch('/api/update')).json());
     $('info').replaceChildren(
       h('dt', {}, 'Version'), h('dd', {}, i.version),
       h('dt', {}, 'Settings file'), h('dd', {}, h('code', {}, i.configPath)),
@@ -564,7 +573,7 @@ async function loadInfo() {
 // ---------------------------------------------------------------- load / save
 async function load() {
   cfg = await (await fetch('/api/settings')).json();
-  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 };
+  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' };
   saved = JSON.stringify(cfg);
   renderPages(); renderDeck(); bindForm(); changed(); loadInfo();
 }
@@ -581,6 +590,28 @@ $('save').onclick = save;
 $('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); bindForm(); changed(); };
 $('openPhone').onclick = async () => { await fetch('/api/phone/open', { method: 'POST' }); toast('Opening the panel on the phone'); };
 $('cityBtn').onclick = searchCity;
+function renderUpdate(u) {
+  const s = u.status;
+  $('updRepo').textContent = cfg.updates?.repo || 'ersinkoc/phonebox';
+  const line = (k, v) => [h('dt', {}, k), h('dd', {}, v)];
+  $('updInfo').replaceChildren(
+    ...line('Agent', s.agentVersion + (s.agentUpdate ? ` → ${s.latest}` : ' (up to date)') + (u.installed ? '' : ' · not the installed copy, updates itself only from %LOCALAPPDATA%\\PhoneBox\\app')),
+    ...line('Phone app', s.appVersion ? s.appVersion + (s.appUpdate ? ` → ${s.latest} (needs USB)` : ' (up to date)') : 'not seen yet'),
+    ...line('Latest release', s.latest ? s.latest : '—'),
+    ...line('Last check', s.lastCheck ? new Date(s.lastCheck).toLocaleString() : 'not yet'));
+  $('updApply').hidden = !(s.agentUpdate || s.appUpdate);
+  $('updState').textContent = s.error ? s.error : s.state !== 'idle' ? s.state + '…' : '';
+}
+$('updCheck').onclick = async () => {
+  $('updState').textContent = 'checking…';
+  await fetch('/api/update/check', { method: 'POST' });
+  loadInfo();
+};
+$('updApply').onclick = async () => {
+  await fetch('/api/update/apply', { method: 'POST' });
+  toast('Updating — the agent restarts by itself if it updates');
+  setTimeout(loadInfo, 3000);
+};
 $('lanRegen').onclick = () => {
   cfg.lan = { ...(cfg.lan || {}), token: '' };
   changed();

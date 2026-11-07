@@ -13,6 +13,7 @@ public sealed class AgentConfig
     public NightConfig Night { get; set; } = new();
     public DisplayConfig Display { get; set; } = new();
     public LanConfig Lan { get; set; } = new();
+    public UpdateConfig Updates { get; set; } = new();
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
 
@@ -65,6 +66,13 @@ public sealed class LanConfig
     public int Port { get; set; } = 8766;
     /// <summary>Shared secret handed to the phone over USB. Empty = generate a new one (forces re-pairing).</summary>
     public string? Token { get; set; }
+}
+
+public sealed class UpdateConfig
+{
+    /// <summary>Install new GitHub releases automatically (phone app over USB, agent in place).</summary>
+    public bool Auto { get; set; } = true;
+    public string Repo { get; set; } = "ersinkoc/phonebox";
 }
 
 public sealed class PageConfig
@@ -170,6 +178,8 @@ public sealed partial class ConfigStore(string path)
         c.Display ??= new();
         c.Display.IdleReturnSec = Math.Clamp(c.Display.IdleReturnSec, 0, 3600);
         c.Lan ??= new();
+        c.Updates ??= new();
+        if (string.IsNullOrWhiteSpace(c.Updates.Repo)) c.Updates.Repo = "ersinkoc/phonebox";
         c.Lan.Port = Math.Clamp(c.Lan.Port, 1024, 65535);
         if (string.IsNullOrWhiteSpace(c.Lan.Token)) c.Lan.Token = NewToken();
         c.Night.Brightness = Math.Clamp(c.Night.Brightness, 0.01, 1);

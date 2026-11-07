@@ -75,6 +75,18 @@ plugged in again; the panel shows which one it uses.
   building…), install [Tailscale](https://tailscale.com) on both: the agent offers its Tailscale address too.
 - Windows Firewall asks once when Wi-Fi is turned on; allow it for the network types you use.
 - The screen stays on, so the phone still needs a charger — just not necessarily the PC.
+## Updates
+
+The agent checks the latest GitHub release every 6 hours (or **Settings › General › Updates › Check now**) and, with
+automatic updates on:
+
+- installs the new APK on the phone with `adb install -r` while it is plugged in (no prompt on the phone; over Wi-Fi
+  the panel shows "plug in USB to update");
+- swaps its own files in `%LOCALAPPDATA%\PhoneBox\app` and restarts.
+
+Android only accepts an update signed with the same key as the installed app, and the agent never uninstalls to
+force one. To publish a release from your clone: bump the version in `PhoneBox.Agent.csproj` and
+`android/app/build.gradle.kts`, commit, then run `.\scripts\release.ps1`.
 ## How it works
 
 ```

@@ -52,10 +52,10 @@ AddMonitor<SessionMonitor>(builder.Services);
 AddMonitor<GitHubMonitor>(builder.Services);
 AddMonitor<PingMonitor>(builder.Services);
 AddMonitor<AdbReverse>(builder.Services);
+AddMonitor<UpdateService>(builder.Services);
 builder.Services.AddHostedService<Tray>();
 
 var app = builder.Build();
-var restartRequested = false;
 
 // Security:
 //  - Local port 8765 listens on 127.0.0.1 only; the Host check blocks DNS rebinding. The phone's USB proxy sends
@@ -81,6 +81,8 @@ app.Use(async (ctx, next) =>
             return;
         }
     }
+    if (ctx.Request.Headers.TryGetValue("X-PhoneBox-App", out var appVersion) && appVersion.ToString().Length is > 0 and < 32)
+        UpdateService.AppVersion = appVersion.ToString();
     ctx.Response.Headers.CacheControl = "no-store";
     ctx.Response.Headers["X-Frame-Options"] = "DENY";
     await next();
@@ -113,9 +115,13 @@ app.MapGet("/api/lan", (ConfigStore cfg) => Results.Json(new
     fingerprint = lanCert is null ? null : Lan.Fingerprint(lanCert),
 }));
 
+app.MapGet("/api/update", (UpdateService upd, ConfigStore cfg) => Results.Json(new { status = upd.Status(), auto = cfg.Get().Updates.Auto, installed = UpdateService.RunningInstalled }));
+app.MapPost("/api/update/check", async (UpdateService upd) => { await upd.CheckAsync(); return Results.Json(upd.Status()); });
+app.MapPost("/api/update/apply", (UpdateService upd) => { _ = Task.Run(() => upd.ApplyAsync()); return Results.Accepted(); });
+
 app.MapPost("/api/restart", (IHostApplicationLifetime life) =>
 {
-    restartRequested = true;
+    AppRestart.Requested = true;
     life.StopApplication();
     return Results.Ok();
 });
@@ -164,8 +170,9 @@ app.MapGet("/api/info", (AdbReverse adb, ConfigStore cfg) => Results.Json(new
 app.MapPost("/api/phone/open", async (AdbReverse adb) => { await adb.OpenPanelAsync(); return Results.Ok(); });
 
 // ---------------------------------------------------------------- phone panel API
-app.MapGet("/api/state", (SystemMonitor sys, MediaMonitor media, AudioControl audio, PingMonitor ping, ConfigStore cfg) => Results.Json(new
+app.MapGet("/api/state", (SystemMonitor sys, MediaMonitor media, AudioControl audio, PingMonitor ping, ConfigStore cfg, UpdateService upd) => Results.Json(new
 {
+    update = upd.Status() is { } u && (u.AppUpdate || u.AgentUpdate) ? new { latest = u.Latest, app = u.AppUpdate, agent = u.AgentUpdate } : null,
     ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
     host = Environment.MachineName,
     cfgVersion = cfg.Version,
@@ -238,7 +245,7 @@ app.Run();
 // Restart requested from the settings page (e.g. Wi-Fi turned on): hand over to a fresh instance.
 single.ReleaseMutex();
 single.Dispose();
-if (restartRequested && Environment.ProcessPath is { } exe)
+if (AppRestart.Requested && Environment.ProcessPath is { } exe)
     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, "--restart") { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory });
 
 static void AddMonitor<T>(IServiceCollection s) where T : class, IHostedService

@@ -264,6 +264,9 @@ body.idle-media .m-progress, body.idle-media .m-controls .ic:not(.play) { opacit
 .down b { color: var(--net); font-weight: 600; }
 .up b { color: var(--up); font-weight: 600; }
 
+#upd { color: #93c5fd; font-weight: 600; }
+#upd:not(:empty)::before { content: "·"; color: var(--dim); margin-right: 6px; font-weight: 400; }
+
 /* ---------- AI quotas ---------- */
 #qMini { display: inline-flex; gap: 8px; }
 #qMini b { font-weight: 600; }

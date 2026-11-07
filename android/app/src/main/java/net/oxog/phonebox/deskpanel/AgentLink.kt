@@ -34,6 +34,7 @@ class AgentLink(context: Context) {
         private set
 
     private val prefs = context.getSharedPreferences("pairing", Context.MODE_PRIVATE)
+    private val appVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
     private val background = Executors.newSingleThreadExecutor()
     @Volatile private var lastPair = 0L
     @Volatile private var preferredHost = 0
@@ -92,6 +93,7 @@ class AgentLink(context: Context) {
 
     private fun send(c: HttpURLConnection, method: String): Reply {
         c.requestMethod = method
+        c.setRequestProperty("X-PhoneBox-App", appVersion) // lets the agent offer updates
         c.readTimeout = 4000
         c.useCaches = false
         if (method == "POST") {
