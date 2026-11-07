@@ -237,6 +237,20 @@ class MainActivity : Activity(), SensorEventListener {
             try { if (on && !pinned) startLockTask() else if (!on && pinned) stopLockTask() } catch (_: Exception) {}
         }
 
+        /** The computers this phone is paired with (for switching over Wi-Fi). */
+        @JavascriptInterface
+        fun pcs(): String = link.pcsJson()
+
+        /** Switches to another paired computer and reloads the panel from it. */
+        @JavascriptInterface
+        fun selectPc(id: String) {
+            if (!link.select(id)) return
+            runOnUiThread { stream.stop(); stream.start(); web.reload() }
+        }
+
+        @JavascriptInterface
+        fun forgetPc(id: String) = link.forget(id)
+
         /** "landscape" (default), "portrait" or "auto" (follow the phone). */
         @JavascriptInterface
         fun setOrientation(mode: String) = runOnUiThread {

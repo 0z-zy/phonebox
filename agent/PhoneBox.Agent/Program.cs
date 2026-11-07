@@ -127,7 +127,7 @@ app.Use(async (ctx, next) =>
 app.MapGet("/api/pair", (ConfigStore cfg) =>
 {
     var lan = cfg.Get().Lan;
-    if (!lan.Enabled || lanCert is null) return Results.Json(new { enabled = false });
+    if (!lan.Enabled || lanCert is null) return Results.Json(new { enabled = false, pc = Environment.MachineName });
     return Results.Json(new
     {
         enabled = true,

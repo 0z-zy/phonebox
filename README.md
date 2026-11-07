@@ -217,6 +217,9 @@ plugged in again; the status line shows which one it uses.
 - Windows Firewall asks once when Wi-Fi is turned on; allow it for the network types you use.
 - The screen stays on, so the phone still needs a charger — just not necessarily the PC.
 
+With several computers (each paired once over USB), the page overview on the phone lists them and switches between
+them over Wi-Fi.
+
 ## Updates
 
 The agent checks the latest GitHub release every 6 hours (or **Settings › General › Updates › Check now**) and, with

@@ -20,6 +20,9 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**Several computers.** The phone remembers every computer it was paired with; the page overview shows them and
+switches between them over Wi-Fi. A USB cable always wins, and the computer you plug into becomes the active one.
+
 **Several phones.** Phones identify themselves to the agent; Settings › General › Phones lists them, and each can
 get a name and its own pages (a desk phone with the clock and music, a tablet with everything).
 

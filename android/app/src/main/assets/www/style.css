@@ -112,13 +112,16 @@ button { font: inherit; color: inherit; background: none; border: 0; }
   position: fixed; inset: 0; z-index: 15; padding: 12px var(--pad-r) 14px var(--pad-l);
   background: #06080b; display: flex; flex-direction: column; gap: 10px;
 }
-.ov-head { font-size: 15px; font-weight: 700; }
+.ov-head { font-size: 15px; font-weight: 700; display: flex; align-items: baseline; gap: 4px; }
 .ov-head small { font-size: 11.5px; font-weight: 400; color: var(--muted); margin-left: 8px; }
 #ovGrid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 10px; overflow-y: auto; }
 .ov-tile {
   display: flex; flex-direction: column; gap: 5px; padding: 7px; border-radius: 14px; min-height: 0;
   background: #10141a; border: 1px solid var(--line); text-align: left;
 }
+#ovPcs { margin-left: auto; display: flex; gap: 6px; }
+.ov-pc { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; }
+.ov-pc.on { border-color: rgba(var(--ambient), .8); background: rgba(var(--ambient), .16); font-weight: 600; }
 .ov-tile.on { border-color: rgba(var(--ambient), .8); box-shadow: 0 0 0 2px rgba(var(--ambient), .25); }
 .ov-tile:active { transform: scale(.97); }
 .ov-map { flex: 1; min-height: 28px; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(6, 1fr); gap: 2px; }

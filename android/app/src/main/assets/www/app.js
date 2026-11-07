@@ -2515,6 +2515,19 @@ function openOverview() {
     return t;
   };
   $('ovGrid').replaceChildren(...pages.map(tile));
+  // several paired computers: switch between them here (a USB cable always wins)
+  let pcs = [];
+  try { pcs = bridge?.pcs ? JSON.parse(bridge.pcs()) : []; } catch (_) {}
+  $('ovPcs').replaceChildren(...(pcs.length > 1 ? pcs.map((pc) => {
+    const b = h('button', 'ov-pc' + (pc.active ? ' on' : ''), '🖥️ ' + (pc.name || 'Computer'));
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (pc.active) return;
+      haptic(); toast(`Switching to ${pc.name || 'the other computer'}…`);
+      setTimeout(() => bridge.selectPc(pc.id), 300);
+    });
+    return b;
+  }) : []));
   $('ovGrid').style.setProperty('--n', Math.min(4, Math.ceil(Math.sqrt(pages.length * 1.6))));
   ov.hidden = false;
 }

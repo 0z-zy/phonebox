@@ -3,6 +3,7 @@ package net.oxog.phonebox.deskpanel
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -25,6 +26,9 @@ import javax.net.ssl.X509TrustManager
  * 2. Wi-Fi / Tailscale: https://<pc-address>:<port>. The address list, a token and the SHA-256 fingerprint of the
  *    agent's self-signed certificate are fetched over USB ("pairing") and stored. Only that exact certificate is
  *    trusted (pinning), and every request carries the token.
+ *
+ * The phone remembers every computer it was paired with; one is active over Wi-Fi (the one last plugged in, or the one
+ * picked in the panel's page overview). A USB cable always wins: the plugged-in computer is used and becomes active.
  */
 class AgentLink(context: Context) {
 
@@ -36,6 +40,62 @@ class AgentLink(context: Context) {
         private set
 
     private val prefs = context.getSharedPreferences("pairing", Context.MODE_PRIVATE)
+
+    /** A computer this phone is paired with; the certificate fingerprint is its id. */
+    private class Pc(val id: String, val name: String, val hosts: List<String>, val port: Int, val token: String) {
+        fun json(): JSONObject = JSONObject().put("id", id).put("name", name).put("hosts", JSONArray(hosts)).put("port", port).put("token", token)
+        companion object {
+            fun from(j: JSONObject) = Pc(j.getString("id"), j.optString("name"),
+                j.getJSONArray("hosts").let { a -> (0 until a.length()).map { a.getString(it) } }, j.getInt("port"), j.getString("token"))
+        }
+    }
+
+    @Volatile private var pcs: List<Pc> = loadPcs()
+    @Volatile private var activeId: String? = prefs.getString("active", null)
+
+    private fun loadPcs(): List<Pc> {
+        // 0.6.x stored a single pairing in plain keys; move it into the list
+        if (!prefs.contains("pcs") && prefs.getBoolean("enabled", false)) {
+            val fp = prefs.getString("fingerprint", null)
+            val token = prefs.getString("token", null)
+            if (fp != null && token != null) {
+                val pc = Pc(fp, prefs.getString("pc", "") ?: "", prefs.getString("hosts", "")!!.split(',').filter { it.isNotBlank() }, prefs.getInt("port", 8766), token)
+                prefs.edit().clear().putString("pcs", JSONArray().put(pc.json()).toString()).putString("active", fp).apply()
+            }
+        }
+        return try {
+            val a = JSONArray(prefs.getString("pcs", "[]"))
+            (0 until a.length()).mapNotNull { runCatching { Pc.from(a.getJSONObject(it)) }.getOrNull() }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    private fun savePcs(list: List<Pc>, active: String?) {
+        pcs = list
+        activeId = active
+        prefs.edit().putString("pcs", JSONArray().apply { list.forEach { put(it.json()) } }.toString()).putString("active", active).apply()
+    }
+
+    private fun activePc(): Pc? = pcs.firstOrNull { it.id == activeId } ?: pcs.firstOrNull()
+
+    /** The paired computers for the panel: [{"id", "name", "active"}]. */
+    fun pcsJson(): String {
+        val active = activePc()?.id
+        return JSONArray().apply { pcs.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("active", it.id == active)) } }.toString()
+    }
+
+    /** Makes another paired computer the one used over Wi-Fi. */
+    fun select(id: String): Boolean {
+        if (pcs.none { it.id == id }) return false
+        savePcs(pcs, id)
+        factory = null
+        preferredHost = 0
+        return true
+    }
+
+    fun forget(id: String) {
+        val rest = pcs.filter { it.id != id }
+        savePcs(rest, if (activeId == id) rest.firstOrNull()?.id else activeId)
+    }
     private val appVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
     // Identifies this phone to the agent (several phones can show different pages): a short hash of the app-scoped
     // Android id, and the model name.
@@ -79,11 +139,11 @@ class AgentLink(context: Context) {
     }
 
     private fun wifi(method: String, pathAndQuery: String, readTimeout: Int = 4000): Reply? {
-        if (!prefs.getBoolean("enabled", false)) return null
-        val hosts = prefs.getString("hosts", "")!!.split(',').filter { it.isNotBlank() }
-        val token = prefs.getString("token", null) ?: return null
-        val pin = prefs.getString("fingerprint", null) ?: return null
-        val port = prefs.getInt("port", 8766)
+        val pc = activePc() ?: return null
+        val hosts = pc.hosts
+        val token = pc.token
+        val pin = pc.id
+        val port = pc.port
         if (hosts.isEmpty()) return null
         // Reuse one socket factory per pinned certificate so HTTPS connections are kept alive between requests.
         val f = factory?.takeIf { it.first == pin }?.second ?: pinnedFactory(pin).also { factory = pin to it }
@@ -134,25 +194,23 @@ class AgentLink(context: Context) {
                 c.connectTimeout = 800
                 c.readTimeout = 3000
                 val j = JSONObject(c.inputStream.bufferedReader().readText())
-                val e = prefs.edit()
+                val name = j.optString("pc")
                 if (j.optBoolean("enabled")) {
+                    // add or refresh this computer and make it the active one
                     val hosts = j.getJSONArray("hosts")
-                    e.putBoolean("enabled", true)
-                        .putString("hosts", (0 until hosts.length()).joinToString(",") { hosts.getString(it) })
-                        .putInt("port", j.getInt("port"))
-                        .putString("token", j.getString("token"))
-                        .putString("fingerprint", j.getString("fingerprint"))
-                        .putString("pc", j.optString("pc"))
-                } else {
-                    e.clear()
+                    val pc = Pc(j.getString("fingerprint"), name, (0 until hosts.length()).map { hosts.getString(it) }, j.getInt("port"), j.getString("token"))
+                    savePcs(pcs.filter { it.id != pc.id && !(name.isNotEmpty() && it.name == name) } + pc, pc.id)
+                } else if (name.isNotEmpty()) {
+                    // Wi-Fi was turned off on this computer: forget its pairing, keep the others
+                    val rest = pcs.filter { it.name != name }
+                    if (rest.size != pcs.size) savePcs(rest, rest.firstOrNull { it.id == activeId }?.id ?: rest.firstOrNull()?.id)
                 }
-                e.apply()
             } catch (_: Exception) {
             }
         }
     }
 
-    fun pairedPc(): String? = if (prefs.getBoolean("enabled", false)) prefs.getString("pc", null) else null
+    fun pairedPc(): String? = activePc()?.name
 
     private fun pinnedFactory(pin: String): SSLSocketFactory {
         val tm = object : X509TrustManager {
