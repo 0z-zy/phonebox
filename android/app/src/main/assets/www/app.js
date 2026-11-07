@@ -2189,14 +2189,47 @@ function setNight(on) {
   if (on === nightOn) return;
   nightOn = on;
   document.body.classList.toggle('night', on);
-  try { bridge && bridge.setBrightness(on ? (cfg.night.brightness ?? 0.02) : -1); } catch (_) {}
+  applyBrightness(true);
 }
+
+// ---------------------------------------------------------------- phone sensors
+// Room light (lux) and proximity come from the Android shell. Brightness can follow the room, the night screen can
+// come on when the room goes dark, and a hand near the phone wakes the night screen.
+let lux = null, darkSince = 0, darkRoom = false, lastBrightness = null;
+
+/** 1 lux → 5 %, 10 → 37 %, 100 → 68 %, 1000+ lux → 100 % (perceived brightness is roughly logarithmic). */
+const luxToBrightness = (l) => Math.max(0.05, Math.min(1, 0.05 + (0.95 * Math.log10(l + 1)) / 3));
+
+function applyBrightness(force = false) {
+  if (!bridge) return;
+  let v = -1; // the phone's own setting
+  if (nightOn) v = cfg.night?.brightness ?? 0.02;
+  else if (cfg.display?.autoBrightness && lux != null) v = luxToBrightness(lux);
+  if (!force && lastBrightness != null && v >= 0 && lastBrightness >= 0 && Math.abs(v - lastBrightness) < 0.04) return;
+  lastBrightness = v;
+  try { bridge.setBrightness(v); } catch (_) {}
+}
+
+window.onAndroidSensor = (kind, value) => {
+  if (kind === 'light') {
+    lux = +value;
+    // dark room: below 3 lux for 30 s; light again above 15 lux
+    if (lux < 3) { darkSince ||= Date.now(); } else darkSince = 0;
+    if (darkRoom && lux > 15) darkRoom = false;
+    applyBrightness();
+  } else if (kind === 'proximity' && value === true && cfg.display?.proximityWake !== false && nightOn) {
+    wakeUntil = Date.now() + 30_000;
+    setNight(false);
+  }
+};
 
 function tick() {
   const now = new Date();
   $('nClock').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
   $('nDate').textContent = now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
-  setNight(isNight(now) && Date.now() > wakeUntil);
+  if (darkSince && Date.now() - darkSince > 30_000) darkRoom = true;
+  const dark = darkRoom && cfg.display?.nightWhenDark === true;
+  setNight((isNight(now) || dark) && Date.now() > wakeUntil);
   const idle = cfg.display?.idleReturnSec ?? 90;
   const held = ruleHold && curPage === ruleHold.page;
   if (idle > 0 && !held && Date.now() - lastTouch > idle * 1000 && (curPage !== 0 || sheet || !$('overview').hidden)) {
@@ -2208,7 +2241,12 @@ function tick() {
 
 // ---------------------------------------------------------------- data from the agent
 function applyDisplay() {
-  try { bridge && bridge.setVolumeKeys && bridge.setVolumeKeys(cfg.display?.volumeKeys !== false); } catch (_) {}
+  if (PREVIEW || !bridge) return;
+  const d = cfg.display || {};
+  try { bridge.setVolumeKeys && bridge.setVolumeKeys(d.volumeKeys !== false); } catch (_) {}
+  try { bridge.setPinned && bridge.setPinned(d.pin === true); } catch (_) {}
+  try { bridge.setHomeScreen && bridge.setHomeScreen(d.homeScreen === true); } catch (_) {}
+  applyBrightness(true);
 }
 
 async function loadConfig() {

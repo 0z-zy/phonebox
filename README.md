@@ -143,6 +143,8 @@ Double-click the tray icon (or open <http://127.0.0.1:8765>):
 - **Shortcuts**: add, edit, reorder and test keys (label, emoji, colour, command, arguments, working folder).
 - **Webhooks**: the webhook key, copy-paste examples, test buttons and the values pushed so far.
 - **General**: weather location search, night mode, clock seconds, idle timeout, vibration, volume-key paging,
+  the phone's sensors (brightness that follows the room, the night screen when the room goes dark, wave to wake it),
+  kiosk options (screen pinning, the panel as the phone's home screen so it starts after a reboot; no root needed),
   phone selection, Wi-Fi & Tailscale, updates.
 - **Advanced**: the raw JSON.
 

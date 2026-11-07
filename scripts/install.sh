@@ -104,7 +104,8 @@ fi
 if [ "$apk" = 1 ]; then
   adb="$(command -v adb || true)"
   [ -n "$adb" ] || { echo "adb not found (see the top of this script)" >&2; exit 1; }
-  apkfile="$(ls -t "$root"/dist/PhoneBox-*.apk 2>/dev/null | head -n1 || true)"
+  # the newest of a release APK in dist/ and the last local build
+  apkfile="$(ls -t "$root"/dist/PhoneBox-*.apk "$root/android/app/build/outputs/apk/release/app-release.apk" 2>/dev/null | head -n1 || true)"
   if [ -z "$apkfile" ]; then
     echo "==> Building the APK (needs the Android SDK)"
     (cd "$root/android" && chmod +x gradlew && ./gradlew assembleRelease --console=plain -q)

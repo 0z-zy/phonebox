@@ -20,6 +20,14 @@ it lasts.
 **Live preview in the layout editor.** Switch the canvas to "Live preview" to run the real panel (served by the
 agent at `/panel/`) with your unsaved changes and live data; it follows the page you select.
 
+**Phone sensors and kiosk.** Brightness can follow the room (light sensor), the night screen can come on whenever
+the room is dark, and a hand near the phone wakes it (proximity sensor). Screen pinning keeps Home and Recents on
+the panel, and the panel can become the phone's home app, so it starts by itself after a reboot; neither needs root.
+
+**Fixes.** macOS reads processes from one `ps` snapshot (the list stayed empty with many processes); the phone no
+longer opens a second live stream after a quick pause and resume; `install.ps1 -Apk` rebuilds the APK when the app's
+sources are newer than the one in `dist\` (new `-BuildApk` forces it).
+
 **Live demo.** <https://ersinkoc.github.io/phonebox/> runs the real panel and layout editor in the browser with
 made-up data.
 

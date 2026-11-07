@@ -10,13 +10,17 @@ import java.io.Closeable
 class AgentStream(private val link: AgentLink, private val deliver: (event: String, data: String) -> Unit) {
 
     @Volatile private var running = false
+    // each start() gets a new generation; a thread from an earlier one (still connecting after a quick pause/resume)
+    // sees the change and ends, so there is never more than one stream
+    @Volatile private var generation = 0
     @Volatile private var current: Closeable? = null
     private var thread: Thread? = null
 
     fun start() {
         if (running) return
         running = true
-        thread = Thread(::loop, "agent-stream").apply { isDaemon = true; start() }
+        val gen = ++generation
+        thread = Thread({ loop(gen) }, "agent-stream").apply { isDaemon = true; start() }
     }
 
     fun stop() {
@@ -26,20 +30,24 @@ class AgentStream(private val link: AgentLink, private val deliver: (event: Stri
         thread = null
     }
 
-    private fun loop() {
-        while (running) {
+    private fun loop(gen: Int) {
+        val alive = { running && gen == generation }
+        while (alive()) {
             var opened = false
+            var body: Closeable? = null
             try {
                 val (route, reply) = link.stream("/api/stream") ?: throw java.io.IOException("offline")
                 if (reply.code != 200) { reply.body.close(); throw java.io.IOException("HTTP ${reply.code}") }
-                current = reply.body
+                if (!alive()) { reply.body.close(); break }
+                body = reply.body
+                current = body
                 opened = true
                 deliver("open", "{\"route\":\"${route.name.lowercase()}\"}")
                 val since = System.currentTimeMillis()
                 reply.body.bufferedReader(Charsets.UTF_8).use { r ->
                     var event = "message"
                     val data = StringBuilder()
-                    while (running) {
+                    while (alive()) {
                         val line = r.readLine() ?: break
                         when {
                             line.isEmpty() -> {
@@ -55,10 +63,10 @@ class AgentStream(private val link: AgentLink, private val deliver: (event: Stri
                 }
             } catch (_: Exception) {
             } finally {
-                current = null
+                if (current === body) current = null // a newer thread may own it already
             }
             if (opened) deliver("close", "{}")
-            if (running) try { Thread.sleep(if (opened) 300 else 2000) } catch (_: InterruptedException) {}
+            if (alive()) try { Thread.sleep(if (opened) 300 else 2000) } catch (_: InterruptedException) {}
         }
     }
 }

@@ -66,6 +66,16 @@ public sealed class DisplayConfig
     public bool Vibrate { get; set; } = true;
     /// <summary>The phone's volume keys switch pages.</summary>
     public bool VolumeKeys { get; set; } = true;
+    /// <summary>Screen brightness follows the room (the phone's light sensor).</summary>
+    public bool AutoBrightness { get; set; }
+    /// <summary>Show the night screen whenever the room is dark, not only at night.</summary>
+    public bool NightWhenDark { get; set; }
+    /// <summary>A hand near the phone (proximity sensor) wakes the night screen.</summary>
+    public bool ProximityWake { get; set; } = true;
+    /// <summary>Screen pinning: Home and Recents stay on the panel.</summary>
+    public bool Pin { get; set; }
+    /// <summary>The panel is the phone's home app: it starts after a reboot and Home returns to it.</summary>
+    public bool HomeScreen { get; set; }
 }
 
 public sealed class LanConfig

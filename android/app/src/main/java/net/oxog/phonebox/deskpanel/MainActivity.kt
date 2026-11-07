@@ -2,9 +2,17 @@ package net.oxog.phonebox.deskpanel
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.ActivityManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.BatteryManager
+import android.os.SystemClock
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -27,12 +35,16 @@ import org.json.JSONObject
  * over USB (adb reverse) or, once paired, over Wi-Fi / Tailscale (see AgentLink). The WebView itself therefore
  * never makes local-network requests (no CORS, mixed-content or local-network-access issues).
  */
-class MainActivity : Activity() {
+class MainActivity : Activity(), SensorEventListener {
 
     private lateinit var web: WebView
     private lateinit var link: AgentLink
     private lateinit var stream: AgentStream
     @Volatile private var volumeKeysFlipPages = true
+    private val sensors by lazy { getSystemService(SensorManager::class.java) }
+    private var lastLux = -1f
+    private var lastLuxAt = 0L
+    private var near: Boolean? = null
 
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
@@ -124,13 +136,42 @@ class MainActivity : Activity() {
         web.onResume()
         stream.start()
         hideSystemUi()
+        sensors?.getDefaultSensor(Sensor.TYPE_LIGHT)?.let { sensors?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        sensors?.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.let { sensors?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
     }
 
     override fun onPause() {
+        sensors?.unregisterListener(this)
         stream.stop()
         web.onPause()
         super.onPause()
     }
+
+    /**
+     * Room light (lux) and proximity for the panel: brightness that follows the room, the night screen when the room
+     * goes dark, and waking the night screen with a wave of the hand. Light is passed on when it changes noticeably.
+     */
+    override fun onSensorChanged(e: SensorEvent) {
+        when (e.sensor.type) {
+            Sensor.TYPE_LIGHT -> {
+                val lux = e.values[0]
+                val now = SystemClock.elapsedRealtime()
+                val jump = lastLux < 0 || kotlin.math.abs(lux - lastLux) > maxOf(3f, lastLux * 0.15f)
+                if (!jump && now - lastLuxAt < 10_000) return
+                if (now - lastLuxAt < 700) return
+                lastLux = lux; lastLuxAt = now
+                web.evaluateJavascript("window.onAndroidSensor && window.onAndroidSensor('light', $lux)", null)
+            }
+            Sensor.TYPE_PROXIMITY -> {
+                val isNear = e.values[0] < minOf(5f, e.sensor.maximumRange)
+                if (isNear == near) return
+                near = isNear
+                web.evaluateJavascript("window.onAndroidSensor && window.onAndroidSensor('proximity', $isNear)", null)
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
 
     inner class Bridge {
         /** Screen brightness 0..1; a negative value returns control to the system setting. */
@@ -177,6 +218,32 @@ class MainActivity : Activity() {
         /** Whether the volume keys flip pages (true) or change the phone's volume (false). */
         @JavascriptInterface
         fun setVolumeKeys(enabled: Boolean) { volumeKeysFlipPages = enabled }
+
+        /** Which sensors the phone has: {"light": true, "proximity": true}. */
+        @JavascriptInterface
+        fun sensors(): String = JSONObject()
+            .put("light", sensors?.getDefaultSensor(Sensor.TYPE_LIGHT) != null)
+            .put("proximity", sensors?.getDefaultSensor(Sensor.TYPE_PROXIMITY) != null)
+            .toString()
+
+        /**
+         * Screen pinning (lock task without a device owner): Home and Recents stay on the panel until it is unpinned
+         * (Back + Overview held together, or turning the setting off). Android asks once to confirm.
+         */
+        @JavascriptInterface
+        fun setPinned(on: Boolean) = runOnUiThread {
+            val pinned = getSystemService(ActivityManager::class.java).lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+            try { if (on && !pinned) startLockTask() else if (!on && pinned) stopLockTask() } catch (_: Exception) {}
+        }
+
+        /** Offers the panel as a home app (see HomeAlias in the manifest); the agent can then make it the default. */
+        @JavascriptInterface
+        fun setHomeScreen(on: Boolean) {
+            val alias = ComponentName(this@MainActivity, "$packageName.HomeAlias")
+            val want = if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            if (packageManager.getComponentEnabledSetting(alias) != want)
+                packageManager.setComponentEnabledSetting(alias, want, PackageManager.DONT_KILL_APP)
+        }
 
         @JavascriptInterface
         fun version(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: ""

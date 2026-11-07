@@ -9,6 +9,8 @@ namespace PhoneBox.Agent;
 public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : BackgroundService
 {
     public const string PanelActivity = "net.oxog.phonebox.deskpanel/.MainActivity";
+    private const string HomeAlias = "net.oxog.phonebox.deskpanel/.HomeAlias";
+    private readonly HashSet<string> _homeSet = [];
     private const string Rule = "tcp:8765";
 
     private string _lastState = "";
@@ -77,6 +79,18 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
             await Adb(adb, $"-s {d} shell am start -n {PanelActivity}", ct);
             log.LogInformation("{Device}: adb reverse set up, panel opened", d);
         }
+        // Settings › Display › home screen: the app offers itself as a home app; make it the default one (no root needed).
+        if (cfg.Get().Display.HomeScreen)
+        {
+            foreach (var d in devices.Where(d => !_homeSet.Contains(d)))
+            {
+                var r = await Adb(adb, $"-s {d} shell cmd package set-home-activity {HomeAlias}", ct);
+                if (!r.Contains("Success")) continue; // the app has not enabled its home entry yet; try again shortly
+                _homeSet.Add(d);
+                log.LogInformation("{Device}: PhoneBox is now the home app", d);
+            }
+        }
+        else _homeSet.Clear();
         Report($"phone connected: {Devices}");
     }
 

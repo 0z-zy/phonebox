@@ -298,7 +298,17 @@ dd { margin: 0; word-break: break-all; }
         <label class="check"><input type="checkbox" data-bind="display.showSeconds"> Show seconds on the clock</label>
         <label class="check"><input type="checkbox" data-bind="display.vibrate"> Vibrate when a session finishes or needs input</label>
         <label class="check"><input type="checkbox" data-bind="display.volumeKeys"> The phone's volume keys switch pages</label>
+        <label class="check"><input type="checkbox" data-bind="display.autoBrightness"> Brightness follows the room (light sensor)</label>
+        <label class="check"><input type="checkbox" data-bind="display.nightWhenDark"> Show the night screen whenever the room is dark</label>
+        <label class="check"><input type="checkbox" data-bind="display.proximityWake"> A hand near the phone wakes the night screen</label>
         <div class="field" style="max-width:260px;margin-top:12px"><label>Return to the first page after idle seconds (0 = never)</label><input type="number" min="0" max="3600" data-bind="display.idleReturnSec" data-type="int"></div>
+      </div>
+
+      <div class="card">
+        <h3>Kiosk</h3>
+        <p class="hint" style="margin:0 0 12px">Keep the phone on the panel. Neither needs root.</p>
+        <label class="check"><input type="checkbox" data-bind="display.pin"> Pin the panel: Home and Recents stay on it (Android asks once; hold Back and Overview together to unpin)</label>
+        <label class="check"><input type="checkbox" data-bind="display.homeScreen"> Use the panel as the phone's home screen: it starts after a reboot and Home returns to it (turn off to get your launcher back)</label>
       </div>
 
       <div class="card">

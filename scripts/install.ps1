@@ -6,7 +6,8 @@
   1. Stops a running agent.
   2. Publishes the agent to %LOCALAPPDATA%\PhoneBox\app (settings in %APPDATA%\PhoneBox are kept).
   3. Optionally adds a Start-with-Windows shortcut.
-  4. Optionally installs the panel APK on the connected phone (from dist\ or a fresh build).
+  4. Optionally installs the panel APK on the connected phone: the newest of dist\ and the last build, rebuilt
+     first when the app's sources are newer (or with -BuildApk).
   5. Starts the agent (it lives in the system tray).
 
 .EXAMPLE
@@ -15,6 +16,7 @@
 #>
 param(
     [switch]$Apk,        # also install the Android panel on the connected phone
+    [switch]$BuildApk,   # with -Apk: always build the APK first
     [switch]$Autostart,  # start the agent with Windows
     [string]$Serial      # phone serial when several devices are connected
 )
@@ -56,14 +58,20 @@ if ($Apk) {
     }
     if (-not $adb) { throw 'adb not found: winget install Google.PlatformTools' }
 
-    $apkFile = Get-ChildItem (Join-Path $root 'dist') -Filter 'PhoneBox-*.apk' -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $apkFile) {
-        Write-Host '==> Building the APK (no dist\PhoneBox-*.apk found)'
-        Push-Location (Join-Path $root 'android')
-        try { .\gradlew.bat assembleRelease --console=plain -q } finally { Pop-Location }
-        $apkFile = Get-Item (Join-Path $root 'android\app\build\outputs\apk\release\app-release.apk')
+    $built = Join-Path $root 'android\app\build\outputs\apk\release\app-release.apk'
+    $apkFile = @(Get-ChildItem (Join-Path $root 'dist') -Filter 'PhoneBox-*.apk' -ErrorAction SilentlyContinue) +
+        @(Get-Item $built -ErrorAction SilentlyContinue) | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (Test-Path (Join-Path $root 'android\gradlew.bat')) {
+        # in a source checkout, an APK from an older release must not win over newer app sources
+        $newestSource = Get-ChildItem (Join-Path $root 'android\app\src') -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($BuildApk -or -not $apkFile -or $newestSource.LastWriteTime -gt $apkFile.LastWriteTime) {
+            Write-Host '==> Building the APK'
+            Push-Location (Join-Path $root 'android')
+            try { .\gradlew.bat assembleRelease --console=plain -q } finally { Pop-Location }
+            $apkFile = Get-Item $built
+        }
     }
+    if (-not $apkFile) { throw 'No APK found in dist\ and no Android sources to build one' }
     if (-not $Serial) {
         $devices = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "`tdevice$" } | ForEach-Object { ($_ -split "`t")[0] })
         if ($devices.Count -eq 0) { throw 'No authorised Android device found (check the USB debugging prompt on the phone).' }
