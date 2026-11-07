@@ -849,7 +849,7 @@ function renderSheet() {
     const row = el('div', 'pi');
     const lbl = el('div', 'lbl');
     const primary = i.session ? '✳ ' + i.session : i.window || i.args || d.title;
-    const secondary = [i.session ? i.args : i.window ? i.args : null, i.startedAt ? 'started ' + shortDur(Date.now() - i.startedAt) + ' ago' : null]
+    const secondary = [i.session ? i.args : i.window ? i.args : null, i.startedAt ? (Date.now() - i.startedAt < 60_000 ? 'just started' : 'started ' + shortDur(Date.now() - i.startedAt) + ' ago') : null]
       .filter(Boolean).join(' · ');
     lbl.append(el('b', i.session ? 'sess' : '', primary), el('small', null, secondary));
     const num = el('div', 'num');
