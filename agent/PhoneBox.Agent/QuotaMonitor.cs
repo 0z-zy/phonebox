@@ -44,7 +44,7 @@ public sealed partial class QuotaMonitor(ILogger<QuotaMonitor> log) : Background
                 var ok = await RefreshClaude(ct);
                 _nextClaude = Environment.TickCount64 + (ok ? 180_000 : 60_000);
             }
-            await Task.Delay(TimeSpan.FromSeconds(30), ct);
+            await Wake.Delay(TimeSpan.FromSeconds(30), ct);
         }
     }
 

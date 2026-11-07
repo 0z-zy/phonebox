@@ -8,6 +8,7 @@ import android.os.BatteryManager
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.view.KeyEvent
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -30,6 +31,7 @@ class MainActivity : Activity() {
 
     private lateinit var web: WebView
     private lateinit var link: AgentLink
+    @Volatile private var volumeKeysFlipPages = true
 
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
@@ -93,6 +95,19 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Volume up / down flip to the previous / next page (unless turned off in the settings). */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val key = when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> "prev"
+            KeyEvent.KEYCODE_VOLUME_DOWN -> "next"
+            else -> null
+        }
+        if (key == null || !volumeKeysFlipPages) return super.dispatchKeyEvent(event)
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0)
+            web.evaluateJavascript("window.onAndroidKey && window.onAndroidKey('$key')", null)
+        return true
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         // Kiosk behaviour: Back does not leave the app, it returns to the first page.
@@ -151,6 +166,10 @@ class MainActivity : Activity() {
         /** "usb", "wifi" or "none": how the last agent request was delivered. */
         @JavascriptInterface
         fun transport(): String = link.route.name.lowercase()
+
+        /** Whether the volume keys flip pages (true) or change the phone's volume (false). */
+        @JavascriptInterface
+        fun setVolumeKeys(enabled: Boolean) { volumeKeysFlipPages = enabled }
 
         @JavascriptInterface
         fun version(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: ""

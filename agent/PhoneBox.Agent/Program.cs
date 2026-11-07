@@ -44,6 +44,8 @@ builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamin
 
 builder.Services.AddSingleton(configStore);
 builder.Services.AddSingleton<AudioControl>();
+builder.Services.AddSingleton<PushStore>();
+builder.Services.AddSingleton<CommandRunner>();
 AddMonitor<SystemMonitor>(builder.Services);
 AddMonitor<MediaMonitor>(builder.Services);
 AddMonitor<QuotaMonitor>(builder.Services);
@@ -66,7 +68,10 @@ app.Use(async (ctx, next) =>
     var origin = ctx.Request.Headers.Origin.ToString();
     if (lanCert is not null && ctx.Connection.LocalPort == lanCfg.Port)
     {
-        if (origin != "" || !Lan.AllowedOverLan(ctx.Request.Path) || !Lan.Matches(ctx.Request.Headers.Authorization, configStore.Get().Lan.Token!))
+        var token = configStore.Get().Lan.Token!;
+        var authorized = Lan.Matches(ctx.Request.Headers.Authorization, token)
+            || (Lan.IsWebhook(ctx.Request.Path) && Lan.MatchesQuery(ctx.Request.Query["token"], token)); // for senders that cannot set headers
+        if (origin != "" || !Lan.AllowedOverLan(ctx.Request.Path) || !authorized)
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
@@ -169,18 +174,65 @@ app.MapGet("/api/info", (AdbReverse adb, ConfigStore cfg) => Results.Json(new
 
 app.MapPost("/api/phone/open", async (AdbReverse adb) => { await adb.OpenPanelAsync(); return Results.Ok(); });
 
+// Widget types and page templates for the settings page's layout editor.
+app.MapGet("/api/catalog", () => Results.Text($"{{\"cols\":{Catalog.Cols},\"rows\":{Catalog.Rows},\"widgets\":{Catalog.WidgetsJson},\"templates\":{Catalog.TemplatesJson}}}",
+    "application/json; charset=utf-8"));
+
+// ---------------------------------------------------------------- webhook API: push data and events into the panel
+// POST /api/push/{key}       body: JSON or plain text (or ?value=); optional ?ttl=seconds. Shown by "push" widgets.
+// DELETE /api/push/{key}     removes a value; GET /api/push lists them.
+// POST /api/notify           {"title","text","level":"info|ok|warn|error","vibrate":true,"page":"<page id>","seconds":5} or plain text
+// POST /api/goto/{page}      switches the phone to a page (id, or 1-based number)
+// POST /api/refresh          refreshes quotas/GitHub now and makes the phone reload its settings and data; ?reload=1 reloads the whole panel
+app.MapGet("/api/push", (PushStore push) => Results.Json(new { version = push.Version, items = push.Snapshot() }));
+app.MapGet("/api/push/{key}", (string key, PushStore push) => push.Get(key) is { } item ? Results.Json(item) : Results.NotFound());
+app.MapMethods("/api/push/{key}", ["POST", "PUT"], async (string key, int? ttl, HttpRequest req, PushStore push) =>
+{
+    var (data, error) = await PushStore.ReadBody(req);
+    if (error is not null) return Results.BadRequest(new { error });
+    error = push.Set(key, data!.Value, ttl);
+    return error is null ? Results.Json(new { ok = true, key, version = push.Version }) : Results.BadRequest(new { error });
+});
+app.MapDelete("/api/push/{key}", (string key, PushStore push) => push.Remove(key) ? Results.Ok() : Results.NotFound());
+app.MapDelete("/api/push", (PushStore push) => { push.Clear(); return Results.Ok(); });
+
+app.MapPost("/api/notify", async (HttpRequest req, PushStore push) =>
+{
+    var (data, error) = await PushStore.ReadBody(req);
+    if (error is not null) return Results.BadRequest(new { error });
+    var d = data!.Value;
+    var payload = d.ValueKind == JsonValueKind.Object ? d : JsonSerializer.SerializeToElement(new { text = d.ToString() });
+    if (!payload.TryGetProperty("text", out _) && !payload.TryGetProperty("title", out _)) return Results.BadRequest(new { error = "give a text or a title" });
+    return Results.Json(push.Emit("notify", payload));
+});
+
+app.MapPost("/api/goto/{page}", (string page, PushStore push) => Results.Json(push.Emit("goto", JsonSerializer.SerializeToElement(new { page }))));
+
+app.MapPost("/api/refresh", (bool? reload, PushStore push) =>
+{
+    Wake.Now();
+    return Results.Json(push.Emit(reload == true ? "reload" : "refresh"));
+});
+
 // ---------------------------------------------------------------- phone panel API
-app.MapGet("/api/state", (SystemMonitor sys, MediaMonitor media, AudioControl audio, PingMonitor ping, ConfigStore cfg, UpdateService upd) => Results.Json(new
+app.MapGet("/api/state", (long? ev, SystemMonitor sys, MediaMonitor media, AudioControl audio, PingMonitor ping, ConfigStore cfg, UpdateService upd, PushStore push) => Results.Json(new
 {
     update = upd.Status() is { } u && (u.AppUpdate || u.AgentUpdate) ? new { latest = u.Latest, app = u.AppUpdate, agent = u.AgentUpdate } : null,
     ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
     host = Environment.MachineName,
     cfgVersion = cfg.Version,
+    pushVersion = push.Version,
+    evSeq = push.Seq,
+    events = ev is { } since ? push.Since(since) : [],
     pc = sys.Snapshot(),
     media = media.Snapshot(),
     audio = audio.Snapshot(),
     ping = ping.Snapshot(),
 }));
+
+// Output of a command widget (the command itself stays here).
+app.MapGet("/api/widget/{page}/{widget}", (string page, string widget, bool? force, CommandRunner runner) =>
+    runner.Get(page, widget, force == true) is { } r ? Results.Json(r) : Results.NotFound());
 
 app.MapGet("/api/config", (ConfigStore cfg) => Results.Json(new { version = cfg.Version, config = cfg.Get().ToPublic() }));
 
@@ -225,7 +277,7 @@ app.MapGet("/api/procs/detail", (string name, ProcessMonitor procs) => Results.J
 // ?name=X ends every instance of X; ?pid=N ends one process together with its children.
 app.MapPost("/api/procs/kill", (string? name, int? pid, ProcessMonitor procs, ConfigStore cfg) =>
 {
-    if (!cfg.Get().PageOption("procs", "allowKill", true))
+    if (!cfg.Get().AllowKill())
         return Results.Json(new KillResult(0, 0, "Terminating processes is disabled in the settings"), statusCode: 403);
     var r = pid is { } id ? procs.KillPid(id) : procs.Kill(name ?? "");
     return r.Killed > 0 ? Results.Json(r) : Results.Json(r, statusCode: 409);

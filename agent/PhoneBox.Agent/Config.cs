@@ -17,22 +17,27 @@ public sealed class AgentConfig
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
 
-    /// <summary>The part sent to the phone: commands (cmd/args/cwd) are never included.</summary>
+    /// <summary>The part sent to the phone: commands (shortcut cmd/args/cwd, command widget scripts) are never included.</summary>
     public object ToPublic() => new
     {
         weather = Weather,
         night = Night,
         display = Display,
-        pages = Pages,
+        pages = Pages.Select(p => new
+        {
+            p.Id, p.Title, p.Icon, p.Enabled,
+            widgets = (p.Widgets ?? []).Select(w => new
+            {
+                w.Id, w.Type, w.X, w.Y, w.W, w.H,
+                options = w.Type == "command" ? w.Options?.Where(o => o.Key != "command").ToDictionary() : w.Options,
+            }),
+        }),
         shortcuts = Shortcuts.Select(s => new { s.Id, s.Label, s.Icon, s.Color }),
     };
 
-    public bool PageEnabled(string type) => Pages.FirstOrDefault(p => p.Type == type)?.Enabled ?? false;
-
-    public bool PageOption(string type, string option, bool fallback) =>
-        Pages.FirstOrDefault(p => p.Type == type)?.Options is { } o && o.TryGetValue(option, out var v)
-            ? v.ValueKind == JsonValueKind.True || (v.ValueKind != JsonValueKind.False && fallback)
-            : fallback;
+    /// <summary>Ending processes is allowed when an enabled page has a processes widget that allows it.</summary>
+    public bool AllowKill() => Pages.Where(p => p.Enabled).SelectMany(p => p.Widgets ?? [])
+        .Any(w => w.Type == "processes" && w.Bool("allowKill") != false);
 }
 
 public sealed class WeatherConfig
@@ -57,6 +62,8 @@ public sealed class DisplayConfig
     public int IdleReturnSec { get; set; } = 90;
     /// <summary>Vibrate when a session finishes or needs input.</summary>
     public bool Vibrate { get; set; } = true;
+    /// <summary>The phone's volume keys switch pages.</summary>
+    public bool VolumeKeys { get; set; } = true;
 }
 
 public sealed class LanConfig
@@ -77,10 +84,37 @@ public sealed class UpdateConfig
 
 public sealed class PageConfig
 {
-    /// <summary>home | ai | work | system | procs | deck</summary>
-    public string Type { get; set; } = "";
+    public string Id { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Icon { get; set; } = "";
     public bool Enabled { get; set; } = true;
+    /// <summary>Widgets on a 12 x 6 grid.</summary>
+    public List<WidgetConfig>? Widgets { get; set; }
+
+    /// <summary>Create the page from this template (templates.json) when it has no widgets yet.</summary>
+    public string? Template { get; set; }
+    /// <summary>Pre-0.6.2 fixed page type (home | ai | work | system | procs | deck); migrated to widgets on load.</summary>
+    public string? Type { get; set; }
+    /// <summary>Pre-0.6.2 page options; migrated to widget options on load.</summary>
     public Dictionary<string, JsonElement>? Options { get; set; }
+}
+
+public sealed class WidgetConfig
+{
+    public string Id { get; set; } = "";
+    public string Type { get; set; } = "";
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int W { get; set; } = 1;
+    public int H { get; set; } = 1;
+    public Dictionary<string, JsonElement>? Options { get; set; }
+
+    public JsonElement? Opt(string key) => Options is not null && Options.TryGetValue(key, out var v) ? v : null;
+    public string? Str(string key) => Opt(key) is { ValueKind: JsonValueKind.String } v ? v.GetString() : null;
+    public int? Int(string key) => Opt(key) is { ValueKind: JsonValueKind.Number } v && v.TryGetDouble(out var d) ? (int)d : null;
+    public bool? Bool(string key) => Opt(key) is { } v ? v.ValueKind switch { JsonValueKind.True => true, JsonValueKind.False => false, _ => null } : null;
+    public void Set(string key, object? value) => (Options ??= [])[key] = JsonSerializer.SerializeToElement(value);
+    public WidgetConfig Clone() => new() { Id = Id, Type = Type, X = X, Y = Y, W = W, H = H, Options = Options?.ToDictionary(kv => kv.Key, kv => kv.Value.Clone()) };
 }
 
 public sealed class Shortcut
@@ -97,7 +131,8 @@ public sealed class Shortcut
 /// <summary>Reads/writes config.json; external edits are picked up on the next request.</summary>
 public sealed partial class ConfigStore(string path)
 {
-    public static readonly string[] PageTypes = ["home", "ai", "work", "system", "procs", "deck"];
+    /// <summary>Pages a fresh install (or an empty page list) starts with.</summary>
+    public static readonly string[] DefaultPages = ["home", "ai", "work", "system", "procs", "deck"];
 
     private static readonly JsonSerializerOptions ReadOpts = new()
     {
@@ -170,7 +205,7 @@ public sealed partial class ConfigStore(string path)
         return null;
     }
 
-    /// <summary>Fills in defaults: drops unknown pages, appends missing pages, generates unique shortcut ids.</summary>
+    /// <summary>Fills in defaults: builds pages from templates, migrates old pages, generates unique ids.</summary>
     private static AgentConfig Normalize(AgentConfig c)
     {
         c.Weather ??= new();
@@ -184,10 +219,7 @@ public sealed partial class ConfigStore(string path)
         if (string.IsNullOrWhiteSpace(c.Lan.Token)) c.Lan.Token = NewToken();
         c.Night.Brightness = Math.Clamp(c.Night.Brightness, 0.01, 1);
 
-        var pages = (c.Pages ?? []).Where(p => PageTypes.Contains(p.Type)).DistinctBy(p => p.Type).ToList();
-        foreach (var t in PageTypes)
-            if (pages.All(p => p.Type != t)) pages.Add(new PageConfig { Type = t, Enabled = true });
-        c.Pages = pages;
+        c.Pages = NormalizePages(c.Pages);
 
         var used = new HashSet<string>();
         foreach (var s in c.Shortcuts ??= [])
@@ -202,6 +234,99 @@ public sealed partial class ConfigStore(string path)
             if (string.IsNullOrWhiteSpace(s.Cwd)) s.Cwd = null;
         }
         return c;
+    }
+
+    /// <summary>Expands templates, migrates the old fixed pages, keeps widgets on the grid and makes ids unique.</summary>
+    private static List<PageConfig> NormalizePages(List<PageConfig>? input)
+    {
+        var src = input is { Count: > 0 } ? input : DefaultPages.Select(t => new PageConfig { Template = t }).ToList();
+        var pages = new List<PageConfig>();
+        var pageIds = new HashSet<string>();
+        foreach (var p in src)
+        {
+            if (p is null) continue;
+            var tpl = Catalog.Template(p.Template ?? p.Type);
+            if ((p.Widgets is null || p.Widgets.Count == 0) && tpl is not null)
+            {
+                p.Widgets = tpl.Widgets.Select(w => w.Clone()).ToList();
+                if (p.Type is not null) MigrateLegacy(p);
+            }
+            if (string.IsNullOrWhiteSpace(p.Title)) p.Title = tpl?.Title ?? "Page";
+            if (string.IsNullOrWhiteSpace(p.Icon)) p.Icon = tpl?.Icon ?? "▫️";
+            p.Title = p.Title.Trim();
+            var id = Slug(string.IsNullOrWhiteSpace(p.Id) ? (tpl?.Id ?? p.Title) : p.Id);
+            if (id == "") id = "page";
+            var unique = id;
+            for (var i = 2; !pageIds.Add(unique); i++) unique = $"{id}-{i}";
+            p.Id = unique;
+            p.Template = null;
+            p.Type = null;
+            p.Options = null;
+
+            var widgetIds = new HashSet<string>();
+            var widgets = new List<WidgetConfig>();
+            foreach (var w in p.Widgets ?? [])
+            {
+                if (w is null || !Catalog.IsWidget(w.Type)) continue;
+                var (minW, minH) = Catalog.MinSize(w.Type);
+                w.W = Math.Clamp(w.W, Math.Min(minW, Catalog.Cols), Catalog.Cols);
+                w.H = Math.Clamp(w.H, Math.Min(minH, Catalog.Rows), Catalog.Rows);
+                w.X = Math.Clamp(w.X, 0, Catalog.Cols - w.W);
+                w.Y = Math.Clamp(w.Y, 0, Catalog.Rows - w.H);
+                var wid = Slug(string.IsNullOrWhiteSpace(w.Id) ? w.Type : w.Id);
+                if (wid == "") wid = w.Type;
+                var wu = wid;
+                for (var i = 2; !widgetIds.Add(wu); i++) wu = $"{wid}-{i}";
+                w.Id = wu;
+                widgets.Add(w);
+            }
+            p.Widgets = widgets;
+            pages.Add(p);
+        }
+        if (pages.Count > 0 && pages.All(p => !p.Enabled)) pages[0].Enabled = true;
+        return pages;
+    }
+
+    /// <summary>Carries the options of a pre-0.6.2 fixed page over to the widgets of its template.</summary>
+    private static void MigrateLegacy(PageConfig p)
+    {
+        bool On(string key, bool fallback = true) =>
+            p.Options is not null && p.Options.TryGetValue(key, out var v) ? v.ValueKind != JsonValueKind.False : fallback;
+        var ws = p.Widgets!;
+        WidgetConfig? Find(string type) => ws.FirstOrDefault(w => w.Type == type);
+        switch (p.Type)
+        {
+            case "home":
+                var clock = Find("clock");
+                clock?.Set("weather", On("weather"));
+                var tiles = p.Options?.TryGetValue("tiles", out var t) == true && t.ValueKind == JsonValueKind.Array
+                    ? t.EnumerateArray().Select(x => x.GetString()).OfType<string>().ToList()
+                    : ["cpu", "gpu", "ram", "net"];
+                ws.RemoveAll(w => w.Type == "stat");
+                if (!On("media")) { ws.RemoveAll(w => w.Type == "media"); if (clock is not null) clock.W = 12; }
+                foreach (var w in ws) w.H = tiles.Count > 0 ? 4 : 6;
+                for (var i = 0; i < tiles.Count; i++)
+                {
+                    var tw = new WidgetConfig { Type = "stat", X = 12 * i / tiles.Count, Y = 4, H = 2 };
+                    tw.W = 12 * (i + 1) / tiles.Count - tw.X;
+                    tw.Set("metric", tiles[i]);
+                    ws.Add(tw);
+                }
+                break;
+            case "ai":
+                Find("quotas")?.Set("providers", new[] { "claude", "codex" }.Where(x => On(x)).ToArray());
+                break;
+            case "work":
+                if (!On("sessions")) { ws.RemoveAll(w => w.Type == "sessions"); if (Find("github") is { } g) { g.X = 0; g.W = 12; } }
+                else if (!On("github")) { ws.RemoveAll(w => w.Type == "github"); if (Find("sessions") is { } s) s.W = 12; }
+                break;
+            case "procs":
+                Find("processes")?.Set("allowKill", On("allowKill"));
+                break;
+            case "deck":
+                if (p.Options?.TryGetValue("columns", out var cols) == true && cols.TryGetInt32(out var n)) Find("shortcuts")?.Set("columns", n);
+                break;
+        }
     }
 
     private static string NewToken() =>

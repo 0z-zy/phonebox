@@ -69,11 +69,21 @@ public static class Lan
         return CryptographicOperations.FixedTimeEquals(given, expected);
     }
 
+    public static bool MatchesQuery(string? given, string token) =>
+        !string.IsNullOrEmpty(given) && CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(given), System.Text.Encoding.UTF8.GetBytes(token));
+
     /// <summary>Endpoints the phone may use over Wi-Fi. Settings, tests and pairing stay local-only.</summary>
     public static bool AllowedOverLan(PathString path) =>
         path.StartsWithSegments("/api/state") || path.StartsWithSegments("/api/config") || path.StartsWithSegments("/api/art")
         || path.StartsWithSegments("/api/media") || path.StartsWithSegments("/api/volume") || path.StartsWithSegments("/api/quotas")
-        || path.StartsWithSegments("/api/work") || path.StartsWithSegments("/api/procs") || path.StartsWithSegments("/api/run");
+        || path.StartsWithSegments("/api/work") || path.StartsWithSegments("/api/procs") || path.StartsWithSegments("/api/run")
+        || path.StartsWithSegments("/api/widget") || IsWebhook(path);
+
+    /// <summary>The webhook API: other machines on the network (or Tailscale) may push data with the same token.</summary>
+    public static bool IsWebhook(PathString path) =>
+        path.StartsWithSegments("/api/push") || path.StartsWithSegments("/api/notify")
+        || path.StartsWithSegments("/api/goto") || path.StartsWithSegments("/api/refresh");
 
     public static IPAddress Any => IPAddress.Any;
 }

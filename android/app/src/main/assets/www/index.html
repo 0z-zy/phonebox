@@ -7,152 +7,29 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="pager">
+<!-- Pages and widgets are built by app.js from the layout designed in the agent's settings page. -->
+<div id="pager"></div>
 
-  <!-- HOME -->
-  <section class="page home" data-page="home">
-    <div class="clock-col">
-      <div class="status">
-        <span class="dot" id="pcDot"></span><span id="pcName">Connecting…</span>
-        <span class="sep">·</span><span id="phoneBat"></span>
-        <span id="qMini"></span>
-        <span id="sMini"></span>
-        <span id="upd"></span>
-      </div>
-      <div class="clock"><span id="hh">--</span><span class="colon">:</span><span id="mm">--</span><span class="sec" id="ss">--</span></div>
-      <div class="date" id="date"></div>
-      <div class="weather" id="weather">
-        <span class="wx-icon" id="wxIcon">·</span>
-        <span class="wx-temp" id="wxTemp">--°</span>
-        <div class="wx-meta">
-          <span id="wxDesc">Loading weather…</span>
-          <span id="wxRange" class="muted"></span>
-        </div>
-      </div>
-    </div>
+<nav id="dots" title="All pages"></nav>
+<div id="ptitle"></div>
 
-    <div class="card media" id="media">
-      <div class="m-top">
-        <div class="art-wrap"><img id="art" alt=""><div class="art-ph">♪</div></div>
-        <div class="m-text">
-          <div class="m-app" id="mApp">Media</div>
-          <div class="m-title" id="mTitle">Nothing playing</div>
-          <div class="m-artist" id="mArtist">Start something in Spotify</div>
-        </div>
-      </div>
-      <div class="m-progress">
-        <div class="bar" id="mBar"><div class="fill" id="mFill"></div></div>
-        <div class="times"><span id="mPos">0:00</span><span id="mDur">0:00</span></div>
-      </div>
-      <div class="m-controls">
-        <button class="ic" data-media="prev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg></button>
-        <button class="ic play" data-media="playpause" aria-label="Play/Pause">
-          <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-          <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
-        </button>
-        <button class="ic" data-media="next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg></button>
-        <div class="vol">
-          <button class="ic sm" id="muteBtn" aria-label="Mute">
-            <svg class="i-vol" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zm11.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
-            <svg class="i-mute" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zm12.6 3 2.2-2.2-1.4-1.4-2.2 2.2-2.2-2.2-1.4 1.4 2.2 2.2-2.2 2.2 1.4 1.4 2.2-2.2 2.2 2.2 1.4-1.4z"/></svg>
-          </button>
-          <input type="range" id="vol" min="0" max="100" step="1" value="50">
-          <span class="vol-val" id="volVal">--</span>
-        </div>
-      </div>
-      <div class="offline-msg">
-        <b>Computer not connected</b>
-        <span>Is the PhoneBox agent running? Plug in the USB cable, or turn on Wi-Fi in the PhoneBox settings and pair once over USB.</span>
-      </div>
-    </div>
-
-    <div class="tiles" id="tiles">
-      <div class="tile" data-tile="cpu" style="--c:var(--cpu)"><canvas id="sCpu"></canvas>
-        <div class="t-label">CPU</div><div class="t-val"><b id="tCpu">—</b><small>%</small></div><div class="t-sub" id="tCpuSub">&nbsp;</div></div>
-      <div class="tile" data-tile="gpu" style="--c:var(--gpu)"><canvas id="sGpu"></canvas>
-        <div class="t-label">GPU</div><div class="t-val"><b id="tGpu">—</b><small>%</small></div><div class="t-sub" id="tGpuSub">&nbsp;</div></div>
-      <div class="tile" data-tile="ram" style="--c:var(--ram)"><canvas id="sRam"></canvas>
-        <div class="t-label">RAM</div><div class="t-val"><b id="tRam">—</b><small>GB</small></div><div class="t-sub" id="tRamSub">&nbsp;</div></div>
-      <div class="tile" data-tile="net" style="--c:var(--net)"><canvas id="sNet"></canvas>
-        <div class="t-label">NETWORK</div><div class="t-val"><b id="tNet">—</b><small id="tNetU"></small></div><div class="t-sub" id="tNetSub">&nbsp;</div></div>
-    </div>
-  </section>
-
-  <!-- AI QUOTAS -->
-  <section class="page ai" data-page="ai">
-    <div class="q-grid" id="qGrid"><div class="deck-empty">Quota data arrives once the computer is connected.</div></div>
-  </section>
-
-  <!-- SESSIONS & GITHUB -->
-  <section class="page work" data-page="work">
-    <div class="card w-sessions" id="wSessions">
-      <div class="w-head"><span class="s-label" style="--c:#d97757">Sessions</span><span class="w-sum" id="sSum"></span></div>
-      <div class="s-list" id="sList"><div class="deck-empty">Waiting for session data…</div></div>
-    </div>
-    <div class="card w-gh" id="wGithub">
-      <div class="w-head"><span class="s-label" style="--c:#c9d1d9">GitHub</span><span class="w-sum" id="ghUser"></span><span class="gh-bell" id="ghBell"></span></div>
-      <div class="gh-sec"><span>Review requests</span><b id="ghRevCount"></b></div>
-      <div class="gh-list" id="ghRev"></div>
-      <div class="gh-sec"><span>My pull requests</span><b id="ghMineCount"></b></div>
-      <div class="gh-list" id="ghMine"></div>
-      <div class="gh-err" id="ghErr"></div>
-    </div>
-  </section>
-
-  <!-- SYSTEM -->
-  <section class="page system" data-page="system">
-    <div class="card sys" style="--c:var(--cpu)">
-      <div class="s-head"><span class="s-label">Processor</span><span class="s-name" id="cpuName"></span></div>
-      <div class="s-main"><b id="cpuBig">—</b><small>%</small><span class="chips" id="cpuChips"></span></div>
-      <canvas id="cCpu"></canvas>
-    </div>
-    <div class="card sys" style="--c:var(--gpu)">
-      <div class="s-head"><span class="s-label">Graphics</span><span class="s-name" id="gpuName"></span></div>
-      <div class="s-main"><b id="gpuBig">—</b><small>%</small><span class="chips" id="gpuChips"></span></div>
-      <canvas id="cGpu"></canvas>
-    </div>
-    <div class="card sys" style="--c:var(--ram)">
-      <div class="s-head"><span class="s-label">Memory</span><span class="s-name" id="uptime"></span></div>
-      <div class="meters">
-        <div class="meter"><div class="m-row"><span>RAM</span><span id="ramTxt">—</span></div><div class="track"><i id="ramBar"></i></div></div>
-        <div class="meter" style="--c:var(--gpu)"><div class="m-row"><span>VRAM</span><span id="vramTxt">—</span></div><div class="track"><i id="vramBar"></i></div></div>
-        <div id="disks"></div>
-      </div>
-    </div>
-    <div class="card sys" style="--c:var(--net)">
-      <div class="s-head"><span class="s-label">Network</span><span class="s-name"><span class="down">↓ <b id="netDown">—</b></span> &nbsp; <span class="up">↑ <b id="netUp">—</b></span></span></div>
-      <div class="s-name" id="netPing" style="margin-top:2px"></div>
-      <canvas id="cNet" class="tall"></canvas>
-    </div>
-  </section>
-
-  <!-- PROCESSES -->
-  <section class="page procs" data-page="procs">
-    <div class="p-head">
-      <span class="s-label" style="--c:#f472b6">Processes</span>
-      <span class="p-sum" id="pSum"></span>
-      <div class="seg" id="pSort"><button data-sort="cpu" class="on">CPU</button><button data-sort="mem">RAM</button></div>
-    </div>
-    <div class="p-grid" id="pGrid"><div class="deck-empty">Processes appear once the computer is connected.</div></div>
-    <div class="p-sheet" id="pSheet" hidden>
-      <div class="ps-head">
-        <div class="p-ico" id="psIco"></div>
-        <div class="ps-title"><b id="psTitle"></b><small id="psSub"></small></div>
-        <button class="ps-btn danger" id="psAll">End all</button>
-        <button class="ps-btn" id="psClose" aria-label="Close">✕</button>
-      </div>
-      <div class="ps-list" id="psList"></div>
-    </div>
-  </section>
-
-  <!-- SHORTCUTS -->
-  <section class="page deck" data-page="deck">
-    <div class="deck-grid" id="deck"></div>
-  </section>
+<div id="overview" hidden>
+  <div class="ov-head">All pages <small>tap one to jump · volume keys flip pages · long-press a page to come back here</small></div>
+  <div id="ovGrid"></div>
 </div>
 
-<nav id="dots"></nav>
+<div class="p-sheet" id="pSheet" hidden>
+  <div class="ps-head">
+    <div class="p-ico" id="psIco"></div>
+    <div class="ps-title"><b id="psTitle"></b><small id="psSub"></small></div>
+    <button class="ps-btn danger" id="psAll">End all</button>
+    <button class="ps-btn" id="psClose" aria-label="Close">✕</button>
+  </div>
+  <div class="ps-list" id="psList"></div>
+</div>
+
 <div class="toast" id="toast"></div>
+<div id="offline">PC not connected</div>
 <div id="night"><div id="nClock">--:--</div><div id="nDate"></div></div>
 
 <script src="app.js"></script>

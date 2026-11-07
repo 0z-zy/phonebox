@@ -12,7 +12,7 @@
     <Product>PhoneBox</Product>
     <Company>PhoneBox</Company>
     <Description>PhoneBox desktop agent: feeds the PhoneBox Android desk panel over USB or Wi-Fi.</Description>
-    <Version>0.6.1</Version>
+    <Version>0.6.2</Version>
     <ApplicationIcon>phonebox.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
@@ -21,6 +21,8 @@
     <EmbeddedResource Include="config.default.json" LogicalName="config.default.json" />
     <EmbeddedResource Include="phonebox.ico" LogicalName="phonebox.ico" />
     <EmbeddedResource Include="settings.html" LogicalName="settings.html" />
+    <EmbeddedResource Include="widgets.json" LogicalName="widgets.json" />
+    <EmbeddedResource Include="templates.json" LogicalName="templates.json" />
   </ItemGroup>
 
 </Project>

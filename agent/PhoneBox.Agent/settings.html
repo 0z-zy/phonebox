@@ -40,7 +40,7 @@ header .ver { color: var(--muted); font-size: 12px; }
 .icon-btn { border: 1px solid var(--line); background: var(--panel); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; display: grid; place-items: center; }
 .icon-btn:disabled { opacity: .3; cursor: default; }
 
-.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 24px; max-width: 1180px; margin: 0 auto; padding: 24px; }
+.layout { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 24px; max-width: 1400px; margin: 0 auto; padding: 24px; }
 nav { position: sticky; top: 76px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
 nav a { padding: 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; }
 nav a:hover { background: var(--panel-2); }
@@ -71,20 +71,60 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .switch input:checked + span { background: var(--accent); }
 .switch input:checked + span::after { left: 21px; }
 
-/* pages */
-.order { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
-.order span { font-size: 12px; padding: 4px 10px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line); }
-.order span.off { opacity: .4; text-decoration: line-through; }
-.page-item { display: grid; grid-template-columns: auto auto 1fr auto; gap: 14px; align-items: start; }
-.page-item.dragging { opacity: .4; }
-.page-item.over { outline: 2px dashed var(--accent); outline-offset: 3px; }
-.handle { cursor: grab; color: var(--muted); font-size: 18px; line-height: 30px; user-select: none; }
-.page-num { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; background: var(--panel-2); border: 1px solid var(--line); }
-.page-body h4 { margin: 4px 0 2px; font-size: 15px; }
-.page-body p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
-.page-item.disabled .page-body { opacity: .5; }
-.page-ctrl { display: flex; gap: 6px; align-items: center; }
+/* pages: layout editor */
+.pages-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 16px; align-items: start; }
+#pageTabs { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 4px; }
+.ptab { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 9px; cursor: pointer; border: 1px solid transparent; user-select: none; }
+.ptab:hover { background: var(--panel-2); }
+.ptab.on { background: var(--panel); border-color: var(--line); box-shadow: var(--shadow); font-weight: 600; }
+.ptab.off .pt-name, .ptab.off .pt-ico { opacity: .4; text-decoration: line-through; }
+.ptab.dragging { opacity: .4; }
+.ptab.over { outline: 2px dashed var(--accent); }
+.pt-num { width: 20px; color: var(--muted); font-size: 12px; text-align: right; }
+.pt-ico { font-size: 16px; }
+.pt-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pt-n { font-size: 11px; color: var(--muted); background: var(--panel-2); border-radius: 6px; padding: 0 6px; }
+.canvas-wrap { display: flex; justify-content: center; }
+.phone { width: 100%; max-width: 860px; padding: 14px 18px; border-radius: 28px; background: #06080b; border: 1px solid #22262e; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.canvas { position: relative; aspect-ratio: 752 / 333; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(6, 1fr); gap: 6px; touch-action: none; }
+.canvas .cell { border-radius: 6px; background: rgba(255,255,255,.035); }
+.wb { position: relative; z-index: 1; border-radius: 10px; background: #1a2230; border: 1.5px solid #2c3647; color: #e8ecf1; cursor: grab; overflow: hidden; display: flex; container-type: size; }
+.wb:active { cursor: grabbing; }
+.wb.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); z-index: 2; }
+.wb-in { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4px; gap: 1px; pointer-events: none; }
+.wb-ico { font-size: clamp(14px, 30cqmin, 34px); line-height: 1.1; }
+.wb b { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.wb small { font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+@container (max-height: 52px) { .wb small { display: none; } }
+@container (max-height: 36px) { .wb b { display: none; } }
+.rz { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--accent) 50%); border-bottom-right-radius: 8px; opacity: .7; }
+.ed-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.palette { display: grid; grid-template-columns: 1fr; gap: 4px; max-height: 560px; overflow-y: auto; }
+.pal { display: flex; gap: 10px; align-items: center; text-align: left; padding: 6px 8px; border-radius: 9px; border: 1px solid transparent; background: none; cursor: pointer; }
+.pal:hover { background: var(--panel-2); border-color: var(--line); }
+.pal-ico { font-size: 20px; width: 28px; text-align: center; }
+.pal b { display: block; font-size: 13px; }
+.pal small { display: block; font-size: 12px; color: var(--muted); line-height: 1.3; }
 .opts { display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: center; }
+textarea { width: 100%; resize: vertical; }
+[hidden] { display: none !important; }
+.modal { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; width: min(1000px, 100%); max-height: 90vh; overflow-y: auto; }
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.tpl { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; }
+.tpl:hover { border-color: var(--accent); }
+.tpl small { color: var(--muted); font-size: 12px; }
+.mini { aspect-ratio: 2.26; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(6, 1fr); gap: 2px; background: #06080b; border-radius: 8px; padding: 4px; margin-bottom: 4px; }
+.mini span { background: #1f2937; border-radius: 3px; display: grid; place-items: center; font-size: 12px; overflow: hidden; }
+.empty-mini { display: grid; place-items: center; font-size: 28px; color: #64748b; }
+/* webhooks */
+.ex { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 6px; }
+.ex span { color: var(--muted); font-size: 13px; }
+.cmdline { display: block; cursor: copy; white-space: nowrap; overflow-x: auto; padding: 6px 10px; font: 12px/1.5 Consolas, "Cascadia Mono", monospace; }
+table.items { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.items td { border-top: 1px solid var(--line); padding: 6px 8px; vertical-align: middle; }
+table.items td.val { font-family: Consolas, monospace; font-size: 12px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1100px) { .pages-layout, .ed-cols { grid-template-columns: 1fr; } #pageTabs { position: static; } }
 
 /* shortcuts */
 .deck { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -154,6 +194,7 @@ dd { margin: 0; word-break: break-all; }
   <nav id="nav">
     <a href="#pages" class="on">Pages</a>
     <a href="#shortcuts">Shortcuts</a>
+    <a href="#webhooks">Webhooks</a>
     <a href="#general">General</a>
     <a href="#advanced">Advanced</a>
   </nav>
@@ -161,14 +202,18 @@ dd { margin: 0; word-break: break-all; }
   <main>
     <section id="pages" class="on">
       <h2>Pages</h2>
-      <p class="lead">Choose which pages the phone shows and in what order. Drag or use the arrows to reorder. The first page is the home page the panel returns to when idle.</p>
-      <div class="order" id="orderPreview"></div>
-      <div id="pageList"></div>
+      <p class="lead">Each page is a 12 × 6 grid of widgets. Pick a page on the left, arrange its widgets on the phone below and set their options.
+        Drag pages to reorder them; the first one is the home page the panel returns to when idle. On the phone, swipe, use the volume keys,
+        or tap the dots (or long-press a page) for an overview of all pages.</p>
+      <div class="pages-layout">
+        <div id="pageTabs"></div>
+        <div id="pageEditor"></div>
+      </div>
     </section>
 
     <section id="shortcuts">
       <h2>Shortcuts</h2>
-      <p class="lead">The keys on the Shortcuts page. Click a key to edit it, drag to reorder. The phone only sends the key's id; commands never leave this computer.</p>
+      <p class="lead">The keys shown by Shortcut grid and Big button widgets. Click a key to edit it, drag to reorder. The phone only sends the key's id; commands never leave this computer.</p>
       <div class="deck" id="deck"></div>
       <div class="card editor" id="editor"></div>
     </section>
@@ -209,6 +254,7 @@ dd { margin: 0; word-break: break-all; }
         <h3>Display</h3>
         <label class="check"><input type="checkbox" data-bind="display.showSeconds"> Show seconds on the clock</label>
         <label class="check"><input type="checkbox" data-bind="display.vibrate"> Vibrate when a session finishes or needs input</label>
+        <label class="check"><input type="checkbox" data-bind="display.volumeKeys"> The phone's volume keys switch pages</label>
         <div class="field" style="max-width:260px;margin-top:12px"><label>Return to the first page after idle seconds (0 = never)</label><input type="number" min="0" max="3600" data-bind="display.idleReturnSec" data-type="int"></div>
       </div>
 
@@ -242,6 +288,34 @@ dd { margin: 0; word-break: break-all; }
       </div>
     </section>
 
+    <section id="webhooks">
+      <h2>Webhooks</h2>
+      <p class="lead">Push data into the panel from scripts, CI jobs, Home Assistant, cron &hellip; Values show up in <b>Pushed value</b> widgets
+        (key = the last part of the URL), notifications in a toast on the phone and in the <b>Notifications</b> widget. Values survive restarts.</p>
+      <div class="card">
+        <h3>Try it</h3>
+        <div class="row" style="gap:8px">
+          <button class="btn" id="whNotify">Send a test notification</button>
+          <button class="btn" id="whPush">Push a test value (key "demo")</button>
+          <button class="btn" id="whRefresh">Refresh the panel</button>
+          <button class="btn" id="whReload">Reload the panel</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Examples</h3>
+        <div id="whExamples"></div>
+        <p class="hint">JSON payloads may carry <code>value</code>, <code>title</code>, <code>sub</code>, <code>unit</code>, <code>icon</code>, <code>color</code>,
+          <code>level</code> (ok / warn / error), <code>progress</code> (0&ndash;1 or 0&ndash;100), <code>items</code> (a list) and <code>ttl</code> (seconds).
+          Plain text or a number works too. Notifications take <code>title</code>, <code>text</code>, <code>level</code>, <code>vibrate</code>,
+          <code>seconds</code>, <code>wake</code> (light up the night screen) and <code>page</code> (switch to it).</p>
+      </div>
+      <div class="card"><h3>From other machines</h3><div id="whLan"></div></div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Current values</h3><button class="btn sm danger" id="whClear">Delete all</button></div>
+        <table class="items"><tbody id="whItems"></tbody></table>
+      </div>
+    </section>
+
     <section id="advanced">
       <h2>Advanced</h2>
       <p class="lead">The raw settings. "Apply JSON" loads your edits into the form; Save writes them to disk.</p>
@@ -257,6 +331,7 @@ dd { margin: 0; word-break: break-all; }
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="modal" id="modal" hidden><div class="modal-box"><div id="modalBody"></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn" id="modalClose">Cancel</button></div></div></div>
 
 <script>
 'use strict';
@@ -274,15 +349,6 @@ const h = (tag, attrs = {}, ...kids) => {
   return e;
 };
 
-const PAGE_META = {
-  home:   { name: 'Home',              desc: 'Clock, date, weather, now playing and summary system tiles.' },
-  ai:     { name: 'AI quotas',         desc: 'Claude and Codex usage limits, reset times and burn-rate forecast.' },
-  work:   { name: 'Sessions & GitHub', desc: 'Live status of Claude Code / Codex sessions, pull requests and CI.' },
-  system: { name: 'System',            desc: 'CPU, GPU, memory, disk and network charts.' },
-  procs:  { name: 'Processes',         desc: 'Top apps by CPU/RAM, with confirm-to-kill.' },
-  deck:   { name: 'Shortcuts',         desc: 'Keys that run commands on this computer.' },
-};
-const TILES = [['cpu', 'CPU'], ['gpu', 'GPU'], ['ram', 'RAM'], ['net', 'Network']];
 const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#e5b84b', '#84cc16', '#22c55e', '#14b8a6', '#0ea5e9', '#2f80ed', '#6366f1', '#a855f7', '#ec4899', '#d97757', '#64748b', '#9ca3af'];
 const EMOJIS = ['⌨️', '💻', '📁', '📝', '🌐', '🎧', '🎵', '💬', '📧', '📅', '🧮', '⚙️', '✂️', '📊', '🔇', '🔊', '🌙', '🔒', '🚀', '🐙', '🐳', '🧪', '🛠️', '📦', '🎮', '📷', '🎙️', '⭐', '✳️', '🦊'];
 const PRESETS = [
@@ -318,16 +384,6 @@ function setPath(o, p, v) {
   for (const k of ks.slice(0, -1)) a = a[k] ??= {};
   a[ks.at(-1)] = v;
 }
-function page(type) { return cfg.pages.find((p) => p.type === type); }
-function opt(type, key, fallback) {
-  const o = page(type)?.options;
-  return o && key in o ? o[key] : fallback;
-}
-function setOpt(type, key, val) {
-  const p = page(type);
-  p.options = { ...(p.options || {}), [key]: val };
-}
-
 function changed() {
   const dirty = JSON.stringify(cfg) !== saved;
   $('save').disabled = !dirty;
@@ -336,59 +392,321 @@ function changed() {
   $('json').value = JSON.stringify(cfg, null, 2);
 }
 
-// ---------------------------------------------------------------- pages
+// ---------------------------------------------------------------- pages: visual layout editor
+let catalog = { cols: 12, rows: 6, widgets: [], templates: [] };
+let selPage = 0;
+let selWidget = -1;
+const widgetDef = (type) => catalog.widgets.find((w) => w.type === type) || { type, name: type, icon: '▫️', options: [], minW: 1, minH: 1, w: 2, h: 2 };
+const curPage = () => cfg.pages[selPage];
+
+function deckCols() {
+  for (const p of cfg.pages) for (const w of p.widgets || []) if (w.type === 'shortcuts') return w.options?.columns || 4;
+  return 4;
+}
+
+function optVal(w, o) { return w.options && o.key in w.options ? w.options[o.key] : o.default; }
+function setWOpt(w, key, val) { w.options = { ...(w.options || {}), [key]: val }; changed(); renderCanvas(); }
+
+/** One-line description of a widget for the canvas. */
+function widgetSummary(w) {
+  const o = w.options || {}, d = widgetDef(w.type);
+  const choice = (key) => { const def = d.options.find((x) => x.key === key); const v = optVal(w, def || { key }); return def?.choices?.find((c) => c[0] === v)?.[1] ?? v; };
+  switch (w.type) {
+    case 'stat': case 'gauge': return choice('metric');
+    case 'chart': return (o.metrics || ['cpu']).join(' + ');
+    case 'forecast': return choice('mode');
+    case 'push': return 'key: ' + (o.key || '?');
+    case 'command': return o.title || 'Command';
+    case 'note': return (o.text || '').split('\n')[0];
+    case 'label': return o.text || '';
+    case 'countdown': return o.label || '';
+    case 'button': return cfg.shortcuts.find((s) => s.id === o.id)?.label || 'pick a shortcut';
+    case 'shortcuts': return (o.ids?.length ? `${o.ids.length} keys` : 'all keys') + ` · ${o.columns || 4} columns`;
+    case 'worldclock': return (o.zones || d.options[0]?.default || []).map((z) => z.split('=')[0]).join(' · ');
+    case 'quotas': return (o.providers || ['claude', 'codex']).join(' + ');
+    default: return '';
+  }
+}
+
+function overlaps(page, w, x, y, ww, hh) {
+  return (page.widgets || []).some((o) => o !== w && x < o.x + o.w && o.x < x + ww && y < o.y + o.h && o.y < y + hh);
+}
+
+/** First free spot for a ww × hh widget, shrinking it if the page is too full. */
+function freeSpot(page, ww, hh, minW, minH) {
+  for (let s = 0; s < 6; s++) {
+    for (let y = 0; y + hh <= catalog.rows; y++)
+      for (let x = 0; x + ww <= catalog.cols; x++)
+        if (!overlaps(page, null, x, y, ww, hh)) return { x, y, w: ww, h: hh };
+    if (ww > minW) ww = Math.max(minW, ww - 2); else if (hh > minH) hh = Math.max(minH, hh - 1); else break;
+  }
+  return null;
+}
+
 function renderPages() {
-  const list = $('pageList');
-  list.textContent = '';
-  $('orderPreview').replaceChildren(
-    h('b', { style: { fontSize: '12px', alignSelf: 'center', marginRight: '4px' } }, 'Order on the phone:'),
-    ...cfg.pages.map((p) => h('span', { class: p.enabled ? '' : 'off' }, PAGE_META[p.type].name)));
+  if (selPage >= cfg.pages.length) selPage = Math.max(0, cfg.pages.length - 1);
+  const list = $('pageTabs');
+  list.replaceChildren(...cfg.pages.map((p, i) => {
+    const row = h('div', { class: 'ptab' + (i === selPage ? ' on' : '') + (p.enabled === false ? ' off' : ''), draggable: 'true', 'data-i': i,
+      onclick: () => { selPage = i; selWidget = -1; renderPages(); } },
+      h('span', { class: 'pt-num' }, String(i + 1)), h('span', { class: 'pt-ico' }, p.icon || '▫️'), h('span', { class: 'pt-name' }, p.title || '(untitled)'),
+      h('span', { class: 'pt-n' }, String((p.widgets || []).length)));
+    dragSort(row, cfg.pages, (from, to) => { selPage = to; renderPages(); changed(); });
+    return row;
+  }), h('button', { class: 'btn', style: { width: '100%', marginTop: '8px' }, onclick: () => openTemplates(null) }, '＋ New page'));
+  renderPageEditor();
+}
 
+function renderPageEditor() {
+  const p = curPage();
+  const box = $('pageEditor');
+  if (!p) { box.replaceChildren(h('p', { class: 'lead' }, 'No pages. Add one with "New page".')); return; }
+  p.widgets ??= [];
+  const move = (d) => { const j = selPage + d; [cfg.pages[selPage], cfg.pages[j]] = [cfg.pages[j], cfg.pages[selPage]]; selPage = j; renderPages(); changed(); };
+  box.replaceChildren(
+    h('div', { class: 'card' },
+      h('div', { class: 'row', style: { gap: '10px' } },
+        h('input', { type: 'text', class: 'icon-input', value: p.icon || '', maxlength: 8, title: 'Icon', oninput: (e) => { p.icon = e.target.value; changed(); renderTabsOnly(); } }),
+        h('input', { type: 'text', value: p.title || '', placeholder: 'Page name', style: { flex: '1', fontSize: '16px', fontWeight: '600' }, oninput: (e) => { p.title = e.target.value; changed(); renderTabsOnly(); } }),
+        h('label', { class: 'check', title: 'Show this page on the phone' }, h('label', { class: 'switch' },
+          h('input', { type: 'checkbox', checked: p.enabled !== false, onchange: (e) => {
+            if (!e.target.checked && cfg.pages.filter((x) => x.enabled !== false).length === 1) { e.target.checked = true; toast('At least one page must stay enabled', true); return; }
+            p.enabled = e.target.checked; changed(); renderTabsOnly();
+          } }), h('span')), 'Shown'),
+        h('button', { class: 'icon-btn', title: 'Move earlier', disabled: selPage === 0, onclick: () => move(-1) }, '↑'),
+        h('button', { class: 'icon-btn', title: 'Move later', disabled: selPage === cfg.pages.length - 1, onclick: () => move(1) }, '↓')),
+      h('div', { class: 'row', style: { gap: '6px', marginTop: '10px' } },
+        h('button', { class: 'btn sm', onclick: () => openTemplates(selPage) }, 'Replace with template…'),
+        h('button', { class: 'btn sm', onclick: () => { const c = JSON.parse(JSON.stringify(p)); c.id = ''; c.title += ' copy'; cfg.pages.splice(selPage + 1, 0, c); selPage++; renderPages(); changed(); } }, 'Duplicate page'),
+        h('button', { class: 'btn sm', onclick: () => { p.widgets = []; selWidget = -1; renderPageEditor(); changed(); } }, 'Clear'),
+        h('span', { class: 'spacer' }),
+        h('button', { class: 'btn sm danger', disabled: cfg.pages.length === 1, onclick: () => {
+          if (!confirm(`Delete the page "${p.title}"?`)) return;
+          cfg.pages.splice(selPage, 1); selWidget = -1; renderPages(); changed();
+        } }, 'Delete page'))),
+    h('div', { class: 'canvas-wrap' }, h('div', { class: 'phone' }, h('div', { class: 'canvas', id: 'canvas' }))),
+    h('p', { class: 'hint', style: { margin: '6px 0 14px' } }, 'Drag a widget to move it, drag its corner to resize. Widgets cannot overlap. Click one to edit its options.'),
+    h('div', { class: 'ed-cols' },
+      h('div', { class: 'card', id: 'inspector' }),
+      h('div', { class: 'card' }, h('h3', {}, 'Add a widget'), h('div', { class: 'palette', id: 'palette' }))));
+  renderCanvas();
+  renderPalette();
+  renderInspector();
+}
+
+function renderTabsOnly() {
+  const tabs = $('pageTabs').querySelectorAll('.ptab');
   cfg.pages.forEach((p, i) => {
-    const meta = PAGE_META[p.type];
-    const opts = h('div', { class: 'opts' });
-    const chk = (key, label, fallback = true) => h('label', { class: 'check' },
-      h('input', { type: 'checkbox', checked: opt(p.type, key, fallback), onchange: (e) => { setOpt(p.type, key, e.target.checked); changed(); } }), label);
-
-    if (p.type === 'home') {
-      opts.append(chk('weather', 'Weather'), chk('media', 'Now playing'));
-      const tiles = opt('home', 'tiles', ['cpu', 'gpu', 'ram', 'net']);
-      opts.append(h('span', { style: { color: 'var(--muted)', fontSize: '12.5px', margin: '0 6px 0 4px' } }, 'Tiles:'));
-      for (const [k, label] of TILES) opts.append(h('label', { class: 'check' },
-        h('input', { type: 'checkbox', checked: tiles.includes(k), onchange: (e) => {
-          const cur = opt('home', 'tiles', ['cpu', 'gpu', 'ram', 'net']).filter((x) => x !== k);
-          if (e.target.checked) cur.push(k);
-          setOpt('home', 'tiles', TILES.map((t) => t[0]).filter((x) => cur.includes(x)));
-          changed();
-        } }), label));
-    } else if (p.type === 'ai') {
-      opts.append(chk('claude', 'Claude'), chk('codex', 'Codex'));
-    } else if (p.type === 'work') {
-      opts.append(chk('sessions', 'Sessions'), chk('github', 'GitHub'));
-    } else if (p.type === 'procs') {
-      opts.append(chk('allowKill', 'Allow killing processes from the phone'));
-    } else if (p.type === 'deck') {
-      const sel = h('select', { onchange: (e) => { setOpt('deck', 'columns', +e.target.value); renderDeck(); changed(); } },
-        ...[3, 4, 5, 6].map((n) => h('option', { value: n, selected: opt('deck', 'columns', 4) === n }, `${n} columns`)));
-      opts.append(h('span', { style: { color: 'var(--muted)', fontSize: '12.5px', marginRight: '6px' } }, 'Layout:'), sel);
-    }
-
-    const move = (d) => { const j = i + d; [cfg.pages[i], cfg.pages[j]] = [cfg.pages[j], cfg.pages[i]]; renderPages(); changed(); };
-    const item = h('div', { class: 'card page-item' + (p.enabled ? '' : ' disabled'), draggable: 'true', 'data-i': i },
-      h('span', { class: 'handle', title: 'Drag' }, '⋮⋮'),
-      h('span', { class: 'page-num' }, String(i + 1)),
-      h('div', { class: 'page-body' }, h('h4', {}, meta.name), h('p', {}, meta.desc), opts),
-      h('div', { class: 'page-ctrl' },
-        h('button', { class: 'icon-btn', title: 'Move up', disabled: i === 0, onclick: () => move(-1) }, '↑'),
-        h('button', { class: 'icon-btn', title: 'Move down', disabled: i === cfg.pages.length - 1, onclick: () => move(1) }, '↓'),
-        h('label', { class: 'switch', title: 'Show / hide' },
-          h('input', { type: 'checkbox', checked: p.enabled, onchange: (e) => {
-            if (!e.target.checked && cfg.pages.filter((x) => x.enabled).length === 1) { e.target.checked = true; toast('At least one page must stay enabled', true); return; }
-            p.enabled = e.target.checked; renderPages(); changed();
-          } }), h('span'))));
-    dragSort(item, cfg.pages, () => { renderPages(); changed(); });
-    list.append(item);
+    const t = tabs[i];
+    if (!t) return;
+    t.querySelector('.pt-ico').textContent = p.icon || '▫️';
+    t.querySelector('.pt-name').textContent = p.title || '(untitled)';
+    t.classList.toggle('off', p.enabled === false);
   });
+}
+
+function renderCanvas() {
+  const canvas = $('canvas'), p = curPage();
+  if (!canvas || !p) return;
+  canvas.replaceChildren();
+  for (let i = 0; i < catalog.cols * catalog.rows; i++) canvas.appendChild(h('div', { class: 'cell' }));
+  p.widgets.forEach((w, i) => {
+    const d = widgetDef(w.type);
+    const el = h('div', { class: 'wb' + (i === selWidget ? ' sel' : ''), title: d.name },
+      h('div', { class: 'wb-in' }, h('span', { class: 'wb-ico' }, d.icon), h('b', {}, d.name), h('small', {}, widgetSummary(w))),
+      h('span', { class: 'rz', title: 'Resize' }));
+    el.style.gridArea = `${w.y + 1} / ${w.x + 1} / span ${w.h} / span ${w.w}`;
+    el.addEventListener('pointerdown', (e) => startDrag(e, w, i, e.target.classList.contains('rz') ? 'resize' : 'move'));
+    canvas.appendChild(el);
+  });
+}
+
+function startDrag(e, w, i, mode) {
+  e.preventDefault();
+  const canvas = $('canvas'), p = curPage(), d = widgetDef(w.type);
+  const r = canvas.getBoundingClientRect();
+  const cw = r.width / catalog.cols, ch = r.height / catalog.rows;
+  const sx = e.clientX, sy = e.clientY, s = { ...w };
+  let moved = false;
+  if (selWidget !== i) { selWidget = i; renderInspector(); }
+  canvas.querySelectorAll('.wb').forEach((b, j) => b.classList.toggle('sel', j === i));
+  const el = canvas.querySelectorAll('.wb')[i];
+  const onMove = (ev) => {
+    const dx = Math.round((ev.clientX - sx) / cw), dy = Math.round((ev.clientY - sy) / ch);
+    let { x, y, w: ww, h: hh } = s;
+    if (mode === 'move') { x = Math.max(0, Math.min(catalog.cols - ww, s.x + dx)); y = Math.max(0, Math.min(catalog.rows - hh, s.y + dy)); }
+    else { ww = Math.max(Math.min(d.minW, catalog.cols), Math.min(catalog.cols - s.x, s.w + dx)); hh = Math.max(Math.min(d.minH, catalog.rows), Math.min(catalog.rows - s.y, s.h + dy)); }
+    if ((x !== w.x || y !== w.y || ww !== w.w || hh !== w.h) && !overlaps(p, w, x, y, ww, hh)) {
+      Object.assign(w, { x, y, w: ww, h: hh });
+      el.style.gridArea = `${y + 1} / ${x + 1} / span ${hh} / span ${ww}`;
+      moved = true;
+    }
+  };
+  const onUp = () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    if (moved) { changed(); renderInspector(); }
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+}
+
+function renderPalette() {
+  $('palette').replaceChildren(...catalog.widgets.map((d) => h('button', { class: 'pal', title: d.desc, onclick: () => addWidget(d) },
+    h('span', { class: 'pal-ico' }, d.icon), h('span', {}, h('b', {}, d.name), h('small', {}, d.desc)))));
+}
+
+function addWidget(d) {
+  const p = curPage();
+  const spot = freeSpot(p, d.w, d.h, d.minW, d.minH);
+  if (!spot) { toast('No free space on this page — make room first', true); return; }
+  const options = {};
+  for (const o of d.options) options[o.key] = Array.isArray(o.default) ? [...o.default] : o.default;
+  p.widgets.push({ id: '', type: d.type, ...spot, options });
+  selWidget = p.widgets.length - 1;
+  renderCanvas(); renderInspector(); renderTabsOnly(); changed();
+  $('pageTabs').querySelectorAll('.pt-n')[selPage].textContent = p.widgets.length;
+}
+
+function renderInspector() {
+  const box = $('inspector'), p = curPage();
+  if (!box) return;
+  const w = p?.widgets[selWidget];
+  if (!w) { box.replaceChildren(h('h3', {}, 'Widget'), h('p', { class: 'hint', style: { margin: 0 } }, 'Click a widget on the page to edit it, or add one from the list.')); return; }
+  const d = widgetDef(w.type);
+  const num = (key, label, min, max) => h('div', { class: 'field', style: { flex: '1' } }, h('label', {}, label),
+    h('input', { type: 'number', min, max, value: w[key], onchange: (e) => {
+      const v = Math.max(min, Math.min(max, parseInt(e.target.value || '0', 10)));
+      const n = { x: w.x, y: w.y, w: w.w, h: w.h, [key]: v };
+      if (n.x + n.w > catalog.cols || n.y + n.h > catalog.rows || overlaps(p, w, n.x, n.y, n.w, n.h)) { toast('That does not fit there', true); e.target.value = w[key]; return; }
+      w[key] = v; changed(); renderCanvas();
+    } }));
+  box.replaceChildren(
+    h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '8px' } },
+      h('h3', { style: { margin: 0 } }, `${d.icon} ${d.name}`),
+      h('div', { class: 'row', style: { gap: '6px' } },
+        h('button', { class: 'btn sm', onclick: () => {
+          const spot = freeSpot(p, w.w, w.h, d.minW, d.minH);
+          if (!spot) { toast('No free space for a copy', true); return; }
+          p.widgets.push({ ...JSON.parse(JSON.stringify(w)), id: '', ...spot }); selWidget = p.widgets.length - 1; renderCanvas(); renderInspector(); changed();
+        } }, 'Duplicate'),
+        h('button', { class: 'btn sm danger', onclick: () => { p.widgets.splice(selWidget, 1); selWidget = -1; renderCanvas(); renderInspector(); changed(); } }, 'Remove'))),
+    h('p', { class: 'hint', style: { margin: '0 0 12px' } }, d.desc),
+    ...d.options.map((o) => optionField(w, o)),
+    h('div', { class: 'row', style: { gap: '8px' } }, num('x', 'Column', 0, catalog.cols - 1), num('y', 'Row', 0, catalog.rows - 1),
+      num('w', 'Width', d.minW, catalog.cols), num('h', 'Height', d.minH, catalog.rows)));
+}
+
+function optionField(w, o) {
+  const v = optVal(w, o);
+  const field = (...kids) => h('div', { class: 'field' }, h('label', {}, o.label), ...kids);
+  switch (o.type) {
+    case 'bool':
+      return h('label', { class: 'check', style: { marginBottom: '10px' } }, h('input', { type: 'checkbox', checked: v !== false, onchange: (e) => setWOpt(w, o.key, e.target.checked) }), o.label);
+    case 'select':
+      return field(h('select', { onchange: (e) => setWOpt(w, o.key, e.target.value) }, ...o.choices.map(([k, l]) => h('option', { value: k, selected: k === v }, l))));
+    case 'multi': {
+      const cur = Array.isArray(v) ? v : [];
+      return field(h('div', { class: 'opts' }, ...o.choices.map(([k, l]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: cur.includes(k), onchange: (e) => {
+        const next = o.choices.map((c) => c[0]).filter((x) => (x === k ? e.target.checked : cur.includes(x)));
+        setWOpt(w, o.key, next.length ? next : cur);
+        if (!next.length) { e.target.checked = true; toast('Keep at least one', true); }
+      } }), l))));
+    }
+    case 'number':
+      return field(h('input', { type: 'number', min: o.min, max: o.max, value: v ?? '', style: { maxWidth: '140px' }, onchange: (e) => setWOpt(w, o.key, e.target.value === '' ? o.default : Number(e.target.value)) }));
+    case 'textarea':
+      return field(h('textarea', { rows: o.key === 'command' ? 3 : 4, style: o.key === 'command' ? { fontFamily: 'Consolas, monospace', fontSize: '12.5px' } : {}, oninput: (e) => setWOpt(w, o.key, e.target.value) }, v ?? ''),
+        o.key === 'command' ? h('span', { class: 'hint' }, 'Runs with PowerShell on this PC. The phone never sees the command, only its output. Tap the widget on the phone to run it now.') : null);
+    case 'lines':
+      return field(h('textarea', { rows: 5, oninput: (e) => setWOpt(w, o.key, e.target.value.split('\n').map((x) => x.trim()).filter(Boolean)) }, (Array.isArray(v) ? v : []).join('\n')));
+    case 'color':
+      return field(h('div', { class: 'row', style: { gap: '8px' } }, h('input', { type: 'color', value: v || '#fbbf24', oninput: (e) => setWOpt(w, o.key, e.target.value) }),
+        h('div', { class: 'swatches' }, ...COLORS.map((c) => h('button', { style: { background: c }, onclick: () => { setWOpt(w, o.key, c); renderInspector(); } })))));
+    case 'shortcut':
+      return field(h('select', { onchange: (e) => setWOpt(w, o.key, e.target.value) }, h('option', { value: '' }, '(first shortcut)'),
+        ...cfg.shortcuts.map((s) => h('option', { value: s.id, selected: s.id === v }, `${s.icon} ${s.label}`))),
+        h('span', { class: 'hint' }, 'New shortcuts get their id when you save.'));
+    case 'shortcuts': {
+      const cur = Array.isArray(v) ? v : [];
+      return field(h('div', { class: 'opts' }, ...cfg.shortcuts.map((s) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: cur.includes(s.id), onchange: (e) => {
+        setWOpt(w, o.key, cfg.shortcuts.map((x) => x.id).filter((id) => (id === s.id ? e.target.checked : cur.includes(id))));
+      } }), `${s.icon} ${s.label}`))));
+    }
+    default:
+      return field(h('input', { type: 'text', value: v ?? '', oninput: (e) => setWOpt(w, o.key, e.target.value) }),
+        w.type === 'push' && o.key === 'key' ? h('span', { class: 'hint' }, 'Send data with POST /api/push/<key> — see the Webhooks section.') : null);
+  }
+}
+
+// ---- template picker: new page (index null) or replace the widgets of page <index>
+function miniMap(widgets) {
+  return h('div', { class: 'mini' }, ...widgets.map((w) => {
+    const b = h('span', {}, widgetDef(w.type).icon);
+    b.style.gridArea = `${w.y + 1} / ${w.x + 1} / span ${w.h} / span ${w.w}`;
+    return b;
+  }));
+}
+
+function openTemplates(index) {
+  const pick = (t) => {
+    const widgets = JSON.parse(JSON.stringify(t ? t.widgets : []));
+    if (index == null) {
+      cfg.pages.push({ id: '', title: t ? t.title : 'New page', icon: t ? t.icon : '▫️', enabled: true, widgets });
+      selPage = cfg.pages.length - 1;
+    } else {
+      cfg.pages[index].widgets = widgets;
+    }
+    selWidget = -1;
+    closeModal(); renderPages(); changed();
+  };
+  $('modalBody').replaceChildren(
+    h('h3', {}, index == null ? 'New page' : `Replace the widgets of "${cfg.pages[index].title}"`),
+    h('div', { class: 'tpl-grid' },
+      h('button', { class: 'tpl', onclick: () => pick(null) }, h('div', { class: 'mini empty-mini' }, '＋'), h('b', {}, 'Blank page'), h('small', {}, 'Start from an empty grid.')),
+      ...catalog.templates.map((t) => h('button', { class: 'tpl', onclick: () => pick(t) }, miniMap(t.widgets), h('b', {}, `${t.icon} ${t.title}`), h('small', {}, t.desc)))));
+  $('modal').hidden = false;
+}
+function closeModal() { $('modal').hidden = true; }
+
+// ---------------------------------------------------------------- webhooks
+function renderWebhooks(lan) {
+  const local = `http://127.0.0.1:${location.port || 8765}`;
+  const host = lan?.active && lan.hosts?.length ? `https://${lan.hosts[0]}:${lan.port}` : null;
+  const token = cfg.lan?.token || '';
+  const ex = [
+    ['A number', `curl -X POST ${local}/api/push/temperature -d 21.5`],
+    ['A status with a subtitle', `curl -X POST ${local}/api/push/build -H "Content-Type: application/json" -d "{\\"value\\":\\"passed\\",\\"sub\\":\\"main · 3m 12s\\"}"`],
+    ['A list (style: list)', `curl -X POST ${local}/api/push/todo -H "Content-Type: application/json" -d "[\\"Ship 0.6.2\\",\\"Buy milk\\"]"`],
+    ['Expires after 10 minutes', `curl -X POST "${local}/api/push/door?ttl=600" -d open`],
+    ['Notification on the phone', `curl -X POST ${local}/api/notify -H "Content-Type: application/json" -d "{\\"title\\":\\"Deploy\\",\\"text\\":\\"Production is live\\",\\"level\\":\\"ok\\"}"`],
+    ['Switch the phone to a page', `curl -X POST ${local}/api/goto/music`],
+    ['Refresh everything now', `curl -X POST ${local}/api/refresh`],
+    ['PowerShell', `Invoke-RestMethod -Method Post ${local}/api/push/cpu-fan -Body 1450`],
+  ];
+  $('whExamples').replaceChildren(...ex.map(([t, c]) => h('div', { class: 'ex' }, h('span', {}, t), h('code', { class: 'cmdline', title: 'Click to copy', onclick: () => { navigator.clipboard?.writeText(c); toast('Copied'); } }, c))));
+  $('whLan').replaceChildren(host
+    ? h('div', {}, h('p', { class: 'hint', style: { marginTop: 0 } }, 'From other machines on your network or Tailscale (HTTPS with this PC\'s self-signed certificate, so curl needs -k; the token can also go in ?token= for senders that cannot set headers):'),
+      h('code', { class: 'cmdline', onclick: () => { navigator.clipboard?.writeText(`curl -k -X POST ${host}/api/push/temperature -H "Authorization: Bearer ${token}" -d 21.5`); toast('Copied'); } },
+        `curl -k -X POST ${host}/api/push/temperature -H "Authorization: Bearer ${token.slice(0, 6)}…" -d 21.5`))
+    : h('p', { class: 'hint', style: { margin: 0 } }, 'Turn on "Wi-Fi & Tailscale" in General to accept webhooks from other machines too. From this PC no token is needed.'));
+}
+
+async function loadPushed() {
+  if (location.hash !== '#webhooks') return;
+  try {
+    const r = await (await fetch('/api/push')).json();
+    const items = Object.entries(r.items || {}).sort((a, b) => b[1].at - a[1].at);
+    $('whItems').replaceChildren(...(items.length ? items.map(([k, v]) => h('tr', {},
+      h('td', {}, h('code', {}, k)), h('td', { class: 'val' }, JSON.stringify(v.data)), h('td', { class: 'hint' }, new Date(v.at).toLocaleString()),
+      h('td', {}, h('button', { class: 'btn sm danger', onclick: async () => { await fetch('/api/push/' + encodeURIComponent(k), { method: 'DELETE' }); loadPushed(); } }, 'Delete'))))
+      : [h('tr', {}, h('td', { colspan: 4, class: 'hint' }, 'Nothing pushed yet.'))]));
+  } catch (_) {}
+}
+
+async function postJson(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body == null ? '' : JSON.stringify(body) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'HTTP ' + r.status);
 }
 
 /** Minimal HTML5 drag-and-drop reordering. */
@@ -411,7 +729,7 @@ function dragSort(el, arr, done) {
 // ---------------------------------------------------------------- shortcuts
 function renderDeck() {
   const deck = $('deck');
-  deck.style.setProperty('--cols', opt('deck', 'columns', 4));
+  deck.style.setProperty('--cols', deckCols());
   deck.textContent = '';
   cfg.shortcuts.forEach((s, i) => {
     const k = h('div', { class: 'key' + (i === selKey ? ' sel' : ''), draggable: 'true', 'data-i': i, style: { '--k': s.color || '#6b7280' },
@@ -562,6 +880,7 @@ async function loadInfo() {
     $('lanStatus').textContent = lan.active ? `Listening on port ${lan.port} (HTTPS)` : lan.configured ? 'Restart to start listening' : 'Off';
     $('restartBtn').hidden = !lan.restartNeeded;
     renderUpdate(await (await fetch('/api/update')).json());
+    renderWebhooks(lan);
     $('info').replaceChildren(
       h('dt', {}, 'Version'), h('dd', {}, i.version),
       h('dt', {}, 'Settings file'), h('dd', {}, h('code', {}, i.configPath)),
@@ -572,6 +891,7 @@ async function loadInfo() {
 
 // ---------------------------------------------------------------- load / save
 async function load() {
+  if (!catalog.widgets.length) catalog = await (await fetch('/api/catalog')).json();
   cfg = await (await fetch('/api/settings')).json();
   cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' };
   saved = JSON.stringify(cfg);
@@ -628,6 +948,15 @@ $('restartBtn').onclick = async () => {
   };
   setTimeout(wait, 1500);
 };
+$('modalClose').onclick = closeModal;
+$('modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+const whTry = (fn, ok) => async () => { try { await fn(); toast(ok); loadPushed(); } catch (e) { toast(e.message, true); } };
+$('whNotify').onclick = whTry(() => postJson('/api/notify', { title: 'PhoneBox', text: 'Hello from the settings page 👋', level: 'ok' }), 'Sent — look at the phone');
+$('whPush').onclick = whTry(() => postJson('/api/push/demo', { value: Math.round(Math.random() * 100), unit: '%', sub: 'sent ' + new Date().toLocaleTimeString() }), 'Pushed "demo"');
+$('whRefresh').onclick = whTry(() => postJson('/api/refresh'), 'The panel refreshes');
+$('whReload').onclick = whTry(() => postJson('/api/refresh?reload=1'), 'The panel reloads');
+$('whClear').onclick = async () => { if (!confirm('Delete all pushed values?')) return; await fetch('/api/push', { method: 'DELETE' }); loadPushed(); };
+setInterval(loadPushed, 4000);
 $('citySearch').onkeydown = (e) => { if (e.key === 'Enter') searchCity(); };
 $('applyJson').onclick = () => {
   try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
@@ -640,6 +969,7 @@ function route() {
   const id = (location.hash || '#pages').slice(1);
   document.querySelectorAll('section').forEach((s) => s.classList.toggle('on', s.id === id));
   document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + id));
+  if (id === 'webhooks') loadPushed();
 }
 window.addEventListener('hashchange', route);
 route();

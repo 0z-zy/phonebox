@@ -46,7 +46,7 @@ public sealed class GitHubMonitor(ILogger<GitHubMonitor> log) : BackgroundServic
                 log.LogDebug("github: {Msg}", ex.Message);
                 _snap = (_snap ?? new GhSnapshot(null, 0, [], [], null, null)) with { Error = ex.Message };
             }
-            await Task.Delay(TimeSpan.FromMinutes(3), ct);
+            await Wake.Delay(TimeSpan.FromMinutes(3), ct);
         }
     }
 
