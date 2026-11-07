@@ -27,8 +27,8 @@ the pages in a visual editor on the PC: **41 widgets**, **18 templates**, as man
 - **Stream Deck–style keys** that launch apps, URLs or built-in actions on the PC.
 - **Webhooks**: scripts, CI and Home Assistant can push values and notifications onto the panel.
 
-<p align="center"><a href="docs/tour.mp4"><img src="docs/tour.gif" width="780" alt="A tour of PhoneBox pages"></a><br>
-<sub>A tour through the pages (made-up data). <a href="docs/tour.mp4">Full video (MP4)</a></sub></p>
+<p align="center"><a href="docs/phonebox-tour.mp4"><img src="docs/phonebox-tour.gif" width="780" alt="A tour of PhoneBox pages"></a><br>
+<sub>A tour through the pages (made-up data). <a href="docs/phonebox-tour.mp4">Full video (MP4)</a></sub></p>
 
 **Contents**: [Quick start](#quick-start) · [Pages & templates](#pages--templates) · [Widgets](#widgets) ·
 [Layout editor](#layout-editor--settings) · [Webhooks](#webhooks) · [Wi-Fi & Tailscale](#wi-fi--tailscale) ·
