@@ -1,0 +1,217 @@
+using System.Globalization;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
+namespace PhoneBox.Agent;
+
+public sealed record QuotaLimit(string Label, double Percent, long? ResetsAt, long? WindowSec, string Severity);
+
+public sealed record QuotaProvider(string Id, string Name, string Plan, IReadOnlyList<QuotaLimit> Limits,
+    string? Extra, long? UpdatedAt, string? Error);
+
+/// <summary>
+/// Collects quota usage of AI subscriptions:
+///  - Claude: api.anthropic.com/api/oauth/usage with the OAuth token from ~/.claude/.credentials.json
+///    (the endpoint behind Claude Code's /usage command). The token is only read and NEVER refreshed;
+///    Claude Code refreshes it itself (refreshing it here could break Claude Code's session).
+///  - Codex: the last "rate_limits" record in the newest rollout file under ~/.codex/sessions (fully local).
+/// </summary>
+public sealed partial class QuotaMonitor(ILogger<QuotaMonitor> log) : BackgroundService
+{
+    private static readonly string Home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+
+    private volatile QuotaProvider? _claude;
+    private volatile QuotaProvider? _codex;
+    private long _nextClaude;
+
+    public IReadOnlyList<QuotaProvider> Snapshot() =>
+        new[] { _claude, _codex }.Where(p => p is not null).Select(p => p!).ToList();
+
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("PhoneBox/" + AppPaths.Version);
+        while (!ct.IsCancellationRequested)
+        {
+            try { _codex = ReadCodex(); }
+            catch (Exception ex) { _codex = Fail("codex", "Codex", ex.Message); }
+
+            if (Environment.TickCount64 >= _nextClaude)
+            {
+                // Every 3 minutes when healthy; retry after 1 minute on errors.
+                var ok = await RefreshClaude(ct);
+                _nextClaude = Environment.TickCount64 + (ok ? 180_000 : 60_000);
+            }
+            await Task.Delay(TimeSpan.FromSeconds(30), ct);
+        }
+    }
+
+    // ------------------------------------------------------------------ Claude
+    private async Task<bool> RefreshClaude(CancellationToken ct)
+    {
+        var path = Path.Combine(Home, ".claude", ".credentials.json");
+        if (!File.Exists(path)) { _claude = null; return true; }
+
+        string plan = "Claude";
+        try
+        {
+            using var creds = JsonDocument.Parse(await File.ReadAllTextAsync(path, ct));
+            var o = creds.RootElement.GetProperty("claudeAiOauth");
+            plan = PlanLabel(Str(o, "subscriptionType"), Str(o, "rateLimitTier"));
+            var token = Str(o, "accessToken");
+            var expires = o.TryGetProperty("expiresAt", out var e) && e.TryGetInt64(out var ms) ? ms : 0;
+
+            if (string.IsNullOrEmpty(token)) { _claude = Keep(plan, "Not signed in to Claude Code"); return false; }
+            if (expires > 0 && expires < DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+            {
+                _claude = Keep(plan, "Token expired; it will refresh when Claude Code runs");
+                return false;
+            }
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, "https://api.anthropic.com/api/oauth/usage");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            req.Headers.Add("anthropic-beta", "oauth-2025-04-20");
+            using var res = await _http.SendAsync(req, ct);
+            if (!res.IsSuccessStatusCode)
+            {
+                _claude = Keep(plan, $"Could not fetch quota (HTTP {(int)res.StatusCode})");
+                return false;
+            }
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
+            _claude = new QuotaProvider("claude", "Claude", plan, ParseClaudeLimits(doc.RootElement),
+                ClaudeExtra(doc.RootElement), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), null);
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            log.LogDebug("claude quota: {Msg}", ex.Message);
+            _claude = Keep(plan, "Could not fetch quota: " + ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>On errors, keeps the last good values and attaches the error.</summary>
+    private QuotaProvider Keep(string plan, string error) =>
+        _claude is { Limits.Count: > 0 } prev ? prev with { Plan = plan, Error = error }
+            : new QuotaProvider("claude", "Claude", plan, [], null, null, error);
+
+    private static List<QuotaLimit> ParseClaudeLimits(JsonElement root)
+    {
+        var list = new List<QuotaLimit>();
+        if (root.TryGetProperty("limits", out var limits) && limits.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var l in limits.EnumerateArray())
+            {
+                var kind = Str(l, "kind");
+                var model = l.TryGetProperty("scope", out var sc) && sc.ValueKind == JsonValueKind.Object
+                    && sc.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.Object ? Str(m, "display_name") : null;
+                var (label, window) = kind switch
+                {
+                    "session" => ("5-hour session", 5 * 3600L),
+                    "weekly_all" => ("Weekly", 7 * 86400L),
+                    "weekly_scoped" => ($"Weekly · {model ?? "model"}", 7 * 86400L),
+                    _ => (kind ?? "Limit", 0L),
+                };
+                list.Add(new QuotaLimit(label, Num(l, "percent") ?? 0, Iso(Str(l, "resets_at")),
+                    window > 0 ? window : null, Str(l, "severity") ?? "normal"));
+            }
+        }
+        if (list.Count == 0)
+        {
+            // Legacy format: five_hour / seven_day
+            foreach (var (key, label, window) in new[] { ("five_hour", "5-hour session", 18000L), ("seven_day", "Weekly", 604800L) })
+                if (root.TryGetProperty(key, out var o) && o.ValueKind == JsonValueKind.Object)
+                    list.Add(new QuotaLimit(label, Num(o, "utilization") ?? 0, Iso(Str(o, "resets_at")), window, "normal"));
+        }
+        return list;
+    }
+
+    private static string? ClaudeExtra(JsonElement root)
+    {
+        if (root.TryGetProperty("extra_usage", out var x) && x.ValueKind == JsonValueKind.Object
+            && x.TryGetProperty("is_enabled", out var en) && en.ValueKind == JsonValueKind.True)
+            return $"Extra usage on · {Num(x, "utilization") ?? 0:0}%";
+        return null;
+    }
+
+    private static string PlanLabel(string? sub, string? tier)
+    {
+        var s = sub switch { "team" => "Team", "max" => "Max", "pro" => "Pro", "enterprise" => "Enterprise", null => "", _ => sub };
+        var m = tier is null ? null : MaxTier().Match(tier);
+        return m is { Success: true } ? $"{s} · Max {m.Groups[1].Value}".Trim(' ', '·') : (s == "" ? "Claude" : s);
+    }
+
+    [GeneratedRegex(@"max_(\d+x)")]
+    private static partial Regex MaxTier();
+
+    // ------------------------------------------------------------------ Codex
+    private static QuotaProvider? ReadCodex()
+    {
+        var root = Path.Combine(Home, ".codex", "sessions");
+        if (!Directory.Exists(root)) return null;
+
+        // Long-running sessions keep writing into older date folders: scan the last 10 days.
+        var files = new List<FileInfo>();
+        for (var d = 0; d < 10; d++)
+        {
+            var day = DateTime.Now.AddDays(-d);
+            var dir = Path.Combine(root, day.ToString("yyyy"), day.ToString("MM"), day.ToString("dd"));
+            if (Directory.Exists(dir)) files.AddRange(new DirectoryInfo(dir).GetFiles("rollout-*.jsonl"));
+        }
+        foreach (var f in files.OrderByDescending(f => f.LastWriteTimeUtc).Take(5))
+        {
+            var line = LastLineWith(f.FullName, "\"rate_limits\"");
+            if (line is null) continue;
+            using var doc = JsonDocument.Parse(line);
+            if (!doc.RootElement.TryGetProperty("payload", out var p) || !p.TryGetProperty("rate_limits", out var rl)
+                || rl.ValueKind != JsonValueKind.Object) continue;
+
+            var limits = new List<QuotaLimit>();
+            foreach (var key in new[] { "primary", "secondary" })
+            {
+                if (!rl.TryGetProperty(key, out var w) || w.ValueKind != JsonValueKind.Object) continue;
+                var mins = (long)(Num(w, "window_minutes") ?? 0);
+                var label = mins switch { 300 => "5-hour", 10080 => "Weekly", >= 1440 => $"{mins / 1440}-day", > 0 => $"{mins / 60}-hour", _ => key };
+                var resets = w.TryGetProperty("resets_at", out var r) && r.TryGetInt64(out var ra) ? ra * 1000
+                    : Num(w, "resets_in_seconds") is { } rs ? new DateTimeOffset(f.LastWriteTimeUtc).ToUnixTimeMilliseconds() + (long)(rs * 1000) : (long?)null;
+                var pct = Num(w, "used_percent") ?? 0;
+                limits.Add(new QuotaLimit(label, pct, resets, mins > 0 ? mins * 60 : null, pct >= 95 ? "critical" : pct >= 80 ? "warning" : "normal"));
+            }
+
+            string? extra = null;
+            if (rl.TryGetProperty("credits", out var cr) && cr.ValueKind == JsonValueKind.Object)
+            {
+                if (cr.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True) extra = "Credits: unlimited";
+                else if (Str(cr, "balance") is { } b && double.TryParse(b, NumberStyles.Float, CultureInfo.InvariantCulture, out var bal))
+                    extra = "Credits: " + bal.ToString("#,0", CultureInfo.InvariantCulture);
+            }
+            var plan = Str(rl, "plan_type") is { } pt ? char.ToUpper(pt[0]) + pt[1..] : "Codex";
+            return new QuotaProvider("codex", "Codex", plan, limits, extra,
+                new DateTimeOffset(f.LastWriteTimeUtc).ToUnixTimeMilliseconds(), null);
+        }
+        return new QuotaProvider("codex", "Codex", "Codex", [], null, null, "No quota data in recent sessions");
+    }
+
+    /// <summary>Reads the last 1 MB of a file and returns the last line containing the given text.</summary>
+    private static string? LastLineWith(string path, string needle)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        var len = Math.Min(fs.Length, 1 << 20);
+        fs.Seek(-len, SeekOrigin.End);
+        var buf = new byte[len];
+        fs.ReadExactly(buf);
+        var lines = Encoding.UTF8.GetString(buf).Split('\n');
+        for (var i = lines.Length - 1; i >= 1; i--) // the first line may be partial
+            if (lines[i].Contains(needle) && lines[i].Contains("\"primary\"")) return lines[i];
+        return null;
+    }
+
+    // ------------------------------------------------------------------ helpers
+    private static QuotaProvider Fail(string id, string name, string msg) => new(id, name, name, [], null, null, msg);
+    private static string? Str(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+    private static double? Num(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+    private static long? Iso(string? s) => DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d.ToUnixTimeMilliseconds() : null;
+}

@@ -1,0 +1,123 @@
+using System.Diagnostics;
+
+namespace PhoneBox.Agent;
+
+/// <summary>
+/// While a phone is connected over USB, keeps an "adb reverse tcp:8765 tcp:8765" rule in place so that
+/// 127.0.0.1:8765 on the phone reaches this agent. When a phone is newly plugged in, wakes it and opens the panel.
+/// </summary>
+public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : BackgroundService
+{
+    public const string PanelActivity = "net.oxog.phonebox.deskpanel/.MainActivity";
+    private const string Rule = "tcp:8765";
+
+    private string _lastState = "";
+    private volatile string[] _devices = [];
+    private volatile string[] _all = [];
+
+    public bool Connected => _devices.Length > 0;
+    public string Devices => string.Join(", ", _devices);
+    /// <summary>All attached devices, before the deviceSerial filter (for the settings page).</summary>
+    public string[] AllDevices => _all;
+    public event Action? StateChanged;
+
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try { await Ensure(ct); }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex) { Report($"adb error: {ex.Message}"); }
+            await Task.Delay(TimeSpan.FromSeconds(4), ct);
+        }
+    }
+
+    public async Task OpenPanelAsync()
+    {
+        var adb = FindAdb(cfg.Get().AdbPath);
+        if (adb is null) return;
+        foreach (var d in _devices)
+        {
+            await Adb(adb, $"-s {d} shell input keyevent KEYCODE_WAKEUP", CancellationToken.None);
+            await Adb(adb, $"-s {d} shell am start -n {PanelActivity}", CancellationToken.None);
+        }
+    }
+
+    private async Task Ensure(CancellationToken ct)
+    {
+        var adb = FindAdb(cfg.Get().AdbPath);
+        if (adb is null)
+        {
+            SetDevices([]);
+            Report("adb not found: run 'winget install Google.PlatformTools' or set adbPath in the settings");
+            return;
+        }
+
+        var serial = cfg.Get().DeviceSerial;
+        var devices = (await Adb(adb, "devices", ct))
+            .Split('\n').Skip(1)
+            .Select(l => l.Trim().Split('\t'))
+            .Where(p => p.Length == 2 && p[1] == "device")
+            .Select(p => p[0])
+            .ToArray();
+        _all = devices;
+        devices = devices.Where(s => string.IsNullOrEmpty(serial) || s == serial).ToArray();
+
+        SetDevices(devices);
+        if (devices.Length == 0) { Report("no phone connected, waiting..."); return; }
+
+        foreach (var d in devices)
+        {
+            var list = await Adb(adb, $"-s {d} reverse --list", ct);
+            if (list.Contains(Rule)) continue;
+            await Adb(adb, $"-s {d} reverse {Rule} {Rule}", ct);
+            // Newly plugged in: wake the screen and open the panel.
+            await Adb(adb, $"-s {d} shell input keyevent KEYCODE_WAKEUP", ct);
+            await Adb(adb, $"-s {d} shell am start -n {PanelActivity}", ct);
+            log.LogInformation("{Device}: adb reverse set up, panel opened", d);
+        }
+        Report($"phone connected: {Devices}");
+    }
+
+    private void SetDevices(string[] devices)
+    {
+        var changed = string.Join(",", devices) != string.Join(",", _devices);
+        _devices = devices;
+        if (changed) StateChanged?.Invoke();
+    }
+
+    private void Report(string state)
+    {
+        if (state == _lastState) return;
+        _lastState = state;
+        log.LogInformation("{State}", state);
+    }
+
+    public static string? FindAdb(string? configured)
+    {
+        if (!string.IsNullOrEmpty(configured) && File.Exists(configured)) return configured;
+        var candidates = new List<string>();
+        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
+            candidates.Add(Path.Combine(dir.Trim(), "adb.exe"));
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        candidates.Add(Path.Combine(local, "Android", "Sdk", "platform-tools", "adb.exe"));
+        var winget = Path.Combine(local, "Microsoft", "WinGet", "Packages");
+        if (Directory.Exists(winget))
+            candidates.AddRange(Directory.GetDirectories(winget, "Google.PlatformTools*")
+                .Select(d => Path.Combine(d, "platform-tools", "adb.exe")));
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static async Task<string> Adb(string adb, string args, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo(adb, args)
+        {
+            RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true,
+            WorkingDirectory = AppPaths.NeutralCwd,
+        };
+        using var p = Process.Start(psi)!;
+        var output = await p.StandardOutput.ReadToEndAsync(ct);
+        await p.WaitForExitAsync(ct);
+        return output;
+    }
+}

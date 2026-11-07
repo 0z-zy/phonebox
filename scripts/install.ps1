@@ -1,0 +1,89 @@
+<#
+.SYNOPSIS
+  Installs (or updates) PhoneBox on this computer and, optionally, on the connected phone.
+
+.DESCRIPTION
+  1. Stops a running agent.
+  2. Publishes the agent to %LOCALAPPDATA%\PhoneBox\app (settings in %APPDATA%\PhoneBox are kept).
+  3. Optionally adds a Start-with-Windows shortcut.
+  4. Optionally installs the panel APK on the connected phone (from dist\ or a fresh build).
+  5. Starts the agent (it lives in the system tray).
+
+.EXAMPLE
+  .\scripts\install.ps1                 # agent only
+  .\scripts\install.ps1 -Apk -Autostart # agent + phone app + start with Windows
+#>
+param(
+    [switch]$Apk,        # also install the Android panel on the connected phone
+    [switch]$Autostart,  # start the agent with Windows
+    [string]$Serial      # phone serial when several devices are connected
+)
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot
+$app = Join-Path $env:LOCALAPPDATA 'PhoneBox\app'
+$exe = Join-Path $app 'PhoneBoxAgent.exe'
+
+Write-Host '==> Stopping running agent'
+Get-Process PhoneBoxAgent, DeskAgent -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Milliseconds 500
+
+Write-Host "==> Publishing agent to $app"
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 10 SDK is required: winget install Microsoft.DotNet.SDK.10' }
+dotnet publish (Join-Path $root 'agent\PhoneBox.Agent') -c Release -o $app --nologo -v q --disable-build-servers
+if (-not (Test-Path $exe)) { throw "publish failed: $exe not found" }
+
+# Leftover shortcut from the pre-PhoneBox "DeskAgent" prototype.
+$startup = [Environment]::GetFolderPath('Startup')
+Remove-Item (Join-Path $startup 'DeskAgent.lnk') -ErrorAction SilentlyContinue
+
+if ($Autostart) {
+    Write-Host '==> Adding Start-with-Windows shortcut'
+    $shell = New-Object -ComObject WScript.Shell
+    $lnk = $shell.CreateShortcut((Join-Path $startup 'PhoneBox.lnk'))
+    $lnk.TargetPath = $exe
+    $lnk.WorkingDirectory = $app
+    $lnk.Description = 'PhoneBox agent'
+    $lnk.Save()
+}
+
+if ($Apk) {
+    $adb = (Get-Command adb -ErrorAction SilentlyContinue).Source
+    if (-not $adb) {
+        $adb = @("$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe") +
+            (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Directory -Filter 'Google.PlatformTools*' -ErrorAction SilentlyContinue |
+                ForEach-Object { Join-Path $_.FullName 'platform-tools\adb.exe' }) |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    if (-not $adb) { throw 'adb not found: winget install Google.PlatformTools' }
+
+    $apkFile = Get-ChildItem (Join-Path $root 'dist') -Filter 'PhoneBox-*.apk' -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $apkFile) {
+        Write-Host '==> Building the APK (no dist\PhoneBox-*.apk found)'
+        Push-Location (Join-Path $root 'android')
+        try { .\gradlew.bat assembleRelease --console=plain -q } finally { Pop-Location }
+        $apkFile = Get-Item (Join-Path $root 'android\app\build\outputs\apk\release\app-release.apk')
+    }
+    if (-not $Serial) {
+        $devices = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "`tdevice$" } | ForEach-Object { ($_ -split "`t")[0] })
+        if ($devices.Count -eq 0) { throw 'No authorised Android device found (check the USB debugging prompt on the phone).' }
+        if ($devices.Count -gt 1) { throw "Several devices are connected; pick one with -Serial: $($devices -join ', ')" }
+        $Serial = $devices[0]
+    }
+    Write-Host "==> Installing $($apkFile.Name) on $Serial"
+    $target = @('-s', $Serial)
+    $out = & $adb @target install -r $apkFile.FullName 2>&1
+    if ($out -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE') {
+        Write-Host '    signature differs from the installed build: reinstalling'
+        & $adb @target uninstall net.oxog.phonebox.deskpanel | Out-Null
+        $out = & $adb @target install $apkFile.FullName 2>&1
+    }
+    $out | Select-Object -Last 1
+    & $adb @target shell am start -n net.oxog.phonebox.deskpanel/.MainActivity | Out-Null
+}
+
+Write-Host '==> Starting agent'
+Start-Process $exe -WorkingDirectory $app
+Start-Sleep 2
+try { Invoke-RestMethod http://127.0.0.1:8765/api/info | Out-Null; Write-Host 'PhoneBox is running. Settings: http://127.0.0.1:8765  (or the tray icon)' }
+catch { Write-Warning "The agent did not respond; see $env:LOCALAPPDATA\PhoneBox\agent.log" }

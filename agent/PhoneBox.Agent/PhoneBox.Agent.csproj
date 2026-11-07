@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <!-- Konsol penceresi acmaz; sistem tepsisinde calisir -->
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PhoneBoxAgent</AssemblyName>
+    <RootNamespace>PhoneBox.Agent</RootNamespace>
+    <Product>PhoneBox</Product>
+    <Company>PhoneBox</Company>
+    <Description>PhoneBox desktop agent: feeds the PhoneBox Android desk panel over USB.</Description>
+    <Version>0.5.0</Version>
+    <ApplicationIcon>phonebox.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="config.default.json" LogicalName="config.default.json" />
+    <EmbeddedResource Include="phonebox.ico" LogicalName="phonebox.ico" />
+    <EmbeddedResource Include="settings.html" LogicalName="settings.html" />
+  </ItemGroup>
+
+</Project>

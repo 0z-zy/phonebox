@@ -1,0 +1,31 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/.kotlin/
+*.iml
+
+# Signing keys never belong in the repo
+*.jks
+*.keystore
+*.p12
+
+# Build output
+dist/
+
+# Local tooling / personal data
+.playwright-mcp/
+.claude/
+extras/**/backup/
+
+# OS
+Thumbs.db
+.DS_Store

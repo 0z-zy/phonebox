@@ -1,0 +1,33 @@
+# UMIDIGI BISON (Android 11) — packages removed for user 0 with "pm uninstall -k --user 0".
+# Nothing is deleted from the system partition; every entry can be restored with debloat.ps1 -Restore.
+# Lines starting with # are ignored. Comment out anything you want to keep.
+
+# --- Vendor OTA / preinstalled apps ---
+com.adups.fota                         # Adups FOTA updater (past data-collection controversy, no updates since 2021)
+com.loudtalks                          # Zello push-to-talk (preinstalled)
+com.zello.overlay                      # Zello overlay
+
+# --- Factory test / debug tools ---
+com.freemeimp.factory                  # Factory "aging" test
+com.hxy.ramtest                        # Factory RAM test
+com.teksun.factorytest                 # Factory test menu
+com.debug.loggerui                     # MediaTek debug logger
+com.mediatek.mdmlsample                # Modem debug sample app
+com.mediatek.mdmconfig                 # Modem debug config
+com.mediatek.gnssdebugreport           # GPS debug report
+com.mediatek.lbs.em2.ui                # Location engineer mode
+com.mediatek.ygps                      # GPS test tool
+com.android.egg                        # Android easter egg
+
+# --- Google: unused or discontinued services ---
+com.google.android.videos              # Play Movies (discontinued)
+# com.google.android.apps.youtube.music  # YouTube Music — kept: the phone doubles as a music player
+com.google.android.apps.tachyon        # Duo / Meet
+com.google.android.projection.gearhead # Android Auto
+com.google.android.apps.wellbeing      # Digital Wellbeing (runs in the background)
+com.google.android.apps.docs           # Google Drive
+com.google.android.apps.googleassistant # Assistant shortcut app (the Google app stays)
+com.google.android.feedback            # Google feedback
+com.google.android.gms.location.history # Location history
+com.android.providers.partnerbookmarks # Partner bookmarks
+com.google.android.printservice.recommendation # Print service recommendations

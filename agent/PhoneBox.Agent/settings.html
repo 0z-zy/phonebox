@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhoneBox Settings</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f8f9fb; --line: #e3e6eb; --text: #14171c; --muted: #6b7280;
+  --accent: #0f9d8a; --accent-ink: #ffffff; --danger: #dc2626; --ok: #16a34a; --warn: #d97706;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0c0e12; --panel: #14171d; --panel-2: #1a1e25; --line: #262b34; --text: #e8ecf1; --muted: #8a94a3;
+    --accent: #2dd4bf; --accent-ink: #062b26; --shadow: none; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+header {
+  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px;
+  padding: 12px 24px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+header img { width: 28px; height: 28px; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+header .ver { color: var(--muted); font-size: 12px; }
+.pill { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; }
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.on i { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.spacer { flex: 1; }
+.btn { border: 1px solid var(--line); background: var(--panel); padding: 7px 14px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.btn.primary:disabled { opacity: .45; cursor: default; }
+.btn.danger { color: var(--danger); }
+.btn.sm { padding: 4px 9px; font-size: 12.5px; border-radius: 7px; }
+.icon-btn { border: 1px solid var(--line); background: var(--panel); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; display: grid; place-items: center; }
+.icon-btn:disabled { opacity: .3; cursor: default; }
+
+.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 24px; max-width: 1180px; margin: 0 auto; padding: 24px; }
+nav { position: sticky; top: 76px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
+nav a { padding: 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; }
+nav a:hover { background: var(--panel-2); }
+nav a.on { background: var(--panel); box-shadow: var(--shadow); font-weight: 600; border: 1px solid var(--line); }
+section { display: none; }
+section.on { display: block; }
+h2 { font-size: 20px; margin: 0 0 4px; }
+.lead { color: var(--muted); margin: 0 0 18px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; margin-bottom: 14px; }
+.card h3 { margin: 0 0 12px; font-size: 15px; }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }
+.field label { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.field .hint { font-size: 12px; color: var(--muted); }
+input[type=text], input[type=number], input[type=time], select, textarea {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; outline: none; min-width: 0;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.check { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; margin-right: 14px; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+/* switch */
+.switch { position: relative; width: 40px; height: 22px; flex: 0 0 40px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 99px; transition: .2s; cursor: pointer; }
+.switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { left: 21px; }
+
+/* pages */
+.order { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.order span { font-size: 12px; padding: 4px 10px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line); }
+.order span.off { opacity: .4; text-decoration: line-through; }
+.page-item { display: grid; grid-template-columns: auto auto 1fr auto; gap: 14px; align-items: start; }
+.page-item.dragging { opacity: .4; }
+.page-item.over { outline: 2px dashed var(--accent); outline-offset: 3px; }
+.handle { cursor: grab; color: var(--muted); font-size: 18px; line-height: 30px; user-select: none; }
+.page-num { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; background: var(--panel-2); border: 1px solid var(--line); }
+.page-body h4 { margin: 4px 0 2px; font-size: 15px; }
+.page-body p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.page-item.disabled .page-body { opacity: .5; }
+.page-ctrl { display: flex; gap: 6px; align-items: center; }
+.opts { display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: center; }
+
+/* shortcuts */
+.deck { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.key {
+  position: relative; aspect-ratio: 1.75; border-radius: 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--k) 28%, #11151b), #11151b); color: #eef2f6;
+  border: 2px solid color-mix(in srgb, var(--k) 45%, transparent); user-select: none;
+}
+.key .ki { font-size: 26px; line-height: 1; }
+.key .kl { font-size: 12.5px; font-weight: 500; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.key.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+.key.add { background: transparent; color: var(--muted); border: 2px dashed var(--line); }
+.key.dragging { opacity: .35; }
+.key.over { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.editor .grid2 { align-items: start; }
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.swatches button { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; }
+.swatches button.on { border-color: var(--text); }
+.emojis { display: flex; gap: 2px; flex-wrap: wrap; margin-top: 4px; }
+.emojis button { border: 0; background: none; font-size: 18px; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; }
+.emojis button:hover { background: var(--panel-2); }
+input[type=color] { width: 42px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); padding: 2px; }
+.icon-input { width: 70px; text-align: center; font-size: 20px; }
+
+/* city search */
+.results { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-top: 6px; }
+.results button { text-align: left; border: 0; background: var(--panel); padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--line); }
+.results button:last-child { border-bottom: 0; }
+.results button:hover { background: var(--panel-2); }
+.results small { color: var(--muted); }
+
+textarea.json { width: 100%; min-height: 420px; font: 12.5px/1.5 Consolas, "Cascadia Mono", monospace; resize: vertical; }
+code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; word-break: break-all; }
+
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 20px); opacity: 0; transition: .25s; padding: 10px 18px; border-radius: 10px;
+  background: var(--text); color: var(--bg); font-weight: 500; pointer-events: none; z-index: 50; }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+.toast.err { background: var(--danger); color: #fff; }
+.dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); display: none; }
+.is-dirty .dirty-dot { display: inline-block; }
+
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; padding: 16px; }
+  nav { position: static; flex-direction: row; overflow-x: auto; }
+  .grid2 { grid-template-columns: 1fr; }
+  .deck { --cols: 3 !important; }
+}
+</style>
+</head>
+<body>
+<header id="hdr">
+  <img src="/favicon.ico" alt="">
+  <h1>PhoneBox</h1><span class="ver" id="ver"></span>
+  <span class="pill" id="phone"><i></i><span>Phone…</span></span>
+  <div class="spacer"></div>
+  <span class="dirty-dot" title="Unsaved changes"></span>
+  <button class="btn" id="openPhone">Open on phone</button>
+  <button class="btn" id="revert" disabled>Revert</button>
+  <button class="btn primary" id="save" disabled>Save</button>
+</header>
+
+<div class="layout">
+  <nav id="nav">
+    <a href="#pages" class="on">Pages</a>
+    <a href="#shortcuts">Shortcuts</a>
+    <a href="#general">General</a>
+    <a href="#advanced">Advanced</a>
+  </nav>
+
+  <main>
+    <section id="pages" class="on">
+      <h2>Pages</h2>
+      <p class="lead">Choose which pages the phone shows and in what order. Drag or use the arrows to reorder. The first page is the home page the panel returns to when idle.</p>
+      <div class="order" id="orderPreview"></div>
+      <div id="pageList"></div>
+    </section>
+
+    <section id="shortcuts">
+      <h2>Shortcuts</h2>
+      <p class="lead">The keys on the Shortcuts page. Click a key to edit it, drag to reorder. The phone only sends the key's id; commands never leave this computer.</p>
+      <div class="deck" id="deck"></div>
+      <div class="card editor" id="editor"></div>
+    </section>
+
+    <section id="general">
+      <h2>General</h2>
+      <p class="lead">Weather, night mode, display behaviour and the phone connection.</p>
+
+      <div class="card">
+        <h3>Weather</h3>
+        <div class="field">
+          <label>Search for a city</label>
+          <div class="row"><input type="text" id="citySearch" placeholder="e.g. Tallinn, Berlin…" style="flex:1"><button class="btn" id="cityBtn">Search</button></div>
+          <div class="results" id="cityResults" hidden></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Display name</label><input type="text" data-bind="weather.city"></div>
+          <div class="row" style="gap:10px">
+            <div class="field" style="flex:1"><label>Latitude</label><input type="number" step="0.001" data-bind="weather.lat" data-type="num"></div>
+            <div class="field" style="flex:1"><label>Longitude</label><input type="number" step="0.001" data-bind="weather.lon" data-type="num"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Night mode</h3>
+        <div class="row" style="margin-bottom:12px"><label class="switch"><input type="checkbox" data-bind="night.enabled"><span></span></label> Dim the screen at night and show only the clock</div>
+        <div class="grid2">
+          <div class="row" style="gap:10px">
+            <div class="field" style="flex:1"><label>From</label><input type="time" data-bind="night.start"></div>
+            <div class="field" style="flex:1"><label>To</label><input type="time" data-bind="night.end"></div>
+          </div>
+          <div class="field"><label>Night brightness: <span id="nbv"></span></label><input type="range" min="0.01" max="0.3" step="0.01" data-bind="night.brightness" data-type="num"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Display</h3>
+        <label class="check"><input type="checkbox" data-bind="display.showSeconds"> Show seconds on the clock</label>
+        <label class="check"><input type="checkbox" data-bind="display.vibrate"> Vibrate when a session finishes or needs input</label>
+        <div class="field" style="max-width:260px;margin-top:12px"><label>Return to the first page after idle seconds (0 = never)</label><input type="number" min="0" max="3600" data-bind="display.idleReturnSec" data-type="int"></div>
+      </div>
+
+      <div class="card">
+        <h3>Phone connection</h3>
+        <div class="grid2">
+          <div class="field"><label>Phone to use</label><select id="serial"></select><span class="hint">If several Android devices are connected, choose which one runs the panel.</span></div>
+          <div class="field"><label>Path to adb.exe (empty = auto-detect)</label><input type="text" data-bind="adbPath" placeholder="auto-detected"><span class="hint" id="adbFound"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="advanced">
+      <h2>Advanced</h2>
+      <p class="lead">The raw settings. "Apply JSON" loads your edits into the form; Save writes them to disk.</p>
+      <div class="card">
+        <dl id="info"></dl>
+      </div>
+      <div class="card">
+        <textarea class="json" id="json" spellcheck="false"></textarea>
+        <div class="row" style="margin-top:10px"><button class="btn" id="applyJson">Apply JSON</button><span class="hint" id="jsonErr" style="color:var(--danger)"></span></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const h = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, '');
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+
+const PAGE_META = {
+  home:   { name: 'Home',              desc: 'Clock, date, weather, now playing and summary system tiles.' },
+  ai:     { name: 'AI quotas',         desc: 'Claude and Codex usage limits, reset times and burn-rate forecast.' },
+  work:   { name: 'Sessions & GitHub', desc: 'Live status of Claude Code / Codex sessions, pull requests and CI.' },
+  system: { name: 'System',            desc: 'CPU, GPU, memory, disk and network charts.' },
+  procs:  { name: 'Processes',         desc: 'Top apps by CPU/RAM, with confirm-to-kill.' },
+  deck:   { name: 'Shortcuts',         desc: 'Keys that run commands on this computer.' },
+};
+const TILES = [['cpu', 'CPU'], ['gpu', 'GPU'], ['ram', 'RAM'], ['net', 'Network']];
+const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#e5b84b', '#84cc16', '#22c55e', '#14b8a6', '#0ea5e9', '#2f80ed', '#6366f1', '#a855f7', '#ec4899', '#d97757', '#64748b', '#9ca3af'];
+const EMOJIS = ['⌨️', '💻', '📁', '📝', '🌐', '🎧', '🎵', '💬', '📧', '📅', '🧮', '⚙️', '✂️', '📊', '🔇', '🔊', '🌙', '🔒', '🚀', '🐙', '🐳', '🧪', '🛠️', '📦', '🎮', '📷', '🎙️', '⭐', '✳️', '🦊'];
+const PRESETS = [
+  ['', 'Pick a preset…'],
+  ['wt.exe', 'Windows Terminal'],
+  ['explorer.exe', 'File Explorer (args: folder)'],
+  ['https://', 'Web address (URL in the command field)'],
+  ['shell:AppsFolder\\', 'Store app (shell:AppsFolder\\AppID)'],
+  ['ms-settings:', 'Windows Settings'],
+  ['ms-screenclip:', 'Screen snip'],
+  ['taskmgr.exe', 'Task Manager'],
+  ['builtin:mute', 'Built-in: toggle mute'],
+  ['builtin:monitor-off', 'Built-in: turn monitors off'],
+  ['builtin:lock', 'Built-in: lock the PC'],
+];
+
+let cfg = null;        // settings being edited
+let saved = '';        // last saved JSON (dirty check)
+let selKey = 0;
+
+// ---------------------------------------------------------------- helpers
+function toast(msg, err = false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast on' + (err ? ' err' : '');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => (t.className = 'toast' + (err ? ' err' : '')), 2800);
+}
+const getPath = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
+function setPath(o, p, v) {
+  const ks = p.split('.');
+  let a = o;
+  for (const k of ks.slice(0, -1)) a = a[k] ??= {};
+  a[ks.at(-1)] = v;
+}
+function page(type) { return cfg.pages.find((p) => p.type === type); }
+function opt(type, key, fallback) {
+  const o = page(type)?.options;
+  return o && key in o ? o[key] : fallback;
+}
+function setOpt(type, key, val) {
+  const p = page(type);
+  p.options = { ...(p.options || {}), [key]: val };
+}
+
+function changed() {
+  const dirty = JSON.stringify(cfg) !== saved;
+  $('save').disabled = !dirty;
+  $('revert').disabled = !dirty;
+  $('hdr').classList.toggle('is-dirty', dirty);
+  $('json').value = JSON.stringify(cfg, null, 2);
+}
+
+// ---------------------------------------------------------------- pages
+function renderPages() {
+  const list = $('pageList');
+  list.textContent = '';
+  $('orderPreview').replaceChildren(
+    h('b', { style: { fontSize: '12px', alignSelf: 'center', marginRight: '4px' } }, 'Order on the phone:'),
+    ...cfg.pages.map((p) => h('span', { class: p.enabled ? '' : 'off' }, PAGE_META[p.type].name)));
+
+  cfg.pages.forEach((p, i) => {
+    const meta = PAGE_META[p.type];
+    const opts = h('div', { class: 'opts' });
+    const chk = (key, label, fallback = true) => h('label', { class: 'check' },
+      h('input', { type: 'checkbox', checked: opt(p.type, key, fallback), onchange: (e) => { setOpt(p.type, key, e.target.checked); changed(); } }), label);
+
+    if (p.type === 'home') {
+      opts.append(chk('weather', 'Weather'), chk('media', 'Now playing'));
+      const tiles = opt('home', 'tiles', ['cpu', 'gpu', 'ram', 'net']);
+      opts.append(h('span', { style: { color: 'var(--muted)', fontSize: '12.5px', margin: '0 6px 0 4px' } }, 'Tiles:'));
+      for (const [k, label] of TILES) opts.append(h('label', { class: 'check' },
+        h('input', { type: 'checkbox', checked: tiles.includes(k), onchange: (e) => {
+          const cur = opt('home', 'tiles', ['cpu', 'gpu', 'ram', 'net']).filter((x) => x !== k);
+          if (e.target.checked) cur.push(k);
+          setOpt('home', 'tiles', TILES.map((t) => t[0]).filter((x) => cur.includes(x)));
+          changed();
+        } }), label));
+    } else if (p.type === 'ai') {
+      opts.append(chk('claude', 'Claude'), chk('codex', 'Codex'));
+    } else if (p.type === 'work') {
+      opts.append(chk('sessions', 'Sessions'), chk('github', 'GitHub'));
+    } else if (p.type === 'procs') {
+      opts.append(chk('allowKill', 'Allow killing processes from the phone'));
+    } else if (p.type === 'deck') {
+      const sel = h('select', { onchange: (e) => { setOpt('deck', 'columns', +e.target.value); renderDeck(); changed(); } },
+        ...[3, 4, 5, 6].map((n) => h('option', { value: n, selected: opt('deck', 'columns', 4) === n }, `${n} columns`)));
+      opts.append(h('span', { style: { color: 'var(--muted)', fontSize: '12.5px', marginRight: '6px' } }, 'Layout:'), sel);
+    }
+
+    const move = (d) => { const j = i + d; [cfg.pages[i], cfg.pages[j]] = [cfg.pages[j], cfg.pages[i]]; renderPages(); changed(); };
+    const item = h('div', { class: 'card page-item' + (p.enabled ? '' : ' disabled'), draggable: 'true', 'data-i': i },
+      h('span', { class: 'handle', title: 'Drag' }, '⋮⋮'),
+      h('span', { class: 'page-num' }, String(i + 1)),
+      h('div', { class: 'page-body' }, h('h4', {}, meta.name), h('p', {}, meta.desc), opts),
+      h('div', { class: 'page-ctrl' },
+        h('button', { class: 'icon-btn', title: 'Move up', disabled: i === 0, onclick: () => move(-1) }, '↑'),
+        h('button', { class: 'icon-btn', title: 'Move down', disabled: i === cfg.pages.length - 1, onclick: () => move(1) }, '↓'),
+        h('label', { class: 'switch', title: 'Show / hide' },
+          h('input', { type: 'checkbox', checked: p.enabled, onchange: (e) => {
+            if (!e.target.checked && cfg.pages.filter((x) => x.enabled).length === 1) { e.target.checked = true; toast('At least one page must stay enabled', true); return; }
+            p.enabled = e.target.checked; renderPages(); changed();
+          } }), h('span'))));
+    dragSort(item, cfg.pages, () => { renderPages(); changed(); });
+    list.append(item);
+  });
+}
+
+/** Minimal HTML5 drag-and-drop reordering. */
+function dragSort(el, arr, done) {
+  el.addEventListener('dragstart', (e) => { el.classList.add('dragging'); e.dataTransfer.setData('text/plain', el.dataset.i); });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+  el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.classList.remove('over');
+    const from = +e.dataTransfer.getData('text/plain'), to = +el.dataset.i;
+    if (Number.isNaN(from) || from === to) return;
+    const [x] = arr.splice(from, 1);
+    arr.splice(to, 0, x);
+    done(from, to);
+  });
+}
+
+// ---------------------------------------------------------------- shortcuts
+function renderDeck() {
+  const deck = $('deck');
+  deck.style.setProperty('--cols', opt('deck', 'columns', 4));
+  deck.textContent = '';
+  cfg.shortcuts.forEach((s, i) => {
+    const k = h('div', { class: 'key' + (i === selKey ? ' sel' : ''), draggable: 'true', 'data-i': i, style: { '--k': s.color || '#6b7280' },
+      onclick: () => { selKey = i; renderDeck(); } },
+      h('span', { class: 'ki' }, s.icon || '•'), h('span', { class: 'kl' }, s.label || '(untitled)'));
+    k.style.setProperty('--k', s.color || '#6b7280');
+    dragSort(k, cfg.shortcuts, (from, to) => { selKey = to; renderDeck(); changed(); });
+    deck.append(k);
+  });
+  deck.append(h('div', { class: 'key add', onclick: addShortcut }, h('span', { class: 'ki' }, '＋'), h('span', { class: 'kl' }, 'New shortcut')));
+  renderEditor();
+}
+
+function addShortcut() {
+  cfg.shortcuts.push({ id: '', label: 'New shortcut', icon: '⭐', color: '#0ea5e9', cmd: '' });
+  selKey = cfg.shortcuts.length - 1;
+  renderDeck();
+  changed();
+  setTimeout(() => document.querySelector('#editor input')?.select(), 0);
+}
+
+function renderEditor() {
+  const ed = $('editor');
+  ed.textContent = '';
+  const s = cfg.shortcuts[selKey];
+  if (!s) { ed.append(h('p', { class: 'lead', style: { margin: 0 } }, 'No shortcuts yet. Add one with "New shortcut".')); return; }
+
+  const upd = (key, val, rerender = true) => { s[key] = val; if (rerender) renderDeckKeysOnly(); changed(); };
+  const text = (key, label, ph = '', hint = '') => h('div', { class: 'field' }, h('label', {}, label),
+    h('input', { type: 'text', value: s[key] ?? '', placeholder: ph, oninput: (e) => upd(key, e.target.value) }),
+    hint ? h('span', { class: 'hint' }, hint) : null);
+
+  const iconIn = h('input', { type: 'text', class: 'icon-input', value: s.icon || '', maxlength: 8, oninput: (e) => upd('icon', e.target.value) });
+  const colorIn = h('input', { type: 'color', value: s.color || '#6b7280', oninput: (e) => { upd('color', e.target.value); markSwatch(); } });
+  const sw = h('div', { class: 'swatches' }, ...COLORS.map((c) => h('button', { title: c, style: { background: c }, 'data-c': c,
+    onclick: () => { colorIn.value = c; upd('color', c); markSwatch(); } })));
+  const markSwatch = () => sw.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.c === s.color));
+  markSwatch();
+  const cmdIn = h('input', { type: 'text', value: s.cmd || '', placeholder: 'e.g. wt.exe, https://…, builtin:lock', oninput: (e) => upd('cmd', e.target.value, false) });
+  const preset = h('select', { onchange: (e) => { if (e.target.value) { cmdIn.value = e.target.value; upd('cmd', e.target.value, false); cmdIn.focus(); } e.target.value = ''; } },
+    ...PRESETS.map(([v, l]) => h('option', { value: v }, l)));
+
+  ed.append(
+    h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '12px' } },
+      h('h3', { style: { margin: 0 } }, 'Edit shortcut'),
+      h('div', { class: 'row', style: { gap: '6px' } },
+        h('button', { class: 'btn sm', onclick: () => moveKey(-1), disabled: selKey === 0 }, '← Earlier'),
+        h('button', { class: 'btn sm', onclick: () => moveKey(1), disabled: selKey === cfg.shortcuts.length - 1 }, 'Later →'),
+        h('button', { class: 'btn sm', onclick: testKey }, '▶ Test'),
+        h('button', { class: 'btn sm danger', onclick: delKey }, 'Delete'))),
+    h('div', { class: 'grid2' },
+      h('div', {},
+        text('label', 'Label', 'Text shown on the key'),
+        h('div', { class: 'field' }, h('label', {}, 'Icon (emoji)'), h('div', { class: 'row' }, iconIn),
+          h('div', { class: 'emojis' }, ...EMOJIS.map((em) => h('button', { onclick: () => { iconIn.value = em; upd('icon', em); } }, em)))),
+        h('div', { class: 'field' }, h('label', {}, 'Colour'), h('div', { class: 'row' }, colorIn), sw)),
+      h('div', {},
+        h('div', { class: 'field' }, h('label', {}, 'Command'), cmdIn, preset,
+          h('span', { class: 'hint' }, 'Program, address or built-in command. Anything the Windows Run dialog accepts works.')),
+        text('args', 'Arguments', 'e.g. -d D:\\Projects claude'),
+        text('cwd', 'Working folder', 'optional'),
+        h('div', { class: 'field' }, h('label', {}, 'Id'), h('code', {}, s.id || '(generated on save)')))));
+}
+
+function renderDeckKeysOnly() {
+  const keys = $('deck').querySelectorAll('.key:not(.add)');
+  cfg.shortcuts.forEach((s, i) => {
+    const k = keys[i];
+    if (!k) return;
+    k.style.setProperty('--k', s.color || '#6b7280');
+    k.querySelector('.ki').textContent = s.icon || '•';
+    k.querySelector('.kl').textContent = s.label || '(untitled)';
+  });
+}
+function moveKey(d) {
+  const j = selKey + d;
+  [cfg.shortcuts[selKey], cfg.shortcuts[j]] = [cfg.shortcuts[j], cfg.shortcuts[selKey]];
+  selKey = j; renderDeck(); changed();
+}
+function delKey() {
+  const s = cfg.shortcuts[selKey];
+  if (!confirm(`Delete "${s.label}"?`)) return;
+  cfg.shortcuts.splice(selKey, 1);
+  selKey = Math.max(0, selKey - 1);
+  renderDeck(); changed();
+}
+async function testKey() {
+  const s = cfg.shortcuts[selKey];
+  const r = await fetch('/api/shortcuts/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s) });
+  const j = await r.json().catch(() => ({}));
+  r.ok ? toast(`Ran "${s.label}"`) : toast(j.error || 'Could not run it', true);
+}
+
+// ---------------------------------------------------------------- general
+function bindForm() {
+  document.querySelectorAll('[data-bind]').forEach((el) => {
+    const p = el.dataset.bind, type = el.dataset.type;
+    const v = getPath(cfg, p);
+    if (el.type === 'checkbox') el.checked = !!v; else el.value = v ?? '';
+    el.oninput = el.onchange = () => {
+      let val = el.type === 'checkbox' ? el.checked : el.value;
+      if (type === 'num') val = parseFloat(val);
+      if (type === 'int') val = parseInt(val || '0', 10);
+      if (p === 'adbPath' && val === '') val = null;
+      setPath(cfg, p, val);
+      $('nbv').textContent = Math.round(cfg.night.brightness * 100) + '%';
+      changed();
+    };
+  });
+  $('nbv').textContent = Math.round(cfg.night.brightness * 100) + '%';
+}
+
+async function searchCity() {
+  const q = $('citySearch').value.trim();
+  const box = $('cityResults');
+  if (!q) return;
+  box.hidden = false;
+  box.replaceChildren(h('button', { disabled: true }, 'Searching…'));
+  try {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`);
+    const j = await r.json();
+    const res = j.results || [];
+    box.replaceChildren(...(res.length ? res.map((c) => h('button', { onclick: () => {
+      cfg.weather = { city: c.name, lat: +c.latitude.toFixed(3), lon: +c.longitude.toFixed(3) };
+      bindForm(); changed(); box.hidden = true; toast(`Location: ${c.name}`);
+    } }, c.name, ' ', h('small', {}, [c.admin1, c.country].filter(Boolean).join(', ')))) : [h('button', { disabled: true }, 'No results')]));
+  } catch (_) { box.replaceChildren(h('button', { disabled: true }, 'Search failed (offline?)')); }
+}
+
+async function loadInfo() {
+  try {
+    const i = await (await fetch('/api/info')).json();
+    $('ver').textContent = 'v' + i.version;
+    const pill = $('phone');
+    pill.className = 'pill' + (i.connected ? ' on' : '');
+    pill.querySelector('span').textContent = i.connected ? 'Phone connected' : 'No phone connected';
+    $('adbFound').textContent = i.adb ? 'Found: ' + i.adb : 'adb not found — winget install Google.PlatformTools';
+    const sel = $('serial');
+    const cur = cfg.deviceSerial || '';
+    const opts = [['', 'All connected devices'], ...i.devices.map((d) => [d, d])];
+    if (cur && !i.devices.includes(cur)) opts.push([cur, cur + ' (not connected)']);
+    sel.replaceChildren(...opts.map(([v, l]) => h('option', { value: v, selected: v === cur }, l)));
+    sel.onchange = () => { cfg.deviceSerial = sel.value || null; changed(); };
+    $('info').replaceChildren(
+      h('dt', {}, 'Version'), h('dd', {}, i.version),
+      h('dt', {}, 'Settings file'), h('dd', {}, h('code', {}, i.configPath)),
+      h('dt', {}, 'Log'), h('dd', {}, h('code', {}, i.logPath)),
+      h('dt', {}, 'adb'), h('dd', {}, i.adb || '—'));
+  } catch (_) {}
+}
+
+// ---------------------------------------------------------------- load / save
+async function load() {
+  cfg = await (await fetch('/api/settings')).json();
+  cfg.pages ??= []; cfg.shortcuts ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {};
+  saved = JSON.stringify(cfg);
+  renderPages(); renderDeck(); bindForm(); changed(); loadInfo();
+}
+
+async function save() {
+  const r = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(j.error || 'Could not save', true); return; }
+  await load();
+  toast('Saved — the phone updates within a few seconds');
+}
+
+$('save').onclick = save;
+$('revert').onclick = () => { cfg = JSON.parse(saved); renderPages(); renderDeck(); bindForm(); changed(); };
+$('openPhone').onclick = async () => { await fetch('/api/phone/open', { method: 'POST' }); toast('Opening the panel on the phone'); };
+$('cityBtn').onclick = searchCity;
+$('citySearch').onkeydown = (e) => { if (e.key === 'Enter') searchCity(); };
+$('applyJson').onclick = () => {
+  try { cfg = JSON.parse($('json').value); $('jsonErr').textContent = ''; renderPages(); renderDeck(); bindForm(); changed(); toast('JSON loaded into the form — remember to save'); }
+  catch (e) { $('jsonErr').textContent = e.message; }
+};
+document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (!$('save').disabled) save(); } });
+window.addEventListener('beforeunload', (e) => { if (!$('save').disabled) { e.preventDefault(); e.returnValue = ''; } });
+
+function route() {
+  const id = (location.hash || '#pages').slice(1);
+  document.querySelectorAll('section').forEach((s) => s.classList.toggle('on', s.id === id));
+  document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + id));
+}
+window.addEventListener('hashchange', route);
+route();
+load();
+setInterval(loadInfo, 5000);
+</script>
+</body>
+</html>

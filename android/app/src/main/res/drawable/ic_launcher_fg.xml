@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- screen -->
+    <path
+        android:pathData="M35,36h38a5,5 0,0 1,5 5v22a5,5 0,0 1,-5 5h-38a5,5 0,0 1,-5 -5v-22a5,5 0,0 1,5 -5z"
+        android:strokeWidth="3"
+        android:strokeColor="#E8ECF1"
+        android:fillColor="#00000000" />
+    <!-- bars -->
+    <path android:pathData="M38,61v-6h5v6z" android:fillColor="#2DD4BF" />
+    <path android:pathData="M46,61v-13h5v13z" android:fillColor="#76B900" />
+    <path android:pathData="M54,61v-9h5v9z" android:fillColor="#A78BFA" />
+    <!-- clock dot -->
+    <path android:pathData="M64,47a4,4 0,1 0,8 0a4,4 0,1 0,-8 0z" android:fillColor="#F59E0B" />
+    <!-- stand -->
+    <path android:pathData="M51,68h6v5h-6z M43,73h22v3h-22z" android:fillColor="#E8ECF1" />
+</vector>
