@@ -3,7 +3,8 @@
 <h1 align="center">PhoneBox</h1>
 
 <p align="center"><b>Turn an old Android phone into a desk panel for your computer: Windows, Linux or macOS.</b><br>
-Widgets for your PC, AI coding sessions, music, weather and anything you push to it. USB or Wi-Fi, no cloud.</p>
+Widgets for your PC, AI coding sessions, music, weather and anything you push to it. USB or Wi-Fi, no cloud.<br>
+<a href="https://ersinkoc.github.io/phonebox/"><b>▶ Try the live demo in your browser</b></a></p>
 
 <p align="center">
   <a href="https://github.com/ersinkoc/phonebox/actions/workflows/build.yml"><img src="https://github.com/ersinkoc/phonebox/actions/workflows/build.yml/badge.svg" alt="build"></a>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhoneBox — live demo</title>
+<meta name="description" content="Turn an old Android phone into a desk panel for your computer. Try the panel and the layout editor in your browser.">
+<link rel="icon" href="favicon.ico">
+<style>
+:root { --bg: #07090d; --panel: #10141b; --line: #232a35; --text: #eef2f6; --muted: #8a94a3; --accent: #2dd4bf; color-scheme: dark; }
+* { box-sizing: border-box; margin: 0; }
+body {
+  background:
+    radial-gradient(45% 50% at 50% 28%, rgba(45, 212, 191, .14), transparent 70%),
+    radial-gradient(40% 50% at 12% 70%, rgba(167, 139, 250, .12), transparent 70%),
+    radial-gradient(40% 50% at 88% 60%, rgba(244, 114, 182, .09), transparent 70%), var(--bg);
+  color: var(--text); font: 15px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif; min-height: 100vh;
+}
+a { color: var(--accent); }
+.wrap { max-width: 1060px; margin: 0 auto; padding: 32px 16px 56px; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+header img { width: 36px; height: 36px; }
+header h1 { font-size: 22px; font-weight: 700; }
+header .gh { margin-left: auto; color: var(--text); text-decoration: none; border: 1px solid var(--line); padding: 7px 14px; border-radius: 10px; font-size: 14px; }
+header .gh:hover { border-color: var(--accent); }
+.lead { color: var(--muted); max-width: 720px; margin: 6px 0 26px; font-size: 16px; }
+.lead b { color: var(--text); font-weight: 600; }
+
+.stage { display: flex; justify-content: center; }
+.phone { position: relative; width: 100%; max-width: 900px; padding: 2.2% 3%; border-radius: 6.5% / 14%;
+  background: linear-gradient(160deg, #262a33, #0c0d11 55%, #1a1d24); box-shadow: 0 40px 80px rgba(0, 0, 0, .6), inset 0 0 0 1.5px #3a3f4b; }
+.screen { position: relative; width: 100%; aspect-ratio: 780 / 360; border-radius: 2.4% / 5.2%; overflow: hidden; background: #000; }
+.screen iframe { position: absolute; left: 0; top: 0; width: 780px; height: 360px; border: 0; transform-origin: 0 0; }
+
+.controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 22px 0 8px; }
+.controls button, .controls a {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+  padding: 9px 14px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 7px;
+}
+.controls button:hover, .controls a:hover { border-color: var(--accent); }
+.controls .primary { background: var(--accent); color: #062b26; border-color: transparent; font-weight: 600; }
+.hint { text-align: center; color: var(--muted); font-size: 13px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 40px; }
+.card { background: rgba(16, 20, 27, .8); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+.card h3 { font-size: 15px; margin-bottom: 4px; }
+.card p { color: var(--muted); font-size: 14px; }
+.cta { margin-top: 36px; text-align: center; }
+.cta code { background: var(--panel); border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px; font-size: 13px; }
+footer { margin-top: 40px; text-align: center; color: var(--muted); font-size: 13px; }
+@media (max-width: 600px) { header .gh span { display: none; } .lead { font-size: 15px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="favicon.ico" alt="">
+    <h1>PhoneBox</h1>
+    <a class="gh" href="https://github.com/ersinkoc/phonebox">★ <span>GitHub</span></a>
+  </header>
+  <p class="lead">Turn an old Android phone into a <b>desk panel for your computer</b> (Windows, Linux or macOS): 41 widgets, a visual layout editor,
+    AI coding sessions and quotas, music, webhooks. This is the real panel running in your browser with made-up data — swipe it, tap it.</p>
+
+  <div class="stage"><div class="phone"><div class="screen"><iframe id="panel" src="panel/" title="PhoneBox panel"></iframe></div></div></div>
+
+  <div class="controls">
+    <button id="prev">◀ Previous page</button>
+    <button id="next">Next page ▶</button>
+    <button id="overview">▦ All pages</button>
+    <button id="notify">🔔 Send a notification</button>
+    <button id="approval">✳ Claude asks for permission</button>
+    <a class="primary" href="settings/#pages" target="_blank" rel="noopener">✎ Open the layout editor ↗</a>
+  </div>
+  <p class="hint">Changes you make in the layout editor show up here right away. Everything stays in your browser.</p>
+
+  <div class="grid">
+    <div class="card"><h3>41 widgets, 18 templates</h3><p>Clocks, weather, media, gauges, charts, processes, timers, checklists, markets, Hacker News… on a 12 × 6 grid, as many pages as you like.</p></div>
+    <div class="card"><h3>AI coding at a glance</h3><p>Claude and Codex quotas with a burn-rate forecast, every Claude Code session, and Allow / Deny for permission prompts right on the phone.</p></div>
+    <div class="card"><h3>Webhooks</h3><p>Scripts, CI and Home Assistant push values and notifications with one <code>curl</code>; the panel can switch pages on demand.</p></div>
+    <div class="card"><h3>USB or Wi-Fi, no cloud</h3><p>Over the USB cable, or over Wi-Fi / Tailscale with a pinned certificate and a key. Nothing leaves your machine.</p></div>
+  </div>
+
+  <div class="cta">
+    <p>Install: <code>./scripts/install.sh --apk</code> (Linux, macOS) or <code>.\scripts\install.ps1 -Apk</code> (Windows) —
+      see the <a href="https://github.com/ersinkoc/phonebox#quick-start">quick start</a>.</p>
+  </div>
+  <footer>MIT licensed · <a href="https://github.com/ersinkoc/phonebox">github.com/ersinkoc/phonebox</a></footer>
+</div>
+
+<script>
+const frame = document.getElementById('panel');
+const screen = frame.parentElement;
+const fit = () => { frame.style.transform = `scale(${screen.clientWidth / 780})`; };
+new ResizeObserver(fit).observe(screen);
+fit();
+const panel = () => frame.contentWindow;
+document.getElementById('prev').onclick = () => panel().onAndroidKey?.('prev');
+document.getElementById('next').onclick = () => panel().onAndroidKey?.('next');
+document.getElementById('overview').onclick = () => panel().openOverview?.();
+const notes = [
+  { title: 'Build #143', text: 'main passed in 2m 48s', level: 'ok' },
+  { title: 'Deploy', text: 'Production is live 🚀', level: 'ok' },
+  { title: 'Doorbell', text: 'Someone is at the front door', level: 'warn' },
+  { title: 'Disk space', text: 'D: is 95% full', level: 'error' },
+];
+let n = 0;
+document.getElementById('notify').onclick = () => panel().PhoneBoxDemo?.emit('notify', notes[n++ % notes.length]);
+document.getElementById('approval').onclick = () => panel().PhoneBoxDemo?.ask();
+</script>
+</body>
+</html>

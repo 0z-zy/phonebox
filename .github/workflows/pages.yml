@@ -1,0 +1,33 @@
+name: pages
+
+# Publishes the live web demo (the real panel and settings page with made-up data) to GitHub Pages.
+on:
+  push:
+    branches: [main]
+    paths: ['android/app/src/main/assets/www/**', 'agent/PhoneBox.Agent/settings.html', 'agent/PhoneBox.Agent/*.json', 'tools/pages/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble the demo
+        run: python3 tools/pages/build.py _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
