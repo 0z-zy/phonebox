@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.3 — 2026-11-08
 
 **Claude Code permission prompts on the phone.** When Claude Code asks for permission, the phone shows the request
 with Allow and Deny (through a `PermissionRequest` hook that the settings page installs). If the phone is not
