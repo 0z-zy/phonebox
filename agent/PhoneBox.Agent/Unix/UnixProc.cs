@@ -61,6 +61,36 @@ public static class UnixProc
         return Ps().TryGetValue(pid, out var row) && row.Uid == Sh.Uid;
     }
 
+    /// <summary>The parent's PID: /proc/&lt;pid&gt;/stat on Linux (the field after the command name), ps on macOS.</summary>
+    public static int? ParentPid(int pid)
+    {
+        if (OperatingSystem.IsLinux())
+        {
+            var stat = Sh.ReadFile($"/proc/{pid}/stat");
+            var close = stat?.LastIndexOf(')') ?? -1; // the command name may contain spaces and parentheses
+            var f = close < 0 ? [] : stat![(close + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return f.Length > 1 && int.TryParse(f[1], out var pp) ? pp : null;
+        }
+        lock (PsLock)
+        {
+            if (Environment.TickCount64 - _ppidAt >= 2000) // one ps call for the whole tree walk
+            {
+                var map = new Dictionary<int, int>();
+                foreach (var line in (Sh.Run("ps", "-axo", "pid=,ppid=") ?? "").Split('\n'))
+                {
+                    var f = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (f.Length == 2 && int.TryParse(f[0], out var p) && int.TryParse(f[1], out var pp)) map[p] = pp;
+                }
+                _ppid = map;
+                _ppidAt = Environment.TickCount64;
+            }
+            return _ppid.TryGetValue(pid, out var parent) ? parent : null;
+        }
+    }
+
+    private static Dictionary<int, int> _ppid = [];
+    private static long _ppidAt = -10_000;
+
     public static string? ImagePath(Process p)
     {
         if (OperatingSystem.IsLinux())

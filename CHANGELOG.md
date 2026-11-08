@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Fix:** ending a process from the Processes widget no longer ends protected processes, other users' processes or
+  the agent among its child processes (it used to end the whole tree unchecked, e.g. the adb server started from a
+  terminal). The ones left running are counted in the reply.
 - **Security:** other web sites can no longer reach the local API with GET requests (browsers send no Origin header
   on those). A page you visited could make the agent run your command widgets' commands; the agent now refuses any
   browser request from another site, except following a link to the settings page.

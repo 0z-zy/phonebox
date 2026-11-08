@@ -197,7 +197,11 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
         return new(killed, failed, killed == 0 ? "access denied (it may be running as administrator)" : null);
     }
 
-    /// <summary>Terminates a single process together with its child processes.</summary>
+    /// <summary>
+    /// Terminates a single process together with its child processes. Every descendant passes the same checks as the
+    /// process itself (protected names, other sessions or users, the agent): those are left running. Process.Kill's
+    /// own tree mode checks none of that, so it would end, say, a protected dotnet or adb started from a terminal.
+    /// </summary>
     public KillResult KillPid(int pid)
     {
         if (pid == _selfPid) return new(0, 0, "that is the PhoneBox agent itself");
@@ -209,14 +213,55 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
             var name = p.ProcessName;
             if (Protected.Contains(name)) return new(0, 0, $"{name} is protected and cannot be terminated");
             if (!Mine(p)) return new(0, 0, "process belongs to another session or user");
-            try
-            {
-                p.Kill(entireProcessTree: true);
-                log.LogInformation("terminated {Name} (pid {Pid}) with its children", name, pid);
-                return new(1, 0, null);
-            }
+            var descendants = Descendants(pid);
+            try { p.Kill(); }
             catch (Exception ex) { return new(0, 1, "could not terminate: " + ex.Message); }
+            int killed = 1, skipped = 0;
+            foreach (var d in descendants)
+            {
+                try
+                {
+                    using var c = Process.GetProcessById(d);
+                    if (d == _selfPid || Protected.Contains(c.ProcessName) || !Mine(c)) { skipped++; continue; }
+                    c.Kill();
+                    killed++;
+                }
+                catch (ArgumentException) { } // already gone
+                catch { skipped++; }
+            }
+            log.LogInformation("terminated {Name} (pid {Pid}) and {Children} child processes ({Skipped} left running)", name, pid, killed - 1, skipped);
+            return new(killed, skipped, null);
         }
+    }
+
+    /// <summary>
+    /// Every process below <paramref name="root"/>. A child counts only if it started after its parent, so a parent
+    /// PID that Windows or Unix has since given to an unrelated process does not pull that process in.
+    /// </summary>
+    public static List<int> Descendants(int root)
+    {
+        var started = new Dictionary<int, DateTime>();
+        var children = new Dictionary<int, List<int>>();
+        foreach (var p in Process.GetProcesses())
+        {
+            using (p)
+            {
+                try { started[p.Id] = p.StartTime; } catch { continue; } // not readable: not ours to end anyway
+                if (ParentPid(p.Id) is { } parent && parent != p.Id)
+                    (children.TryGetValue(parent, out var list) ? list : children[parent] = []).Add(p.Id);
+            }
+        }
+        var result = new List<int>();
+        var seen = new HashSet<int> { root };
+        var queue = new Queue<int>([root]);
+        while (queue.Count > 0)
+        {
+            var parent = queue.Dequeue();
+            if (!children.TryGetValue(parent, out var kids) || !started.TryGetValue(parent, out var parentStart)) continue;
+            foreach (var kid in kids)
+                if (started[kid] >= parentStart && seen.Add(kid)) { result.Add(kid); queue.Enqueue(kid); }
+        }
+        return result;
     }
 
     /// <summary>Windows: same logon session as the agent. Linux / macOS: same user.</summary>
@@ -271,6 +316,17 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
     }
 
 #if WINDOWS
+    /// <summary>The parent's PID (PROCESS_BASIC_INFORMATION.InheritedFromUniqueProcessId), or null.</summary>
+    private static int? ParentPid(int pid)
+    {
+        var h = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+        if (h == 0) return null;
+        var size = 6 * IntPtr.Size;
+        var buf = Marshal.AllocHGlobal(size);
+        try { return NtQueryInformationProcess(h, 0 /* ProcessBasicInformation */, buf, size, out _) == 0 ? (int)Marshal.ReadIntPtr(buf, 5 * IntPtr.Size) : null; }
+        finally { Marshal.FreeHGlobal(buf); CloseHandle(h); }
+    }
+
     private static string? ImagePath(int pid)
     {
         var h = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
@@ -332,5 +388,6 @@ public sealed class ProcessMonitor(ILogger<ProcessMonitor> log, SessionMonitor s
     private static extern bool CloseHandle(nint h);
 #else
     private static string? ReadArgs(int pid) => UnixProc.Args(pid);
+    private static int? ParentPid(int pid) => UnixProc.ParentPid(pid);
 #endif
 }
