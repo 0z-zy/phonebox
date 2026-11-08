@@ -41,6 +41,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
       - name: Signing key
         env:
           KEYSTORE: ${{ secrets.PHONEBOX_KEYSTORE_BASE64 }}

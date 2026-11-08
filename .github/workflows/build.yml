@@ -16,6 +16,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle   # the Gradle distribution and dependencies, so a download hiccup does not fail the build
       - name: Build debug APK
         working-directory: android
         run: |

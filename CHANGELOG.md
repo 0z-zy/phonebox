@@ -4,6 +4,7 @@
 
 - Updates download from the GitHub API when github.com's download links answer with an error (a 504 held up the
   0.6.5 update for a while).
+- A failed update check is retried after 15 minutes instead of 6 hours.
 
 ## 0.6.5 — 2026-11-08
 
