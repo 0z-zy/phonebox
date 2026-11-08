@@ -180,11 +180,12 @@
     const day = new Date(new Date().toDateString()).getTime(), H = 3600e3, M = 60e3, t = now();
     const ev = (title, start, mins, cal, color, location, allDay = false) => ({ title, start, end: start + mins * M, allDay, location, calendar: cal, color });
     const work = '#60a5fa', home = '#34d399';
+    const utcDay = (n) => { const d = new Date(); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + n); };
     return { updated: t - 4 * M, errors: [], events: [
       ev('Design review', t - 20 * M, 45, 'Work', work, 'Room 4'),
       ev('1:1 with Sam', t + 90 * M, 30, 'Work', work, null),
       ev('Gym', day + 18.5 * H, 60, 'Personal', home, null),
-      ev('Release day', day + 24 * H, 24 * 60, 'Work', work, null, true),
+      ev('Release day', utcDay(1), 24 * 60, 'Work', work, null, true), // all-day: UTC midnight of the date, as the agent sends it
       ev('Sprint planning', day + 33.5 * H, 60, 'Work', work, 'Big room'),
       ev('Lunch with Alex', day + 36 * H, 60, 'Personal', home, 'Noodle bar'),
       ev('Dentist', day + 2 * 24 * H + 10 * H, 45, 'Personal', home, null),

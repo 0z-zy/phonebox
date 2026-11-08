@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fix:** all-day calendar events show on their own date wherever the phone is (west of UTC they showed a day early,
+  east of UTC they ran into the next morning).
 - **Fix:** a command widget whose command leaves a process running in the background (`start /b …`, `… &`) no
   longer stays "running" until that process ends; it shows its output right after the command itself finishes.
 

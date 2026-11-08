@@ -239,6 +239,25 @@ test('rules can be added from the examples', async ({ page }) => {
   await expect(page.locator('#save')).toBeEnabled();
 });
 
+// The agent sends all-day events as the UTC midnight of their date; the panel has to show them on that date wherever
+// the phone is (audit F9: west of UTC they showed a day early, east of UTC they ran into the next day).
+for (const [zone, noon] of [['America/New_York', '2026-11-09T12:00:00-05:00'], ['Pacific/Auckland', '2026-11-09T12:00:00+13:00']]) {
+  test(`all-day events land on their own date (${zone})`, async ({ browser, baseURL }) => {
+    const ctx = await browser.newContext({ baseURL, viewport: { width: 780, height: 360 }, timezoneId: zone });
+    const page = await ctx.newPage();
+    await page.clock.setFixedTime(new Date(noon));
+    await page.goto('/panel/');
+    await expect(page.locator('.w').first()).toBeVisible();
+    const planner = await page.locator('#dots i').count() - 4; // Planner is the 5th page from the end of the demo
+    for (let i = 0; i < planner; i++) await page.keyboard.press('ArrowRight');
+    const heading = page.locator('.ag-day, .ag-row').filter({ hasText: /Release day|^(Today|Tomorrow)$/ });
+    await expect(page.locator('.ag-row', { hasText: 'Release day' })).toBeVisible();
+    const order = await heading.evaluateAll((els) => els.map((e) => e.textContent.trim()));
+    expect(order[order.findIndex((t) => t.includes('Release day')) - 1]).toBe('Tomorrow');
+    await ctx.close();
+  });
+}
+
 test('the landing page embeds the panel', async ({ page }) => {
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 1200, height: 900 });

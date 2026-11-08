@@ -1216,8 +1216,16 @@ export async function loadConfig() {
   } catch (_) {}
 }
 
+// All-day events have a date but no time zone: the agent sends the UTC midnight of that date. Show them on that date in
+// the phone's own zone (west of UTC they would land a day early, east of UTC run into the next day).
+const localDay = (ms) => { const d = new Date(ms); return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()).getTime(); };
 export async function loadCalendar() {
-  try { D.calendar = await api('/calendar'); emit('calendar'); } catch (_) {}
+  try {
+    const cal = await api('/calendar');
+    cal.events = (cal.events || []).map((e) => (e.allDay ? { ...e, start: localDay(e.start), end: localDay(e.end) } : e)).sort((a, b) => a.start - b.start);
+    D.calendar = cal;
+    emit('calendar');
+  } catch (_) {}
 }
 
 export async function loadQuotas() {
