@@ -14,7 +14,7 @@ Widgets for your PC, AI coding sessions, music, weather and anything you push to
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
-<p align="center"><img src="docs/hero.png" width="900" alt="PhoneBox on three phones: status, home and ambient pages"></p>
+<p align="center"><img src="docs/hero-0.6.png" width="900" alt="PhoneBox on three phones: automation, home and planner pages"></p>
 
 PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and an **agent** on the computer
 (Windows, Linux or macOS) that feeds it over the USB cable (or over Wi-Fi / Tailscale after pairing once). You design
@@ -30,8 +30,8 @@ the pages in a visual editor on the PC: **53 widgets**, **23 templates**, as man
 - **Webhooks and rules**: scripts, CI and Home Assistant push values and notifications; rules switch pages calmly
   when something happens (a call, music, an AI session waiting for you).
 
-<p align="center"><a href="docs/phonebox-tour.mp4"><img src="docs/phonebox-tour.gif" width="780" alt="A tour of PhoneBox pages"></a><br>
-<sub>A tour through the pages (made-up data). <a href="docs/phonebox-tour.mp4">Full video (MP4)</a></sub></p>
+<p align="center"><a href="docs/tour-0.6.mp4"><img src="docs/tour-0.6.gif" width="780" alt="A tour of PhoneBox pages: a notification, a Claude Code permission prompt, a rule switching pages with a countdown, and the new templates"></a><br>
+<sub>A tour through the pages (made-up data): a notification, a permission prompt, a rule switching pages calmly. <a href="docs/tour-0.6.mp4">Video (MP4)</a></sub></p>
 
 **Contents**: [Quick start](#quick-start) · [Pages & templates](#pages--templates) · [Widgets](#widgets) ·
 [Layout editor](#layout-editor--settings) · [Claude Code prompts](#claude-code-permission-prompts) · [Webhooks](#webhooks) · [Rules](#rules) · [Wi-Fi & Tailscale](#wi-fi--tailscale) ·
@@ -363,6 +363,7 @@ Yes. PhoneBox needs no root on the phone and no admin rights on the PC.
 python tools/demo-server.py                  # the web demo from source: http://127.0.0.1:8790/panel/ and /settings/
 dotnet test agent/PhoneBox.Agent.Tests       # agent unit tests
 cd tools/ui-tests; npm ci; npx playwright test; cd ../..   # browser tests of the panel and settings (against the demo)
+cd tools/ui-tests; node media.js tour; cd ../..         # README media from the running demo: shots <page>… | tour | hero
 .\scripts\build.ps1                          # dist\PhoneBox-<v>.apk + dist\PhoneBoxAgent-<v>-win-x64.zip
 cd android; .\gradlew.bat assembleDebug      # APK only
 dotnet run --project agent/PhoneBox.Agent    # agent from source
