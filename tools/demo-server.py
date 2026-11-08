@@ -16,6 +16,7 @@ webhook API, so curl can push values, notifications and page switches into the o
 Only the Python standard library is used. Layout changes are kept in the browser (as on the live demo).
 """
 import importlib.util, json, sys, threading, time
+sys.dont_write_bytecode = True  # importing tools/pages/build.py must not leave a __pycache__ in the repo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
