@@ -72,7 +72,7 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
         {
             _state = "checking";
             var repo = cfg.Get().Updates.Repo;
-            using var doc = JsonDocument.Parse(await _http.GetStringAsync($"https://api.github.com/repos/{repo}/releases/latest", ct));
+            using var doc = JsonDocument.Parse(await ApiStringAsync($"https://api.github.com/repos/{repo}/releases/latest", ct));
             var r = doc.RootElement;
             var tag = r.GetProperty("tag_name").GetString() ?? "";
             string? apk = null, zip = null;
@@ -213,16 +213,57 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
         {
             // github.com's download links sometimes answer 504 while the API serves the same file fine
             log.LogInformation("download of {Name} failed ({Msg}); trying the GitHub API", name, ex.Message);
-            await DownloadToAsync(api, "application/octet-stream", tmp, ct);
+            try { await DownloadToAsync(api, "application/octet-stream", tmp, ct); }
+            catch (HttpRequestException)
+            {
+                var token = await GhTokenAsync(ct);
+                if (token is null) throw;
+                await DownloadToAsync(api, "application/octet-stream", tmp, ct, token);
+            }
         }
         File.Move(tmp, path, true);
         return path;
     }
 
-    private async Task DownloadToAsync(string url, string? accept, string file, CancellationToken ct)
+    /// <summary>
+    /// GET on api.github.com. GitHub sometimes answers anonymous requests with 503 / 504 while it serves signed-in ones;
+    /// then the request is repeated with the GitHub CLI's token, if gh is installed and signed in. The token is sent to
+    /// api.github.com only (.NET drops the Authorization header when it follows a redirect to the download host).
+    /// </summary>
+    private async Task<string> ApiStringAsync(string url, CancellationToken ct)
+    {
+        try { return await _http.GetStringAsync(url, ct); }
+        catch (HttpRequestException ex)
+        {
+            var token = await GhTokenAsync(ct);
+            if (token is null) throw;
+            log.LogInformation("GitHub API without a token failed ({Msg}); retrying with the gh CLI's token", ex.Message);
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new("Bearer", token);
+            using var res = await _http.SendAsync(req, ct);
+            res.EnsureSuccessStatusCode();
+            return await res.Content.ReadAsStringAsync(ct);
+        }
+    }
+
+    /// <summary>The GitHub CLI's token (gh auth token), or null when gh is missing or not signed in.</summary>
+    private static async Task<string?> GhTokenAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
+            var t = (await GitHubMonitor.Gh(["auth", "token"], cts.Token)).Trim();
+            return t.Length > 0 && !t.Contains(' ') ? t : null;
+        }
+        catch (Exception) when (!ct.IsCancellationRequested) { return null; }
+    }
+
+    private async Task DownloadToAsync(string url, string? accept, string file, CancellationToken ct, string? token = null)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         if (accept is not null) { req.Headers.Accept.Clear(); req.Headers.Accept.ParseAdd(accept); }
+        if (token is not null) req.Headers.Authorization = new("Bearer", token);
         using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         res.EnsureSuccessStatusCode();
         await using var src = await res.Content.ReadAsStreamAsync(ct);

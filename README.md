@@ -280,6 +280,8 @@ The agent checks the latest GitHub release every 6 hours (or **Settings › Gene
 automatic updates on, installs the new APK on the phone with `adb install -r` while it is plugged in (no prompt on the
 phone; over Wi-Fi the panel shows "plug in USB to update") and replaces its own files, then restarts. Android only
 accepts an update signed with the same key as the installed app; the agent never uninstalls to force one.
+When GitHub turns away anonymous requests (it answers 503 / 504 now and then), the agent asks again with the
+[GitHub CLI](https://cli.github.com)'s token if `gh` is signed in; the token only goes to `api.github.com`.
 See the [changelog](CHANGELOG.md).
 
 ## How it works

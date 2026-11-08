@@ -5,6 +5,8 @@
 - Updates download from the GitHub API when github.com's download links answer with an error (a 504 held up the
   0.6.5 update for a while).
 - A failed update check is retried after 15 minutes instead of 6 hours.
+- When GitHub answers anonymous API requests with 503 / 504 (it did for hours on 2026-11-08), update checks and
+  downloads are repeated with the GitHub CLI's token, if `gh` is signed in. The token is sent to api.github.com only.
 
 ## 0.6.5 — 2026-11-08
 

@@ -90,7 +90,7 @@ public sealed class GitHubMonitor(ILogger<GitHubMonitor> log) : BackgroundServic
         review, ci,
         DateTimeOffset.TryParse(Str(n, "updatedAt"), out var u) ? u.ToUnixTimeMilliseconds() : 0);
 
-    private static async Task<string> Gh(string[] args, CancellationToken ct)
+    internal static async Task<string> Gh(string[] args, CancellationToken ct)
     {
         var psi = new ProcessStartInfo("gh")
         {
