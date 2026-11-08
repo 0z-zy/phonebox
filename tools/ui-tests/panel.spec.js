@@ -172,6 +172,18 @@ test('a question from Claude is shown with its choices and left for the terminal
   await expect(prompt).toBeHidden();
 });
 
+test('a GPU without sensors (Apple) shows its memory, not 0 degrees', async ({ page }) => {
+  await page.goto('/panel/');
+  await expect(page.locator('.w').first()).toBeVisible();
+  const labels = await page.evaluate(async () => {
+    const { METRICS } = await import('/panel/main.js');
+    const apple = { pc: { gpu: { name: 'Apple M2 Pro', util: 37, temp: null, power: null, vramUsed: 2, vramTotal: 16, fan: null, clock: null }, ramUsedGb: 9.46, ramTotalGb: 16 } };
+    const nvidia = { pc: { gpu: { name: 'RTX', util: 5, temp: 61.4, power: 120.2, vramUsed: 2, vramTotal: 16, fan: 30, clock: 1800 } } };
+    return { gpu: METRICS.gpu.sub(apple), temp: METRICS.gputemp.sub(apple), ram: METRICS.ram.sub(apple), nvidia: METRICS.gpu.sub(nvidia), nvidiaTemp: METRICS.gputemp.sub(nvidia) };
+  });
+  expect(labels).toEqual({ gpu: '2 / 16 GB memory', temp: 'No GPU data', ram: '9.5 / 16 GB', nvidia: '61°C · 120 W', nvidiaTemp: 'Fan 30% · 1800 MHz' });
+});
+
 test('portrait arranges the widgets in six columns', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto('/panel/');

@@ -205,9 +205,15 @@ export const METRICS = {
   cpu: { label: 'CPU', name: 'Processor', color: '--cpu', unit: '%', max: () => 100, val: (s) => s.pc?.cpu,
     sub: (s) => (s.pc?.cpuTemp != null ? `${Math.round(s.pc.cpuTemp)}°C` : shortCpu(s.pc?.cpuName)), title: (s) => s.pc?.cpuName },
   gpu: { label: 'GPU', name: 'Graphics', color: '--gpu', unit: '%', max: () => 100, val: (s) => gpuOf(s)?.util,
-    sub: (s) => (gpuOf(s) ? `${Math.round(gpuOf(s).temp)}°C · ${Math.round(gpuOf(s).power)} W` : 'No GPU data'), title: (s) => gpuOf(s)?.name },
+    sub: (s) => {
+      const g = gpuOf(s);
+      if (!g) return 'No GPU data';
+      if (g.temp != null && g.power != null) return `${Math.round(g.temp)}°C · ${Math.round(g.power)} W`;
+      if (g.vramUsed != null && g.vramTotal != null) return `${r1(g.vramUsed)} / ${Math.round(g.vramTotal)} GB memory`; // no sensors (Apple GPU)
+      return g.name || 'Active';
+    }, title: (s) => gpuOf(s)?.name },
   ram: { label: 'RAM', name: 'Memory', color: '--ram', unit: 'GB', max: (s) => s.pc?.ramTotalGb || 1, val: (s) => s.pc?.ramUsedGb, fmt: r1,
-    pct: (s) => (s.pc ? (s.pc.ramUsedGb / s.pc.ramTotalGb) * 100 : null), sub: (s) => (s.pc ? `/ ${Math.round(s.pc.ramTotalGb)} GB` : '') },
+    pct: (s) => (s.pc ? (s.pc.ramUsedGb / s.pc.ramTotalGb) * 100 : null), sub: (s) => (s.pc && s.pc.ramTotalGb ? `${r1(s.pc.ramUsedGb)} / ${Math.round(s.pc.ramTotalGb)} GB` : '') },
   vram: { label: 'VRAM', name: 'Video memory', color: '--gpu', unit: '%', max: () => 100,
     val: (s) => (gpuOf(s)?.vramTotal ? (gpuOf(s).vramUsed / gpuOf(s).vramTotal) * 100 : null),
     sub: (s) => (gpuOf(s)?.vramTotal ? `${r1(gpuOf(s).vramUsed)} / ${Math.round(gpuOf(s).vramTotal)} GB` : '') },
@@ -218,7 +224,7 @@ export const METRICS = {
   ping: { label: 'PING', name: 'Ping', color: '#38bdf8', unit: 'ms', max: () => Math.max(50, ...hist.ping) * 1.2, val: (s) => s.ping?.ms,
     sub: (s) => (s.ping ? `avg ${s.ping.avgMs ?? '—'} ms · loss ${s.ping.lossPct}%` : '') },
   gputemp: { label: 'GPU TEMP', name: 'GPU temperature', color: '#f97316', unit: '°C', max: () => 100, val: (s) => gpuOf(s)?.temp,
-    sub: (s) => (gpuOf(s) ? `Fan ${Math.round(gpuOf(s).fan)}% · ${Math.round(gpuOf(s).clock)} MHz` : 'No GPU data') },
+    sub: (s) => (gpuOf(s)?.fan != null && gpuOf(s)?.clock != null ? `Fan ${Math.round(gpuOf(s).fan)}% · ${Math.round(gpuOf(s).clock)} MHz` : 'No GPU data') },
   cputemp: { label: 'CPU TEMP', name: 'CPU temperature', color: '#fb7185', unit: '°C', max: () => 100, val: (s) => s.pc?.cpuTemp,
     sub: (s) => (s.pc?.cpuTemp == null ? 'needs LibreHardwareMonitor' : shortCpu(s.pc?.cpuName)) },
 };

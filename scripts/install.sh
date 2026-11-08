@@ -38,6 +38,15 @@ rid="$os-$arch"
 
 command -v dotnet >/dev/null || { echo ".NET 10 SDK is required: https://dotnet.microsoft.com/download" >&2; exit 1; }
 
+# the service files below need DOTNET_ROOT; Homebrew keeps the runtime in libexec, not next to the dotnet link
+if [ -z "${DOTNET_ROOT:-}" ]; then
+  if command -v brew >/dev/null && [ -d "$(brew --prefix dotnet 2>/dev/null)/libexec" ]; then
+    export DOTNET_ROOT="$(brew --prefix dotnet)/libexec"
+  else
+    export DOTNET_ROOT="$(dirname "$(readlink -f "$(command -v dotnet)" 2>/dev/null || command -v dotnet)")"
+  fi
+fi
+
 echo "==> Building the agent ($rid)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -54,6 +63,7 @@ echo "==> Installing to $app"
 mkdir -p "$app"
 cp -R "$tmp/." "$app/"
 chmod +x "$app/PhoneBoxAgent"
+if [ "$os" = osx ]; then codesign --force --deep --sign - "$app/PhoneBoxAgent" >/dev/null 2>&1 || true; fi # macOS refuses unsigned binaries it has quarantined
 
 if [ "$autostart" = 1 ]; then
   if [ "$os" = linux ]; then
@@ -69,7 +79,7 @@ After=graphical-session.target
 ExecStart=$app/PhoneBoxAgent
 Restart=on-failure
 RestartSec=5
-Environment=DOTNET_ROOT=$(dirname "$(readlink -f "$(command -v dotnet)")")
+Environment=DOTNET_ROOT=$DOTNET_ROOT
 
 [Install]
 WantedBy=default.target
@@ -88,7 +98,7 @@ EOF
   <key>ProgramArguments</key><array><string>$app/PhoneBoxAgent</string></array>
   <key>EnvironmentVariables</key><dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    <key>DOTNET_ROOT</key><string>$(dirname "$(readlink -f "$(command -v dotnet)" 2>/dev/null || command -v dotnet)")</string>
+    <key>DOTNET_ROOT</key><string>$DOTNET_ROOT</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>

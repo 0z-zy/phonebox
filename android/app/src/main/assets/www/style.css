@@ -190,7 +190,7 @@ body.night #navCard, body.night #navChip { display: none; }
 
 /* ---------- clock ---------- */
 .w-clock { display: flex; flex-direction: column; justify-content: center; padding-left: 2px; }
-.status { font-size: clamp(10px, 5cqh, 12.5px); color: var(--muted); display: flex; align-items: center; gap: 5px; letter-spacing: .02em; white-space: nowrap; overflow: hidden; }
+.status { font-size: 11.5px; font-size: clamp(10px, 5cqh, 12.5px); color: var(--muted); display: flex; align-items: center; gap: 5px; letter-spacing: .02em; white-space: nowrap; overflow: hidden; }
 .status .sep { color: var(--dim); }
 .status .qm b { font-weight: 600; }
 .status .qm .sep { margin-right: 5px; }
@@ -209,11 +209,11 @@ body.night #navCard, body.night #navChip { display: none; }
 .clock .sec { font-size: .2em; font-weight: 400; color: var(--muted); letter-spacing: 0; margin: .5em 0 0 .45em; }
 .clock .sec:empty { display: none; }
 @keyframes blink { 50% { opacity: .2; } }
-.date { font-size: clamp(11px, 7.5cqh, 19px); color: #c9d1db; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wx { display: flex; align-items: center; gap: 8px; margin-top: clamp(2px, 4cqh, 14px); min-width: 0; }
-.wx-icon { font-size: clamp(18px, 13cqh, 34px); line-height: 1; }
-.wx-temp { font-size: clamp(18px, 13cqh, 34px); font-weight: 300; letter-spacing: -0.02em; }
-.wx-meta { display: flex; flex-direction: column; font-size: clamp(10px, 5.4cqh, 13px); line-height: 1.35; min-width: 0; }
+.date { font-size: 15px; font-size: clamp(11px, 7.5cqh, 19px); color: #c9d1db; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx { display: flex; align-items: center; gap: 8px; margin-top: 6px; margin-top: clamp(2px, 4cqh, 14px); min-width: 0; }
+.wx-icon { font-size: 26px; font-size: clamp(18px, 13cqh, 34px); line-height: 1; }
+.wx-temp { font-size: 26px; font-size: clamp(18px, 13cqh, 34px); font-weight: 300; letter-spacing: -0.02em; }
+.wx-meta { display: flex; flex-direction: column; font-size: 11.5px; font-size: clamp(10px, 5.4cqh, 13px); line-height: 1.35; min-width: 0; }
 .wx-meta span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @container (max-height: 80px) { .w-clock .date, .w-clock .wx-meta { display: none; } }
 

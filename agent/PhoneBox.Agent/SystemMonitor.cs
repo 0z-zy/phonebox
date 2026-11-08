@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace PhoneBox.Agent;
 
@@ -72,9 +73,10 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
         }
     }
 
-    // Keeps nvidia-smi running and reads one line per second.
+    // Keeps nvidia-smi running and reads one line per second (macOS: asks ioreg every two seconds instead).
     private async Task GpuLoop(CancellationToken ct)
     {
+        if (OperatingSystem.IsMacOS()) { await AppleGpuLoop(ct); return; }
         var name = "GPU";
         while (!ct.IsCancellationRequested)
         {
@@ -100,6 +102,51 @@ public sealed class SystemMonitor(ILogger<SystemMonitor> log) : BackgroundServic
             _gpu = null;
             await Task.Delay(TimeSpan.FromSeconds(10), ct);
         }
+    }
+
+    /// <summary>macOS has no nvidia-smi; the GPU's load and memory come from the IOAccelerator entry of ioreg.</summary>
+    private async Task AppleGpuLoop(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo("ioreg", "-r -d 1 -w 0 -c IOAccelerator")
+                {
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = AppPaths.NeutralCwd,
+                };
+                using var p = Process.Start(psi)!;
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(5));
+                try
+                {
+                    var text = await p.StandardOutput.ReadToEndAsync(cts.Token);
+                    await p.WaitForExitAsync(cts.Token);
+                    _gpu = ParseAppleGpu(text, Memory().Total);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested) { try { p.Kill(); } catch { } _gpu = null; }
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex) { log.LogDebug("apple-gpu: {Msg}", ex.Message); _gpu = null; }
+            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+        }
+    }
+
+    /// <summary>Reads the GPU from the ioreg text. The memory is unified: the total is the machine's RAM, the used part what the GPU holds.</summary>
+    internal static GpuInfo? ParseAppleGpu(string ioreg, double totalMemoryBytes)
+    {
+        var util = Regex.Match(ioreg, "\"Device Utilization %\"\\s*=\\s*(\\d+)");
+        if (!util.Success) return null; // no accelerator entry: nothing to show
+        var model = Regex.Match(ioreg, "\"model\"\\s*=\\s*\"([^\"]+)\"");
+        var alloc = Regex.Match(ioreg, "\"Alloc system memory\"\\s*=\\s*(\\d+)");
+        const double Gb = 1024.0 * 1024 * 1024;
+        return new GpuInfo(model.Success ? model.Groups[1].Value : "Apple GPU",
+            double.Parse(util.Groups[1].Value, CultureInfo.InvariantCulture), null, null, null,
+            alloc.Success ? Math.Round(double.Parse(alloc.Groups[1].Value, CultureInfo.InvariantCulture) / Gb, 1) : null,
+            totalMemoryBytes > 0 ? Math.Round(totalMemoryBytes / Gb, 1) : null, null, null);
     }
 
     // CPU temperature: Windows from LibreHardwareMonitor's web server (port 8085), when it is running; Linux from hwmon.
