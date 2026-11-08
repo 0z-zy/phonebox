@@ -105,7 +105,8 @@ app.Use(async (ctx, next) =>
     else
     {
         var host = ctx.Request.Host.Host;
-        if ((host != "127.0.0.1" && host != "localhost") || (origin != "" && !SameOrigins.Contains(origin)))
+        if ((host != "127.0.0.1" && host != "localhost") || (origin != "" && !SameOrigins.Contains(origin))
+            || BrowserGuard.IsForeign(ctx.Request.Headers["Sec-Fetch-Site"], ctx.Request.Headers["Sec-Fetch-Mode"], ctx.Request.Method, ctx.Request.Path))
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;

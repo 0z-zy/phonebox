@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Security:** other web sites can no longer reach the local API with GET requests (browsers send no Origin header
+  on those). A page you visited could make the agent run your command widgets' commands; the agent now refuses any
+  browser request from another site, except following a link to the settings page.
 - The old agent no longer starts the same update a second time while it restarts into the new version (it logged
   "access denied" on a *.old file).
 

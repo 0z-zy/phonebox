@@ -163,3 +163,19 @@ public class UpdateServiceTests
         Assert.False(UpdateService.Transient(new InvalidOperationException(), CancellationToken.None));
     }
 }
+
+/// <summary>F1 (audit 2026-11-08): other sites must not reach the local API through GET requests without an Origin.</summary>
+public class BrowserGuardTests
+{
+    [Theory]
+    [InlineData("cross-site", "no-cors", "GET", "/api/widget/devops/command", true)]   // <img src> on another site
+    [InlineData("same-site", "cors", "GET", "/api/settings", true)]                     // another port on localhost
+    [InlineData("cross-site", "navigate", "GET", "/api/widget/p/w", true)]             // a link straight to the API
+    [InlineData("cross-site", "navigate", "POST", "/", true)]                          // a form posted from another site
+    [InlineData("cross-site", "navigate", "GET", "/", false)]                          // a link to the settings page
+    [InlineData("same-origin", "cors", "GET", "/api/settings", false)]                 // the settings page itself
+    [InlineData("none", "navigate", "GET", "/", false)]                                // typed into the address bar
+    [InlineData(null, null, "GET", "/api/state", false)]                               // the phone's USB proxy, curl, hooks
+    public void ForeignBrowserRequestsAreRefused(string? site, string? mode, string method, string path, bool foreign) =>
+        Assert.Equal(foreign, BrowserGuard.IsForeign(site, mode, method, new Microsoft.AspNetCore.Http.PathString(path)));
+}
