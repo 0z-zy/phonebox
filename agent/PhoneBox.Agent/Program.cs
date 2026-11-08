@@ -190,14 +190,21 @@ app.MapGet("/panel/{*file}", (string? file, HttpRequest req) =>
 });
 app.MapGet("/favicon.ico", () => AppPaths.Resource("phonebox.ico") is { } s ? Results.Stream(s, "image/x-icon") : Results.NotFound());
 
-app.MapGet("/api/settings", (ConfigStore cfg) => Results.Text(
-    JsonSerializer.Serialize(cfg.Get(), ConfigStore.WriteOpts), "application/json; charset=utf-8"));
+// The version lets the settings page save only over what it loaded (X-Config-Version, see ConfigStore.Save).
+app.MapGet("/api/settings", (ConfigStore cfg, HttpResponse res) =>
+{
+    var json = JsonSerializer.Serialize(cfg.Get(), ConfigStore.WriteOpts);
+    res.Headers["X-Config-Version"] = cfg.Version.ToString();
+    return Results.Text(json, "application/json; charset=utf-8");
+});
 
 app.MapPut("/api/settings", async (HttpRequest req, ConfigStore cfg, ILogger<Program> log) =>
 {
     if (req.ContentType?.StartsWith("application/json") != true) return Results.StatusCode(415);
     using var r = new StreamReader(req.Body);
-    var err = cfg.Save(await r.ReadToEndAsync());
+    long? expected = long.TryParse(req.Headers["X-Config-Version"], out var v) ? v : null; // scripts may leave it out
+    var err = cfg.Save(await r.ReadToEndAsync(), expected);
+    if (err == ConfigStore.Conflict) return Results.Json(new { error = err }, statusCode: StatusCodes.Status409Conflict);
     if (err is not null) return Results.BadRequest(new { error = err });
     log.LogInformation("settings saved");
     return Results.Ok(new { version = cfg.Version });

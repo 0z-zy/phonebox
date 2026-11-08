@@ -348,8 +348,15 @@ public sealed partial class ConfigStore(string path)
         }
     }
 
-    /// <summary>Validates and saves the settings. Returns an error message, or null on success.</summary>
-    public string? Save(string json)
+    /// <summary>Save refused: the file changed after the caller loaded it (<see cref="Save"/> with an expected version).</summary>
+    public const string Conflict = "The settings were changed in another tab or window after this one loaded them. Reload the page to see them; the changes made here were not saved.";
+
+    /// <summary>
+    /// Validates and saves the settings. Returns an error message, or null on success. With
+    /// <paramref name="expectedVersion"/> (the <see cref="Version"/> the caller loaded), a save over a newer file is
+    /// refused with <see cref="Conflict"/> instead of silently undoing the newer change.
+    /// </summary>
+    public string? Save(string json, long? expectedVersion = null)
     {
         AgentConfig cfg;
         try { cfg = JsonSerializer.Deserialize<AgentConfig>(json, ReadOpts) ?? throw new JsonException("empty"); }
@@ -363,6 +370,7 @@ public sealed partial class ConfigStore(string path)
 
         lock (_lock)
         {
+            if (expectedVersion is { } expected && File.Exists(path) && File.GetLastWriteTimeUtc(path).Ticks != expected) return Conflict;
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
             var tmp = path + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(cfg, WriteOpts));

@@ -164,3 +164,52 @@ public class PushTests
         Assert.Equal(JsonValueKind.String, PushStore.ParseValue("NaN").ValueKind);
     }
 }
+
+/// <summary>Audit F10: a settings tab loaded earlier must not silently undo a change saved since (a stale tab once turned the night screen back on).</summary>
+public class ConfigConcurrencyTests
+{
+    private static (ConfigStore Store, string Path) NewStore()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"phonebox-config-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, "{}");
+        return (new ConfigStore(path), path);
+    }
+
+    private static string With(ConfigStore s, Action<AgentConfig> edit)
+    {
+        var c = System.Text.Json.JsonSerializer.Deserialize<AgentConfig>(System.Text.Json.JsonSerializer.Serialize(s.Get(), ConfigStore.WriteOpts), ConfigStore.WriteOpts)!;
+        edit(c);
+        return System.Text.Json.JsonSerializer.Serialize(c, ConfigStore.WriteOpts);
+    }
+
+    [Fact]
+    public void AStaleSaveIsRefusedAndTheNewerChangeStays()
+    {
+        var (s, path) = NewStore();
+        try
+        {
+            var loadedByTabA = s.Version;
+            var tabA = With(s, c => c.Night.Brightness = 0.03);
+            Thread.Sleep(20);
+            Assert.Null(s.Save(With(s, c => c.Night.Start = "01:11"), s.Version));   // tab B, up to date
+            Assert.Equal(ConfigStore.Conflict, s.Save(tabA, loadedByTabA));           // tab A, stale
+            Assert.Equal("01:11", s.Get().Night.Start);
+            Assert.Equal(0.02, s.Get().Night.Brightness);
+        }
+        finally { File.Delete(path); File.Delete(path + ".bak"); }
+    }
+
+    [Fact]
+    public void AnUpToDateSaveAndASaveWithoutAVersionGoThrough()
+    {
+        var (s, path) = NewStore();
+        try
+        {
+            Assert.Null(s.Save(With(s, c => c.Night.Start = "01:11"), s.Version));
+            Thread.Sleep(20);
+            Assert.Null(s.Save(With(s, c => c.Night.Start = "02:22"), null));        // scripts and backups send no version
+            Assert.Equal("02:22", s.Get().Night.Start);
+        }
+        finally { File.Delete(path); File.Delete(path + ".bak"); }
+    }
+}

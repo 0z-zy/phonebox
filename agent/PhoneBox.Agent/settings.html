@@ -561,6 +561,7 @@ const PRESETS = [
 
 let cfg = null;        // settings being edited
 let saved = '';        // last saved JSON (dirty check)
+let cfgVersion = null; // version of the settings file this page loaded; a save over a newer one is refused
 let selKey = 0;
 
 // ---------------------------------------------------------------- helpers
@@ -1524,7 +1525,9 @@ async function loadInfo() {
 // ---------------------------------------------------------------- load / save
 async function load() {
   if (!catalog.widgets.length) catalog = await (await fetch('/api/catalog')).json();
-  cfg = await (await fetch('/api/settings')).json();
+  const res = await fetch('/api/settings');
+  cfgVersion = res.headers.get('X-Config-Version');
+  cfg = await res.json();
   cfg.pages ??= []; cfg.shortcuts ??= []; cfg.rules ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false };
   for (const [k, v] of Object.entries({ idleReturnSec: 90, switchCountdownSec: 3, touchGraceSec: 20, minDwellSec: 15, holdMaxMin: 30, keepAwake: true })) cfg.display[k] ??= v;
   cfg.charge ??= { enabled: false, min: 50, max: 80, method: 'ha' };
@@ -1533,7 +1536,9 @@ async function load() {
 }
 
 async function save() {
-  const r = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) });
+  const headers = { 'Content-Type': 'application/json' };
+  if (cfgVersion) headers['X-Config-Version'] = cfgVersion;
+  const r = await fetch('/api/settings', { method: 'PUT', headers, body: JSON.stringify(cfg) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { toast(j.error || 'Could not save', true); return; }
   await load();

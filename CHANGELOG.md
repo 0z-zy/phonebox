@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Fix:** a settings tab that was opened earlier can no longer silently undo changes saved since (another tab, a
+  script): its save is refused with "changed in another tab or window — reload". This once turned the night screen
+  back on.
 - **Fix:** all-day calendar events show on their own date wherever the phone is (west of UTC they showed a day early,
   east of UTC they ran into the next morning).
 - **Fix:** a command widget whose command leaves a process running in the background (`start /b …`, `… &`) no
