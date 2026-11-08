@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Security:** script in a Custom HTML widget can no longer reach the agent API through the phone's proxy (it could
+  end processes, switch Home Assistant entities and more). The proxy now only forwards the panel's own requests.
 - **Fix:** a "while it lasts" rule with a rest time comes back at once after you edit it or resume paused rules
   (its condition still held, but it waited out the rest time first).
 - **Fix:** a pushed value with a TTL now also disappears from the phone when it expires (the phone was never told and

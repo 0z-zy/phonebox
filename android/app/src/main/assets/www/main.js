@@ -14,6 +14,10 @@ import './widgets/web.js';
 // (adb reverse) or Wi-Fi to the computer.
 
 export const API = '/agent/api';
+// The phone's native proxy only forwards requests that carry this header (or image GETs), so script in a sandboxed
+// Custom HTML widget cannot reach the agent: adding the header to a cross-origin request needs a CORS preflight,
+// which the proxy refuses. See MainActivity.fromPanel.
+export const PANEL_HEADERS = { 'X-PhoneBox-Panel': '1' };
 export const LOCALE = 'en-GB';
 export const COLS = 12;
 export const ROWS = 6;
@@ -70,7 +74,7 @@ export async function api(path, method = 'GET', timeout = 2500) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeout);
   try {
-    const r = await fetch(API + path, { method, signal: ctl.signal, cache: 'no-store' });
+    const r = await fetch(API + path, { method, signal: ctl.signal, cache: 'no-store', headers: PANEL_HEADERS });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const ct = r.headers.get('content-type') || '';
     return ct.includes('json') ? r.json() : r.text();
@@ -547,7 +551,7 @@ export function renderSheet() {
 }
 
 export async function postKill(query) {
-  const r = await fetch(`${API}/procs/kill?${query}`, { method: 'POST', cache: 'no-store' });
+  const r = await fetch(`${API}/procs/kill?${query}`, { method: 'POST', cache: 'no-store', headers: PANEL_HEADERS });
   return { ok: r.ok, body: await r.json().catch(() => ({})) };
 }
 

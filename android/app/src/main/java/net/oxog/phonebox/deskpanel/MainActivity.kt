@@ -79,7 +79,8 @@ class MainActivity : Activity(), SensorEventListener {
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url
-                if (url.host == ASSET_HOST && url.path?.startsWith("/agent/") == true) return proxy(request)
+                if (url.host == ASSET_HOST && url.path?.startsWith("/agent/") == true)
+                    return if (fromPanel(request)) proxy(request) else FORBIDDEN()
                 val r = assetLoader.shouldInterceptRequest(url)
                 // the panel is made of ES modules, which need a JavaScript MIME type
                 if (r != null && url.path?.endsWith(".js") == true) r.mimeType = "text/javascript"
@@ -93,6 +94,16 @@ class MainActivity : Activity(), SensorEventListener {
         web.loadUrl("https://$ASSET_HOST/assets/www/index.html")
         hideSystemUi()
     }
+
+    /**
+     * Only the panel itself may reach the agent. Every frame of the WebView comes through here, including the sandboxed
+     * iframe of a Custom HTML widget, which is meant to talk to the panel through postMessage only. The panel sends
+     * X-PhoneBox-Panel on its requests; a sandboxed frame cannot add it without a CORS preflight, which is refused.
+     * Images (album art, process icons) cannot carry headers, but they are read-only GETs.
+     */
+    private fun fromPanel(req: WebResourceRequest): Boolean =
+        req.requestHeaders.keys.any { it.equals(PANEL_HEADER, ignoreCase = true) } ||
+            (req.method == "GET" && req.url.path in READ_ONLY_IMAGES)
 
     private fun proxy(req: WebResourceRequest): WebResourceResponse {
         val path = req.url.encodedPath!!.removePrefix("/agent")
@@ -299,5 +310,8 @@ class MainActivity : Activity(), SensorEventListener {
     companion object {
         private const val ASSET_HOST = "appassets.androidplatform.net"
         private val NO_STORE = mapOf("Cache-Control" to "no-store")
+        private const val PANEL_HEADER = "X-PhoneBox-Panel"
+        private val READ_ONLY_IMAGES = setOf("/agent/api/art", "/agent/api/procs/icon")
+        private fun FORBIDDEN() = WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", NO_STORE, java.io.ByteArrayInputStream(ByteArray(0)))
     }
 }

@@ -1,4 +1,4 @@
-import { $, API, D, LOCALE, Q_STYLE, api, bridge, cfg, color, rulesPaused, toggleRulesPause, fillIcon, fmtDur, fmtMem, gotoPageRef, h, haptic, openSheet, paceInfo, pad, quotaProviders, store, tick, toast } from '../main.js';
+import { $, API, D, PANEL_HEADERS, LOCALE, Q_STYLE, api, bridge, cfg, color, rulesPaused, toggleRulesPause, fillIcon, fmtDur, fmtMem, gotoPageRef, h, haptic, openSheet, paceInfo, pad, quotaProviders, store, tick, toast } from '../main.js';
 import { W } from '../registry.js';
 import { canKillAnywhere, dialEl, every } from './helpers.js';
 
@@ -87,7 +87,7 @@ W.obs = {
       haptic();
       busy = action + (scene || ''); render(true);
       try {
-        const r = await fetch(`${API}/obs/${action}` + (scene ? '?scene=' + encodeURIComponent(scene) : ''), { method: 'POST', cache: 'no-store' });
+        const r = await fetch(`${API}/obs/${action}` + (scene ? '?scene=' + encodeURIComponent(scene) : ''), { method: 'POST', cache: 'no-store', headers: PANEL_HEADERS });
         if (!r.ok) toast((await r.json().catch(() => ({}))).error || 'OBS did not do it', 'err');
       } catch (_) { toast('The PC did not answer', 'err'); }
       setTimeout(async () => { await load(); busy = null; render(true); }, 600);
@@ -172,7 +172,7 @@ W.ha = {
       haptic();
       busy = e.id; render(true);
       try {
-        const r = await fetch(`${API}/ha/toggle/${encodeURIComponent(e.id)}`, { method: 'POST', cache: 'no-store' });
+        const r = await fetch(`${API}/ha/toggle/${encodeURIComponent(e.id)}`, { method: 'POST', cache: 'no-store', headers: PANEL_HEADERS });
         if (!r.ok) toast((await r.json().catch(() => ({}))).error || 'Could not switch it', 'err');
       } catch (_) { toast('The PC did not answer', 'err'); }
       setTimeout(async () => { await load(); busy = null; render(true); }, 700);
@@ -212,7 +212,7 @@ W.docker = {
       haptic();
       busy = c.id; render(true);
       try {
-        const r = await fetch(`${API}/docker/${encodeURIComponent(c.id)}/${action}`, { method: 'POST', cache: 'no-store' });
+        const r = await fetch(`${API}/docker/${encodeURIComponent(c.id)}/${action}`, { method: 'POST', cache: 'no-store', headers: PANEL_HEADERS });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) toast(j.error || `Could not ${action} ${c.name}`, 'err');
         else toast(`${c.name}: ${action === 'stop' ? 'stopped' : action === 'start' ? 'started' : 'restarted'}`, 'ok');
