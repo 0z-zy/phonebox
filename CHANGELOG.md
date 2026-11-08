@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.9 — 2026-11-09
+
+- A question from Claude Code (the "ask the user" tool) no longer shows up on the phone as an Allow / Deny prompt with
+  a block of JSON. The panel lists the question and its choices as text with a single **Got it**; the question itself
+  is still answered in the terminal on the PC, where Claude Code keeps waiting for it.
+- macOS: the GPU widgets work on Apple Silicon (load and the memory the GPU holds, read from `ioreg`). A GPU without
+  temperature or power sensors shows its memory instead of "0°C · 0 W".
+- The RAM meter shows used / total in GB.
+- Clock, date and weather text keep a sensible size on older Android System WebViews that do not know the `cqh` unit.
+- `scripts/install.sh`: finds the .NET runtime of a Homebrew install for the autostart service, and signs the agent
+  ad hoc on macOS.
+
 ## 0.6.8 — 2026-11-08
 
 The last fixes from the code audit; each was reproduced first and verified after.
