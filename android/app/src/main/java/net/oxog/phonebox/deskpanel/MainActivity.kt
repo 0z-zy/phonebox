@@ -28,6 +28,8 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import org.json.JSONObject
 
 /**
@@ -86,7 +88,14 @@ class MainActivity : Activity(), SensorEventListener {
                 if (r != null && url.path?.endsWith(".js") == true) r.mimeType = "text/javascript"
                 return r
             }
+
+            // Old WebView without document-start scripts: hand the bridge key to the main frame only (evaluateJavascript
+            // never runs in iframes), and only when it shows the panel. Bridge calls before it arrives get nothing.
+            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) = giveKey(view, url)
+            override fun onPageFinished(view: WebView, url: String?) = giveKey(view, url)
         }
+        if (documentStartKey)
+            WebViewCompat.addDocumentStartJavaScript(web, "window.__phoneboxKey='$bridgeKey';", setOf("https://$ASSET_HOST"))
         web.addJavascriptInterface(Bridge(), "Android")
         // Lets you debug the panel from the computer via chrome://inspect.
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
@@ -188,32 +197,55 @@ class MainActivity : Activity(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
 
+    /**
+     * Key for the bridge: addJavascriptInterface puts window.Android into EVERY frame of the WebView, including the
+     * sandboxed iframe of a Custom HTML widget. Each call therefore carries this key, which only frames of the panel's
+     * own origin receive (a document-start script with an origin rule; the sandboxed iframe has an opaque origin).
+     * Calls without it do nothing (fail closed). A WebView without document-start scripts gets the key through
+     * evaluateJavascript, which only reaches the main frame (see giveKey).
+     */
+    private val bridgeKey = java.util.UUID.randomUUID().toString()
+    private val documentStartKey by lazy { WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) }
+
+    private fun giveKey(view: WebView, url: String?) {
+        if (!documentStartKey && url?.startsWith("https://$ASSET_HOST/") == true)
+            view.evaluateJavascript("window.__phoneboxKey='$bridgeKey';", null)
+    }
+
     inner class Bridge {
+        private fun ok(key: String) = key == bridgeKey
+
         /** Screen brightness 0..1; a negative value returns control to the system setting. */
         @JavascriptInterface
-        fun setBrightness(value: Float) = runOnUiThread {
-            val lp = window.attributes
-            lp.screenBrightness =
-                if (value < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else value.coerceIn(0.01f, 1f)
-            window.attributes = lp
+        fun setBrightness(key: String, value: Float) {
+            if (!ok(key)) return
+            runOnUiThread {
+                val lp = window.attributes
+                lp.screenBrightness =
+                    if (value < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else value.coerceIn(0.01f, 1f)
+                window.attributes = lp
+            }
         }
 
         @JavascriptInterface
-        fun haptic() {
+        fun haptic(key: String) {
+            if (!ok(key)) return
             val v = getSystemService(Vibrator::class.java) ?: return
             if (v.hasVibrator()) v.vibrate(VibrationEffect.createOneShot(14, VibrationEffect.DEFAULT_AMPLITUDE))
         }
 
         /** Notification vibration; pattern is a "wait,vibrate,wait,vibrate..." list of milliseconds. */
         @JavascriptInterface
-        fun buzz(pattern: String) {
+        fun buzz(key: String, pattern: String) {
+            if (!ok(key)) return
             val v = getSystemService(Vibrator::class.java) ?: return
             val timings = pattern.split(',').mapNotNull { it.trim().toLongOrNull() }.toLongArray()
             if (v.hasVibrator() && timings.isNotEmpty()) v.vibrate(VibrationEffect.createWaveform(timings, -1))
         }
 
         @JavascriptInterface
-        fun battery(): String {
+        fun battery(key: String): String {
+            if (!ok(key)) return "{}"
             val i = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val level = i?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
             val scale = i?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
@@ -246,15 +278,15 @@ class MainActivity : Activity(), SensorEventListener {
 
         /** "usb", "wifi" or "none": how the last agent request was delivered. */
         @JavascriptInterface
-        fun transport(): String = link.route.name.lowercase()
+        fun transport(key: String): String = if (ok(key)) link.route.name.lowercase() else ""
 
         /** Whether the volume keys flip pages (true) or change the phone's volume (false). */
         @JavascriptInterface
-        fun setVolumeKeys(enabled: Boolean) { volumeKeysFlipPages = enabled }
+        fun setVolumeKeys(key: String, enabled: Boolean) { if (ok(key)) volumeKeysFlipPages = enabled }
 
         /** Which sensors the phone has: {"light": true, "proximity": true}. */
         @JavascriptInterface
-        fun sensors(): String = JSONObject()
+        fun sensors(key: String): String = if (!ok(key)) "{}" else JSONObject()
             .put("light", sensors?.getDefaultSensor(Sensor.TYPE_LIGHT) != null)
             .put("proximity", sensors?.getDefaultSensor(Sensor.TYPE_PROXIMITY) != null)
             .toString()
@@ -264,39 +296,46 @@ class MainActivity : Activity(), SensorEventListener {
          * (Back + Overview held together, or turning the setting off). Android asks once to confirm.
          */
         @JavascriptInterface
-        fun setPinned(on: Boolean) = runOnUiThread {
-            val pinned = getSystemService(ActivityManager::class.java).lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
-            try { if (on && !pinned) startLockTask() else if (!on && pinned) stopLockTask() } catch (_: Exception) {}
+        fun setPinned(key: String, on: Boolean) {
+            if (!ok(key)) return
+            runOnUiThread {
+                val pinned = getSystemService(ActivityManager::class.java).lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+                try { if (on && !pinned) startLockTask() else if (!on && pinned) stopLockTask() } catch (_: Exception) {}
+            }
         }
 
         /** The computers this phone is paired with (for switching over Wi-Fi). */
         @JavascriptInterface
-        fun pcs(): String = link.pcsJson()
+        fun pcs(key: String): String = if (ok(key)) link.pcsJson() else "[]"
 
         /** Switches to another paired computer and reloads the panel from it. */
         @JavascriptInterface
-        fun selectPc(id: String) {
-            if (!link.select(id)) return
+        fun selectPc(key: String, id: String) {
+            if (!ok(key) || !link.select(id)) return
             runOnUiThread { stream.stop(); stream.start(); web.reload() }
         }
 
         @JavascriptInterface
-        fun forgetPc(id: String) = link.forget(id)
+        fun forgetPc(key: String, id: String) { if (ok(key)) link.forget(id) }
 
         /** "landscape" (default), "portrait" or "auto" (follow the phone). */
         @JavascriptInterface
-        fun setOrientation(mode: String) = runOnUiThread {
-            val want = when (mode) {
-                "portrait" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                "auto" -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
-                else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        fun setOrientation(key: String, mode: String) {
+            if (!ok(key)) return
+            runOnUiThread {
+                val want = when (mode) {
+                    "portrait" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    "auto" -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+                    else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                }
+                if (requestedOrientation != want) requestedOrientation = want
             }
-            if (requestedOrientation != want) requestedOrientation = want
         }
 
         /** Offers the panel as a home app (see HomeAlias in the manifest); the agent can then make it the default. */
         @JavascriptInterface
-        fun setHomeScreen(on: Boolean) {
+        fun setHomeScreen(key: String, on: Boolean) {
+            if (!ok(key)) return
             val alias = ComponentName(this@MainActivity, "$packageName.HomeAlias")
             val want = if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
             if (packageManager.getComponentEnabledSetting(alias) != want)
@@ -304,7 +343,7 @@ class MainActivity : Activity(), SensorEventListener {
         }
 
         @JavascriptInterface
-        fun version(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+        fun version(key: String): String = if (ok(key)) packageManager.getPackageInfo(packageName, 0).versionName ?: "" else ""
     }
 
     companion object {

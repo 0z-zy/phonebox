@@ -22,7 +22,12 @@ export const LOCALE = 'en-GB';
 export const COLS = 12;
 export const ROWS = 6;
 export const $ = (id) => document.getElementById(id);
-export const bridge = typeof Android !== 'undefined' ? Android : null;
+// The native bridge (window.Android) is in every frame, sandboxed widgets included, so each call carries a key that only
+// the panel's own frames receive (MainActivity.bridgeKey). This wrapper adds it.
+const BRIDGE = ['battery', 'buzz', 'haptic', 'pcs', 'selectPc', 'forgetPc', 'setBrightness', 'setHomeScreen', 'setOrientation',
+  'setPinned', 'setVolumeKeys', 'transport', 'sensors', 'version'];
+export const bridge = typeof Android === 'undefined' ? null : Object.fromEntries(BRIDGE.filter((m) => typeof Android[m] === 'function')
+  .map((m) => [m, (...args) => Android[m](window.__phoneboxKey || '', ...args)]));
 // Live preview inside the agent's layout editor: the layout comes from the editor (unsaved), not from the agent.
 export const PREVIEW = new URLSearchParams(location.search).has('preview') && window.parent !== window;
 

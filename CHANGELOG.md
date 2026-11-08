@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Security:** script in a Custom HTML widget can no longer call the phone's native bridge (forget or switch paired
+  computers, pin the screen, take over the home screen…). Every bridge call needs a key only the panel itself gets.
 - **Security:** script in a Custom HTML widget can no longer reach the agent API through the phone's proxy (it could
   end processes, switch Home Assistant entities and more). The proxy now only forwards the panel's own requests.
 - **Fix:** a "while it lasts" rule with a rest time comes back at once after you edit it or resume paused rules
