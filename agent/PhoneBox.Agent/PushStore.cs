@@ -42,8 +42,14 @@ public sealed partial class PushStore
         catch (Exception ex) { log.LogWarning("could not read {Path}: {Msg}", DataPath, ex.Message); }
     }
 
-    /// <summary>Changes whenever a value is set or removed; the phone refetches /api/push when it changes.</summary>
-    public long Version => Interlocked.Read(ref _version);
+    /// <summary>
+    /// Changes whenever a value is set, removed or expires; the phone refetches /api/push when it changes. Phones read it
+    /// every second (in /api/state), which is also when expired values are dropped.
+    /// </summary>
+    public long Version
+    {
+        get { PurgeExpired(); return Interlocked.Read(ref _version); }
+    }
 
     /// <summary>Last event number, so a freshly started phone does not replay old notifications.</summary>
     public long Seq => Interlocked.Read(ref _seq);
@@ -52,6 +58,7 @@ public sealed partial class PushStore
 
     public IReadOnlyDictionary<string, PushItem> Snapshot()
     {
+        PurgeExpired();
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         return _items.Where(kv => kv.Value.ExpiresAt is null || kv.Value.ExpiresAt > now).ToDictionary(kv => kv.Key, kv => kv.Value);
     }
@@ -62,6 +69,7 @@ public sealed partial class PushStore
     public string? Set(string key, JsonElement data, int? ttlSec)
     {
         if (!ValidKey(key)) return "key must be 1-64 characters: letters, digits, '.', '_' or '-'";
+        PurgeExpired(); // expired values do not count against the limit
         if (!_items.ContainsKey(key) && _items.Count >= MaxItems) return $"too many keys (max {MaxItems}); delete some first";
         // {"ttl": 300, ...} inside the payload works too
         if (ttlSec is null && data.ValueKind == JsonValueKind.Object && data.TryGetProperty("ttl", out var t) && t.TryGetInt32(out var tt)) ttlSec = tt;
@@ -107,9 +115,19 @@ public sealed partial class PushStore
         lock (_evLock) return _events.Where(e => e.Seq > seq && e.At > cutoff).ToList();
     }
 
+    /// <summary>Drops values whose TTL has passed; that is a change too, so phones reload and drop them as well.</summary>
+    private void PurgeExpired()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var removed = false;
+        foreach (var kv in _items)
+            if (kv.Value.ExpiresAt <= now && _items.TryRemove(kv)) removed = true; // only this exact value, not a newer one
+        if (removed) Changed();
+    }
+
     private void Changed()
     {
-        Interlocked.Exchange(ref _version, Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Version + 1));
+        Interlocked.Exchange(ref _version, Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Interlocked.Read(ref _version) + 1));
         _saveTimer.Change(2000, Timeout.Infinite); // debounce disk writes
     }
 

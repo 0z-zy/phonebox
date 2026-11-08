@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fix:** a pushed value with a TTL now also disappears from the phone when it expires (the phone was never told and
+  kept showing it), and expired values no longer count against the 200-key limit.
 - **Fix:** ending a process from the Processes widget no longer ends protected processes, other users' processes or
   the agent among its child processes (it used to end the whole tree unchecked, e.g. the adb server started from a
   terminal). The ones left running are counted in the reply.
