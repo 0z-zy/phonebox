@@ -69,7 +69,13 @@ public sealed class RuleEngine(ConfigStore config, PushStore push, SessionMonito
 
         foreach (var (key, st) in _states.Where(kv => paused || !keys.ContainsKey(kv.Key)).ToList())
         {
-            if (st.Active && st.Rule.WhileActive) Undo(st.Rule);
+            if (st.Active && st.Rule.WhileActive)
+            {
+                Undo(st.Rule);
+                // the edit or the pause took the effect back, not the condition: the new version (or the rule after the
+                // pause) may bring it back at once instead of waiting out the rest time
+                _fired.Remove(st.Rule.Id);
+            }
             _states.Remove(key);
         }
         if (paused) { _active = []; return; }

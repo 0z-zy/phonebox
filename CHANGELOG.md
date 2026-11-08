@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fix:** a "while it lasts" rule with a rest time comes back at once after you edit it or resume paused rules
+  (its condition still held, but it waited out the rest time first).
 - **Fix:** a pushed value with a TTL now also disappears from the phone when it expires (the phone was never told and
   kept showing it), and expired values no longer count against the 200-key limit.
 - **Fix:** ending a process from the Processes widget no longer ends protected processes, other users' processes or
