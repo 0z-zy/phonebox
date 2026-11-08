@@ -23,6 +23,9 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
     private volatile string[] _all = [];
 
     public bool Connected => _devices.Length > 0;
+    /// <summary>Why the phone is missing from adb although it reports in over Wi-Fi (see <see cref="UsbDoctor"/>), or null.</summary>
+    public string? UsbProblem => UsbDoctor.Diagnose(ChargeGuard.LastReport, Connected, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+    private string? _lastProblem;
     public string Devices => string.Join(", ", _devices);
     /// <summary>All attached devices, before the deviceSerial filter (for the settings page).</summary>
     public string[] AllDevices => _all;
@@ -72,6 +75,13 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
         devices = devices.Where(s => string.IsNullOrEmpty(serial) || s == serial).ToArray();
 
         SetDevices(devices);
+        var problem = UsbProblem;
+        if (problem != _lastProblem)
+        {
+            _lastProblem = problem;
+            if (problem is not null) log.LogWarning("USB: {Problem}", problem);
+            if (problem is null && devices.Length > 0) log.LogInformation("USB: the phone is back on USB");
+        }
         if (devices.Length == 0) { Report("no phone connected, waiting..."); return; }
 
         _missingApp = _missingApp.Where(devices.Contains).ToArray();

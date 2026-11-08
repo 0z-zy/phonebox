@@ -335,6 +335,13 @@ accept the USB debugging prompt on the phone. If several devices are connected, 
 **Settings › General › Phone connection**. Over Wi-Fi, pair once over USB and allow the agent in Windows Firewall.
 </details>
 
+<details><summary><b>The phone keeps dropping off USB.</b></summary>
+
+The panel carries on over Wi-Fi when Wi-Fi is on, and **Settings › General › Phone connection** says what the phone
+itself sees: if it is charging but has no USB data connection, the cable or the port only carries power — try another
+cable, or a port straight on the computer instead of a hub or a front-panel port. Updates of the phone app need USB.
+</details>
+
 <details><summary><b>Some widgets show "—" or "No data".</b></summary>
 
 GPU values need an NVIDIA GPU (`nvidia-smi`), CPU temperature needs LibreHardwareMonitor's web server on port 8085,

@@ -1337,7 +1337,9 @@ function reportBattery() {
   if (PREVIEW || !bridge?.battery || !online) return;
   try {
     const b = JSON.parse(bridge.battery());
-    if (b.level >= 0) api(`/phone/battery?level=${b.level}&plugged=${!!b.plugged}&temp=${b.temp || 0}`, 'POST', 4000).catch(() => {});
+    // the phone's view of its USB link lets the agent explain a cable that only charges (see UsbDoctor.cs)
+    const usb = b.usb ? ['connected', 'configured', 'adb'].filter((k) => b.usb[k]).join(',') || 'none' : '';
+    if (b.level >= 0) api(`/phone/battery?level=${b.level}&plugged=${!!b.plugged}&temp=${b.temp || 0}&source=${b.source || ''}&usb=${usb}`, 'POST', 4000).catch(() => {});
   } catch (_) {}
 }
 setInterval(reportBattery, 30_000);

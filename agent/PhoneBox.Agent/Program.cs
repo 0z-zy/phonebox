@@ -221,6 +221,7 @@ app.MapGet("/api/info", (AdbReverse adb, ConfigStore cfg) => Results.Json(new
     connected = adb.Connected,
     devices = adb.AllDevices,
     appMissing = adb.MissingApp,
+    usbProblem = adb.UsbProblem,
 }));
 
 app.MapPost("/api/phone/open", async (AdbReverse adb) => { await adb.OpenPanelAsync(); return Results.Ok(); });
@@ -335,7 +336,7 @@ app.MapPost("/api/rules/test", (RuleConfig rule, RuleEngine rules) =>
 });
 
 // The phone reports its battery (charge guard); the settings show the guard's state and can switch the power to test it.
-app.MapPost("/api/phone/battery", (int level, bool plugged, double? temp) => { ChargeGuard.Report(level, plugged, temp); return Results.Ok(); });
+app.MapPost("/api/phone/battery", (int level, bool plugged, double? temp, string? source, string? usb) => { ChargeGuard.Report(level, plugged, temp, source, usb); return Results.Ok(); });
 app.MapGet("/api/charge", (ChargeGuard guard) => Results.Json(guard.Status()));
 app.MapPost("/api/charge/test", async (string action, ChargeGuard guard, ConfigStore cfg) =>
     action is "on" or "off" && await guard.Switch(cfg.Get().Charge, action) is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));

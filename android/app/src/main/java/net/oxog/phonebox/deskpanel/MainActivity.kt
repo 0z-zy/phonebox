@@ -206,12 +206,30 @@ class MainActivity : Activity(), SensorEventListener {
             val i = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val level = i?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
             val scale = i?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
-            val plugged = (i?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+            val pluggedType = i?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
             val temp = (i?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10.0
+            val source = when (pluggedType) {
+                BatteryManager.BATTERY_PLUGGED_USB -> "usb"
+                BatteryManager.BATTERY_PLUGGED_AC -> "ac"
+                BatteryManager.BATTERY_PLUGGED_WIRELESS -> "wireless"
+                else -> ""
+            }
+            // The phone's own view of its USB data link (a sticky system broadcast): lets the agent tell a cable that
+            // only charges from a host that lost the phone.
+            val usb = try {
+                registerReceiver(null, IntentFilter("android.hardware.usb.action.USB_STATE"))?.let { u ->
+                    JSONObject()
+                        .put("connected", u.getBooleanExtra("connected", false))
+                        .put("configured", u.getBooleanExtra("configured", false))
+                        .put("adb", u.getBooleanExtra("adb", false))
+                }
+            } catch (_: Exception) { null }
             return JSONObject()
                 .put("level", if (level >= 0) level * 100 / scale else -1)
-                .put("plugged", plugged)
+                .put("plugged", pluggedType != 0)
                 .put("temp", temp)
+                .put("source", source)
+                .put("usb", usb ?: JSONObject.NULL)
                 .toString()
         }
 

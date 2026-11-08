@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **When the phone drops off USB**, Settings › General › Phone connection (and the log) say why, from the phone's own
+  view of its USB link: a cable or port that only charges, USB debugging turned off, or a port the computer lost.
 - The Next up widget no longer squeezes its title into the time line when it is only two rows high (Deep work
   template); it drops its heading and keeps the title on one line instead.
 - The web demo includes the Weekend and Deep work templates.

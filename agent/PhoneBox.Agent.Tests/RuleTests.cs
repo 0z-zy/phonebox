@@ -110,3 +110,32 @@ public class ChargeGuardTests
         finally { File.Delete(path); }
     }
 }
+
+public class UsbDoctorTests
+{
+    private const long Now = 1_000_000_000;
+    private static PhoneBatteryReport R(bool plugged, string? usb, long ageMs = 0, string? source = null) => new(60, plugged, null, Now - ageMs, source, usb);
+
+    [Fact]
+    public void ChargingWithoutDataBlamesTheCable() =>
+        Assert.Contains("only carries power", UsbDoctor.Diagnose(R(true, "none", source: "ac"), false, Now));
+
+    [Fact]
+    public void ConnectedWithAdbButUnseenBlamesThePort() =>
+        Assert.Contains("adb does not see it", UsbDoctor.Diagnose(R(true, "connected,configured,adb"), false, Now));
+
+    [Fact]
+    public void ConnectedWithoutAdbAsksForDebugging() =>
+        Assert.Contains("USB debugging is off", UsbDoctor.Diagnose(R(true, "connected,configured"), false, Now));
+
+    [Theory]
+    [InlineData(true, "none", 0, true)]                 // adb sees the phone: nothing to explain
+    [InlineData(false, "none", 0, false)]               // unplugged
+    [InlineData(true, null, 0, false)]                  // an older app without the USB report
+    [InlineData(true, "none", 3 * 60_000, false)]       // stale report
+    public void StaysQuiet(bool plugged, string? usb, long ageMs, bool adbSees) =>
+        Assert.Null(UsbDoctor.Diagnose(R(plugged, usb, ageMs), adbSees, Now));
+
+    [Fact]
+    public void NoReportNoDiagnosis() => Assert.Null(UsbDoctor.Diagnose(null, false, Now));
+}

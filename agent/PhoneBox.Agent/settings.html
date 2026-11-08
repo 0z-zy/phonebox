@@ -424,6 +424,7 @@ dd { margin: 0; word-break: break-all; }
             <div class="row" id="appMissing" hidden style="margin-top:8px"><button class="btn primary sm" id="installApp">Install the phone app</button><span class="hint" id="appMissingText"></span></div></div>
           <div class="field"><label>Path to adb.exe (empty = auto-detect)</label><input type="text" data-bind="adbPath" placeholder="auto-detected"><span class="hint" id="adbFound"></span></div>
         </div>
+        <p id="usbProblem" hidden style="margin:10px 0 0;font-size:13px;color:var(--warn)"></p>
       </div>
       <div class="card">
         <h3>Phones</h3>
@@ -1491,6 +1492,8 @@ async function loadInfo() {
     osName = i.os || 'windows';
     $('adbFound').textContent = i.adb ? 'Found: ' + i.adb : 'adb not found — ' + ({ linux: 'sudo apt install adb', macos: 'brew install android-platform-tools' }[osName] || 'winget install Google.PlatformTools');
     $('appMissing').hidden = !(i.appMissing && i.appMissing.length);
+    $('usbProblem').hidden = !i.usbProblem;
+    $('usbProblem').textContent = i.usbProblem ? '⚠ ' + i.usbProblem : '';
     if (i.appMissing?.length) $('appMissingText').textContent = `${i.appMissing.join(', ')} has no PhoneBox app yet`;
     const sel = $('serial');
     const cur = cfg.deviceSerial || '';
