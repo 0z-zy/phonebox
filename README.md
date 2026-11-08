@@ -360,7 +360,7 @@ Yes. PhoneBox needs no root on the phone and no admin rights on the PC.
 ## Development
 
 ```powershell
-python tools/demo-server.py                  # panel + settings page with made-up data: http://127.0.0.1:8790 and /settings
+python tools/demo-server.py                  # the web demo from source: http://127.0.0.1:8790/panel/ and /settings/
 dotnet test agent/PhoneBox.Agent.Tests       # agent unit tests
 cd tools/ui-tests; npm ci; npx playwright test; cd ../..   # browser tests of the panel and settings (against the demo)
 .\scripts\build.ps1                          # dist\PhoneBox-<v>.apk + dist\PhoneBoxAgent-<v>-win-x64.zip
@@ -369,8 +369,11 @@ dotnet run --project agent/PhoneBox.Agent    # agent from source
 pwsh tools/make-icon.ps1                     # regenerate the .ico
 ```
 
-The demo server needs only Python: size the browser window to 780 × 360 (the phone's screen in CSS pixels) and the
-panel behaves as on the phone, including webhooks (`curl -X POST http://127.0.0.1:8790/api/notify -d hello`).
+The demo server needs only Python. It serves the same demo as the [live one](https://ersinkoc.github.io/phonebox/)
+(made-up data in [`tools/pages/demo.js`](tools/pages/demo.js)) straight from the sources, so a reload shows your
+changes. Size the browser window to 780 × 360 (the phone's screen in CSS pixels) and the panel behaves as on the
+phone, including webhooks: `curl -X POST http://127.0.0.1:8790/api/notify -d hello` (also `/api/push/<key>`,
+`/api/goto/<page>` and `/api/ask` for a made-up permission prompt).
 
 The panel is plain ES modules: [`main.js`](android/app/src/main/assets/www/main.js) (core, pages, navigation, data
 from the agent) and the widgets in [`widgets/`](android/app/src/main/assets/www/widgets). A widget is a

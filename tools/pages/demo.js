@@ -364,5 +364,16 @@
     window.Android = { battery: () => JSON.stringify({ level: 82, plugged: true, temp: 29.5 }), transport: () => 'usb', version: () => 'demo',
       haptic() {}, buzz() {}, setBrightness() {}, setVolumeKeys() {} };
 
+  // Served by tools/demo-server.py: webhooks sent to that server with curl arrive here. Each tab applies them itself.
+  if (document.currentScript.dataset.relay !== undefined && window.EventSource) {
+    const es = new EventSource(ROOT + 'demo/events');
+    const on = (kind, fn) => es.addEventListener(kind, (m) => fn(JSON.parse(m.data)));
+    on('notify', (d) => emit('notify', d, false));
+    on('goto', (d) => emit('goto', d, false));
+    on('refresh', () => emit('refresh', null, false));
+    on('push', (d) => { push[d.key] = { data: d.value, at: now() }; pushVersion++; });
+    on('ask', (d) => ask(d || undefined, false));
+  }
+
   window.PhoneBoxDemo = { emit, ask, reset() { localStorage.removeItem('pb-demo-config'); store.set('pb-demo-version', cfgVersion() + 1); } };
 })();

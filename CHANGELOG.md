@@ -5,6 +5,9 @@
 - The Next up widget no longer squeezes its title into the time line when it is only two rows high (Deep work
   template); it drops its heading and keeps the title on one line instead.
 - The web demo includes the Weekend and Deep work templates.
+- `tools/demo-server.py` serves the web demo from the sources instead of its own copy of the made-up data, so it
+  has everything the live demo has (rules, OBS, battery care, permission prompts); webhooks sent to it with `curl`
+  reach the open tabs. The panel is at `/panel/` now.
 
 ## 0.6.4 — 2026-11-08
 
