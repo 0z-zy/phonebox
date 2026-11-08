@@ -836,6 +836,8 @@ body.night #night { display: flex; }
 .nu-meta { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: auto; }
 .nu-track { margin-top: 6px; }
 .nu-track i { background: var(--nu, rgb(var(--ambient))); }
+.w-nextup > :not(.nu-title) { flex-shrink: 0; }
+@container (max-height: 110px) { .w-nextup .w-title { display: none; } .nu-title { -webkit-line-clamp: 1; font-size: clamp(15px, 14cqh, 22px); } .nu-meta { margin-top: 0; } .nu-track { margin-top: auto; } }
 
 /* ---------- moon ---------- */
 .mo-body { flex: 1; min-height: 0; display: flex; align-items: center; gap: 12px; }

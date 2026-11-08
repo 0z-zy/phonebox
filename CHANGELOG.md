@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The Next up widget no longer squeezes its title into the time line when it is only two rows high (Deep work
+  template); it drops its heading and keeps the title on one line instead.
+- The web demo includes the Weekend and Deep work templates.
+
 ## 0.6.4 — 2026-11-08
 
 **Calm page switching.** Rules, webhooks and the idle return no longer jump between pages. The phone shows

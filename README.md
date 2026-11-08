@@ -119,10 +119,13 @@ Every page is a 12 × 6 grid. Start a page from one of the 23 templates (or from
 | <img src="docs/screenshots/daily.png" alt="Daily"> | <img src="docs/screenshots/world.png" alt="World"> |
 | **Music** — a big now-playing card | **Shortcuts** — Stream Deck–style keys |
 | <img src="docs/screenshots/music.png" alt="Music"> | <img src="docs/screenshots/deck.png" alt="Shortcuts"> |
+| **Planner** — next up, month, agenda, checklist | **Automation** — rules, on air, pushed values, device batteries, notifications |
+| <img src="docs/screenshots/planner.png" alt="Planner"> | <img src="docs/screenshots/automation.png" alt="Automation"> |
+| **Nightstand** — word clock, moon, battery care, next hours | **Deep work** — pomodoro, next up, sessions, quota ring, rules |
+| <img src="docs/screenshots/nightstand.png" alt="Nightstand"> | <img src="docs/screenshots/deepwork.png" alt="Deep work"> |
 
-More templates: **Clock**, **Focus** (pomodoro + note), **Calm** (breathing), **DevOps** (command widgets),
-**Nightstand** (word clock, moon, battery care), **Planner** (next up, month, agenda, checklist), **Automation** (rules,
-on air, pushed values, inbox), **Weekend** and **Deep work**.
+More templates: **Clock**, **Focus** (pomodoro + note), **Calm** (breathing), **DevOps** (command widgets) and
+**Weekend** (forecast, music, moon, analog clock, quote).
 
 **Getting around.** Swipe; press the phone's **volume keys** to flip pages; tap the page dots (or long-press an empty
 spot) for an overview of all pages and jump straight to one. Webhooks and rules can switch pages too; they count down
