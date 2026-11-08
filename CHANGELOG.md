@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Updates download from the GitHub API when github.com's download links answer with an error (a 504 held up the
+  0.6.5 update for a while).
+
 ## 0.6.5 — 2026-11-08
 
 - **When the phone drops off USB**, Settings › General › Phone connection (and the log) say why, from the phone's own

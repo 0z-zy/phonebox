@@ -79,6 +79,7 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
             {
                 var name = a.GetProperty("name").GetString() ?? "";
                 var url = a.GetProperty("browser_download_url").GetString();
+                if (url is not null && a.TryGetProperty("url", out var api) && api.GetString() is { } apiUrl) _apiUrls[url] = apiUrl;
                 if (name.StartsWith("PhoneBox-", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase)) apk = url;
                 if (name.StartsWith("PhoneBoxAgent-", StringComparison.OrdinalIgnoreCase) && name.EndsWith($"-{AppPaths.Rid}.zip", StringComparison.OrdinalIgnoreCase)) zip = url;
             }
@@ -197,17 +198,35 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
         life.StopApplication();
     }
 
+    /// <summary>Release asset download links → the same assets on api.github.com (filled by <see cref="CheckAsync"/>).</summary>
+    private readonly Dictionary<string, string> _apiUrls = [];
+
     private async Task<string> DownloadAsync(string url, string name, CancellationToken ct)
     {
         Directory.CreateDirectory(Downloads);
         var path = Path.Combine(Downloads, name);
         if (File.Exists(path)) return path;
         var tmp = path + ".part";
-        await using (var src = await _http.GetStreamAsync(url, ct))
-        await using (var dst = File.Create(tmp))
-            await src.CopyToAsync(dst, ct);
+        try { await DownloadToAsync(url, null, tmp, ct); }
+        catch (HttpRequestException ex) when (_apiUrls.TryGetValue(url, out var api))
+        {
+            // github.com's download links sometimes answer 504 while the API serves the same file fine
+            log.LogInformation("download of {Name} failed ({Msg}); trying the GitHub API", name, ex.Message);
+            await DownloadToAsync(api, "application/octet-stream", tmp, ct);
+        }
         File.Move(tmp, path, true);
         return path;
+    }
+
+    private async Task DownloadToAsync(string url, string? accept, string file, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        if (accept is not null) { req.Headers.Accept.Clear(); req.Headers.Accept.ParseAdd(accept); }
+        using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        res.EnsureSuccessStatusCode();
+        await using var src = await res.Content.ReadAsStreamAsync(ct);
+        await using var dst = File.Create(file);
+        await src.CopyToAsync(dst, ct);
     }
 
     /// <summary>Removes *.old files left behind by the previous update, plus old downloads.</summary>
