@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Fix:** a command widget whose command leaves a process running in the background (`start /b …`, `… &`) no
+  longer stays "running" until that process ends; it shows its output right after the command itself finishes.
+
 ## 0.6.7 — 2026-11-08
 
 A security and reliability release from a code audit; every fix below was reproduced first and verified after.

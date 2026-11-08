@@ -58,8 +58,9 @@ public sealed class CommandRunner(ConfigStore cfg, ILogger<CommandRunner> log)
                 : ["-lc", command]; // login shell: the user's PATH (docker, brew…) is available
             foreach (var a in args) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi)!;
-            var stdout = p.StandardOutput.ReadToEndAsync();
-            var stderr = p.StandardError.ReadToEndAsync();
+            var stdout = new Capture();
+            var stderr = new Capture();
+            var pumps = Task.WhenAll(stdout.Pump(p.StandardOutput.BaseStream), stderr.Pump(p.StandardError.BaseStream));
             using var cts = new CancellationTokenSource(Timeout);
             try { await p.WaitForExitAsync(cts.Token); }
             catch (OperationCanceledException)
@@ -67,8 +68,11 @@ public sealed class CommandRunner(ConfigStore cfg, ILogger<CommandRunner> log)
                 try { p.Kill(entireProcessTree: true); } catch { }
                 return new CommandResult($"timed out after {Timeout.TotalSeconds:0} s", Now(), false, false, sw.Elapsed.TotalMilliseconds);
             }
-            var output = (await stdout).TrimEnd();
-            var err = (await stderr).Trim();
+            // The shell is done. A process it left running in the background (start /b, cmd &) inherits the output pipe
+            // and may keep it open for ever: wait a moment for the rest of the output, not for that process.
+            await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(1)));
+            var output = stdout.Text().TrimEnd();
+            var err = stderr.Text().Trim();
             var ok = p.ExitCode == 0;
             if (output == "" && err != "") output = err;
             if (output.Length > MaxOutput) output = output[..MaxOutput] + "…";
@@ -82,4 +86,25 @@ public sealed class CommandRunner(ConfigStore cfg, ILogger<CommandRunner> log)
     }
 
     private static long Now() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    /// <summary>Collects a stream's bytes (up to a cap, the rest is drained and dropped) and can be read at any time.</summary>
+    private sealed class Capture
+    {
+        private const int Cap = 64 * 1024;
+        private readonly MemoryStream _buf = new();
+
+        public async Task Pump(Stream s)
+        {
+            var chunk = new byte[8192];
+            try
+            {
+                int n;
+                while ((n = await s.ReadAsync(chunk)) > 0)
+                    lock (_buf) if (_buf.Length < Cap) _buf.Write(chunk, 0, (int)Math.Min(n, Cap - _buf.Length));
+            }
+            catch (Exception) { /* the process object was disposed while a background process still held the pipe */ }
+        }
+
+        public string Text() { lock (_buf) return Encoding.UTF8.GetString(_buf.GetBuffer(), 0, (int)_buf.Length); }
+    }
 }
