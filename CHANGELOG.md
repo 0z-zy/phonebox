@@ -1,21 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.6.7 — 2026-11-08
 
-- **Security:** script in a Custom HTML widget can no longer call the phone's native bridge (forget or switch paired
-  computers, pin the screen, take over the home screen…). Every bridge call needs a key only the panel itself gets.
-- **Security:** script in a Custom HTML widget can no longer reach the agent API through the phone's proxy (it could
-  end processes, switch Home Assistant entities and more). The proxy now only forwards the panel's own requests.
-- **Fix:** a "while it lasts" rule with a rest time comes back at once after you edit it or resume paused rules
-  (its condition still held, but it waited out the rest time first).
-- **Fix:** a pushed value with a TTL now also disappears from the phone when it expires (the phone was never told and
-  kept showing it), and expired values no longer count against the 200-key limit.
-- **Fix:** ending a process from the Processes widget no longer ends protected processes, other users' processes or
-  the agent among its child processes (it used to end the whole tree unchecked, e.g. the adb server started from a
-  terminal). The ones left running are counted in the reply.
-- **Security:** other web sites can no longer reach the local API with GET requests (browsers send no Origin header
-  on those). A page you visited could make the agent run your command widgets' commands; the agent now refuses any
-  browser request from another site, except following a link to the settings page.
+A security and reliability release from a code audit; every fix below was reproduced first and verified after.
+
+**Security**
+- Other web sites can no longer reach the local API with GET requests (browsers send no Origin header on those). A page
+  you visited could make the agent run your command widgets' commands; the agent now refuses any browser request from
+  another site, except following a link to the settings page.
+- Script in a Custom HTML widget can no longer reach the agent API through the phone's proxy (it could end processes,
+  switch Home Assistant entities and more). The proxy now only forwards the panel's own requests.
+- Script in a Custom HTML widget can no longer call the phone's native bridge (forget or switch paired computers, pin
+  the screen, take over the home screen…). Every bridge call needs a key only the panel itself gets.
+
+**Fixes**
+- Ending a process from the Processes widget no longer ends protected processes, other users' processes or the agent
+  among its child processes (it used to end the whole tree unchecked, e.g. the adb server started from a terminal).
+  The ones left running are counted in the reply.
+- A pushed value with a TTL now also disappears from the phone when it expires (the phone was never told and kept
+  showing it), and expired values no longer count against the 200-key limit.
+- A "while it lasts" rule with a rest time comes back at once after you edit it or resume paused rules (its condition
+  still held, but it waited out the rest time first).
 - The old agent no longer starts the same update a second time while it restarts into the new version (it logged
   "access denied" on a *.old file).
 
