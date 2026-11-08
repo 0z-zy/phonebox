@@ -158,6 +158,20 @@ test('a Claude Code permission prompt can be answered', async ({ page }) => {
   await expect(prompt).toBeHidden();
 });
 
+test('a question from Claude is shown with its choices and left for the terminal', async ({ page }) => {
+  await page.goto('/panel/');
+  await expect(page.locator('.w').first()).toBeVisible();
+  await page.evaluate(() => window.PhoneBoxDemo.ask({ kind: 'question', tool: 'Claude has a question', project: 'api-gateway',
+    detail: 'Framework: Which framework?\n  • React — Component library\n  • Vue — Progressive framework' }));
+  const prompt = page.locator('#approval');
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('React — Component library');
+  await expect(prompt.getByRole('button', { name: 'Allow' })).toBeHidden();
+  await expect(prompt.getByRole('button', { name: 'Deny' })).toBeHidden();
+  await prompt.getByRole('button', { name: 'Got it' }).click();
+  await expect(prompt).toBeHidden();
+});
+
 test('portrait arranges the widgets in six columns', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto('/panel/');

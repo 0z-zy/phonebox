@@ -5,8 +5,9 @@ namespace PhoneBox.Agent;
 
 /// <param name="Tool">The tool Claude Code wants to use (Bash, Edit, Write, WebFetch, an MCP tool…).</param>
 /// <param name="Detail">What it wants to do: the command, the file path, the URL…</param>
+/// <param name="Kind">"permission" (Allow / Deny) or "question" (Claude is asking something; it is answered in the terminal).</param>
 public sealed record Approval(string Id, string Source, string Session, string Project, string Tool, string Detail,
-    string? Description, long CreatedAt, long ExpiresAt);
+    string? Description, long CreatedAt, long ExpiresAt, string Kind = "permission");
 
 /// <summary>
 /// Permission prompts waiting for an answer from the phone. A Claude Code hook posts the request and waits; the
@@ -50,7 +51,7 @@ public sealed class ApprovalStore(PushStore events, ILogger<ApprovalStore> log)
 
     public bool Decide(string id, string decision)
     {
-        if (decision is not ("allow" or "deny") || !_pending.TryGetValue(id, out var p)) return false;
+        if (decision is not ("allow" or "deny" or "skip") || !_pending.TryGetValue(id, out var p)) return false;
         log.LogInformation("approval {Id}: {Decision} from the phone", id, decision);
         return p.Decision.TrySetResult(decision);
     }

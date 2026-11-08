@@ -29,11 +29,14 @@ public static class ClaudeHook
         var session = sessions.Snapshot().FirstOrDefault(s => s.Id == "claude:" + sessionId);
         var project = session?.Name ?? Path.GetFileName(cwd.TrimEnd('\\', '/'));
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var a = new Approval(ApprovalStore.NewId(), "Claude Code", sessionId, project, ToolTitle(tool), Detail(tool, ti),
-            ti.ValueKind == JsonValueKind.Object ? Str(ti, "description") : null, now, now + Math.Clamp(c.TimeoutSec, 10, 3600) * 1000L);
+        // AskUserQuestion is a question, not a permission: Allow would only open the same question in the terminal.
+        var question = tool == "AskUserQuestion";
+        var a = new Approval(ApprovalStore.NewId(), "Claude Code", sessionId, project, ToolTitle(tool), question ? QuestionDetail(ti) : Detail(tool, ti),
+            ti.ValueKind == JsonValueKind.Object ? Str(ti, "description") : null, now, now + Math.Clamp(c.TimeoutSec, 10, 3600) * 1000L,
+            question ? "question" : "permission");
 
         var decision = await approvals.AskAsync(a, aborted);
-        if (decision is null) return null;
+        if (decision is null or "skip") return null; // no decision: Claude Code asks in the terminal as usual
         return new
         {
             hookSpecificOutput = new
@@ -55,6 +58,7 @@ public static class ClaudeHook
         "WebFetch" => "Fetch a web page",
         "WebSearch" => "Search the web",
         "Read" => "Read a file",
+        "AskUserQuestion" => "Claude has a question",
         _ when tool.StartsWith("mcp__") => "Use " + tool[5..].Replace("__", " › "),
         _ => "Use " + tool,
     };
@@ -73,6 +77,29 @@ public static class ClaudeHook
         };
         if (tool is "Edit" && Str(ti, "new_string") is { } ns) s += "\n\n" + Head(ns, 12);
         s ??= JsonSerializer.Serialize(ti, new JsonSerializerOptions { WriteIndented = true });
+        return s.Length > 3000 ? s[..3000] + "…" : s;
+    }
+
+    /// <summary>The questions and their choices as plain text: "Header: Question" and one line per choice.</summary>
+    internal static string QuestionDetail(JsonElement ti)
+    {
+        var sb = new System.Text.StringBuilder();
+        if (ti.ValueKind == JsonValueKind.Object && ti.TryGetProperty("questions", out var qs) && qs.ValueKind == JsonValueKind.Array)
+            foreach (var q in qs.EnumerateArray())
+            {
+                if (sb.Length > 0) sb.Append("\n\n");
+                var header = Str(q, "header");
+                sb.Append(header is { Length: > 0 } ? header + ": " : "").Append(Str(q, "question") ?? "");
+                if (q.TryGetProperty("multiSelect", out var m) && m.ValueKind == JsonValueKind.True) sb.Append("  (more than one can be picked)");
+                if (q.TryGetProperty("options", out var os) && os.ValueKind == JsonValueKind.Array)
+                    foreach (var o in os.EnumerateArray())
+                    {
+                        var d = Str(o, "description");
+                        sb.Append("\n  • ").Append(Str(o, "label") ?? "").Append(d is { Length: > 0 } ? " — " + d : "");
+                    }
+            }
+        var s = sb.ToString();
+        if (s.Length == 0) s = "Claude is asking something; answer it in the terminal on your PC.";
         return s.Length > 3000 ? s[..3000] + "…" : s;
     }
 

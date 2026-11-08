@@ -644,8 +644,12 @@ export function renderApproval() {
     lastTouch = Date.now();
     if (nightOn) { wakeUntil = Date.now() + 60_000; setNight(false); }
     buzz('0,120,80,120,80,240');
-    $('apAllow').disabled = $('apDeny').disabled = false;
+    $('apAllow').disabled = $('apDeny').disabled = $('apSkip').disabled = false;
   }
+  // A question from Claude is answered at the PC (the terminal shows it); the phone only tells you it is waiting.
+  const asking = a.kind === 'question';
+  $('apAllow').hidden = $('apDeny').hidden = asking;
+  $('apSkip').hidden = !asking;
   $('apSource').textContent = a.source || 'Claude Code';
   $('apProject').textContent = a.project || a.session || '';
   $('apCount').textContent = approvals.length > 1 ? `1 of ${approvals.length}` : '';
@@ -661,7 +665,8 @@ export function tickApproval() {
   const a = approvals[0];
   if (!a || $('approval').hidden) return;
   const left = a.expiresAt - Date.now();
-  $('apTime').textContent = left > 0 ? `otherwise asked in the terminal in ${fmtTime(left)}` : 'asking in the terminal…';
+  $('apTime').textContent = a.kind === 'question' ? 'Answer it in the terminal on your PC'
+    : left > 0 ? `otherwise asked in the terminal in ${fmtTime(left)}` : 'asking in the terminal…';
   if (left < -3000) { approvals.shift(); renderApproval(); }
 }
 setInterval(tickApproval, 1000);
@@ -670,16 +675,18 @@ export async function decide(decision) {
   const a = approvals[0];
   if (!a) return;
   haptic();
-  $('apAllow').disabled = $('apDeny').disabled = true;
+  $('apAllow').disabled = $('apDeny').disabled = $('apSkip').disabled = true;
   try {
     await api(`/approvals/${encodeURIComponent(a.id)}?decision=${decision}`, 'POST', 4000);
-    toast(`${decision === 'allow' ? 'Allowed' : 'Denied'}: ${a.tool}`, decision === 'allow' ? 'ok' : 'err');
+    if (decision === 'skip') toast('The question is waiting in the terminal', 'warn');
+    else toast(`${decision === 'allow' ? 'Allowed' : 'Denied'}: ${a.tool}`, decision === 'allow' ? 'ok' : 'err');
   } catch (_) { toast('Already answered in the terminal', 'warn'); }
   approvals = approvals.filter((x) => x.id !== a.id);
   renderApproval();
 }
 $('apAllow').addEventListener('click', () => decide('allow'));
 $('apDeny').addEventListener('click', () => decide('deny'));
+$('apSkip').addEventListener('click', () => decide('skip'));
 
 export function handleEvent(e) {
   if (PREVIEW && (e.kind === 'goto' || e.kind === 'back' || e.kind === 'reload')) return; // the editor picks the page
