@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.5 — 2026-11-08
 
 - **When the phone drops off USB**, Settings › General › Phone connection (and the log) say why, from the phone's own
   view of its USB link: a cable or port that only charges, USB debugging turned off, or a port the computer lost.
