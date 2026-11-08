@@ -139,3 +139,27 @@ public class UsbDoctorTests
     [Fact]
     public void NoReportNoDiagnosis() => Assert.Null(UsbDoctor.Diagnose(null, false, Now));
 }
+
+public class UpdateServiceTests
+{
+    [Theory]
+    [InlineData("https://api.github.com/repos/ersinkoc/phonebox/releases/latest", true)]
+    [InlineData("https://API.github.com/repos/x/y/releases/assets/1", true)]
+    [InlineData("http://api.github.com/repos/x/y", false)]                      // never over plain HTTP
+    [InlineData("https://github.com/x/y/releases/download/v1/a.zip", false)]
+    [InlineData("https://api.github.com.evil.example/repos", false)]
+    [InlineData("https://release-assets.githubusercontent.com/x", false)]
+    [InlineData("not a url", false)]
+    public void TokenOnlyGoesToTheGitHubApi(string url, bool expected) => Assert.Equal(expected, UpdateService.IsGitHubApi(url));
+
+    [Fact]
+    public void TimeoutsAndHttpErrorsAreTransientButOurCancellationIsNot()
+    {
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        Assert.True(UpdateService.Transient(new HttpRequestException("504"), CancellationToken.None));
+        Assert.True(UpdateService.Transient(new TaskCanceledException("HttpClient.Timeout"), CancellationToken.None));
+        Assert.False(UpdateService.Transient(new TaskCanceledException(), cancelled.Token));
+        Assert.False(UpdateService.Transient(new InvalidOperationException(), CancellationToken.None));
+    }
+}

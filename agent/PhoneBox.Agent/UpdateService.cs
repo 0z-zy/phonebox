@@ -68,6 +68,13 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
     public async Task CheckAsync(CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct);
+        try { await CheckCoreAsync(ct); }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>The check itself; the caller holds <see cref="_gate"/> (it is not reentrant).</summary>
+    private async Task CheckCoreAsync(CancellationToken ct)
+    {
         try
         {
             _state = "checking";
@@ -95,7 +102,6 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
             _error = "Update check failed: " + ex.Message;
             _state = "idle";
         }
-        finally { _gate.Release(); }
     }
 
     /// <summary>Installs whatever is newer: the phone app first (needs USB), then the agent (restarts it).</summary>
@@ -133,7 +139,7 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
         try
         {
             _state = "installing the phone app";
-            if (_latest is null) await CheckAsync(ct);
+            if (_latest is null) { await CheckCoreAsync(ct); _state = "installing the phone app"; } // not CheckAsync: this method already holds the gate
             if (_latest?.Apk is null) return "could not find the phone app in the GitHub releases";
             var apk = await DownloadAsync(_latest.Apk, $"PhoneBox-{_latest.Version}.apk", ct);
             var adbExe = AdbReverse.FindAdb(cfg.Get().AdbPath) ?? throw new InvalidOperationException("adb not found");
@@ -209,12 +215,12 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
         if (File.Exists(path)) return path;
         var tmp = path + ".part";
         try { await DownloadToAsync(url, null, tmp, ct); }
-        catch (HttpRequestException ex) when (_apiUrls.TryGetValue(url, out var api))
+        catch (Exception ex) when (Transient(ex, ct) && _apiUrls.TryGetValue(url, out var api))
         {
             // github.com's download links sometimes answer 504 while the API serves the same file fine
             log.LogInformation("download of {Name} failed ({Msg}); trying the GitHub API", name, ex.Message);
             try { await DownloadToAsync(api, "application/octet-stream", tmp, ct); }
-            catch (HttpRequestException)
+            catch (Exception ex2) when (Transient(ex2, ct))
             {
                 var token = await GhTokenAsync(ct);
                 if (token is null) throw;
@@ -233,18 +239,26 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
     private async Task<string> ApiStringAsync(string url, CancellationToken ct)
     {
         try { return await _http.GetStringAsync(url, ct); }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (Transient(ex, ct))
         {
             var token = await GhTokenAsync(ct);
             if (token is null) throw;
             log.LogInformation("GitHub API without a token failed ({Msg}); retrying with the gh CLI's token", ex.Message);
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new("Bearer", token);
+            if (IsGitHubApi(url)) req.Headers.Authorization = new("Bearer", token);
             using var res = await _http.SendAsync(req, ct);
             res.EnsureSuccessStatusCode();
             return await res.Content.ReadAsStringAsync(ct);
         }
     }
+
+    /// <summary>A failed request worth another route: an HTTP error or HttpClient's own timeout (not our cancellation).</summary>
+    public static bool Transient(Exception ex, CancellationToken ct) =>
+        ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested);
+
+    /// <summary>The only host the GitHub CLI's token is ever sent to.</summary>
+    public static bool IsGitHubApi(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps && u.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The GitHub CLI's token (gh auth token), or null when gh is missing or not signed in.</summary>
     private static async Task<string?> GhTokenAsync(CancellationToken ct)
@@ -263,7 +277,7 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         if (accept is not null) { req.Headers.Accept.Clear(); req.Headers.Accept.ParseAdd(accept); }
-        if (token is not null) req.Headers.Authorization = new("Bearer", token);
+        if (token is not null && IsGitHubApi(url)) req.Headers.Authorization = new("Bearer", token);
         using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         res.EnsureSuccessStatusCode();
         await using var src = await res.Content.ReadAsStreamAsync(ct);

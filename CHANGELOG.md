@@ -7,6 +7,9 @@
 - A failed update check is retried after 15 minutes instead of 6 hours.
 - When GitHub answers anonymous API requests with 503 / 504 (it did for hours on 2026-11-08), update checks and
   downloads are repeated with the GitHub CLI's token, if `gh` is signed in. The token is sent to api.github.com only.
+- **Fix:** Settings › General › *Install the phone app* hung for good (and blocked every later update until a restart)
+  when the last update check had failed.
+- Download fallbacks also kick in when GitHub does not answer at all (a timeout), not only on an error status.
 
 ## 0.6.5 — 2026-11-08
 
