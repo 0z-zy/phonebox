@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The old agent no longer starts the same update a second time while it restarts into the new version (it logged
+  "access denied" on a *.old file).
+
 ## 0.6.6 — 2026-11-08
 
 - Updates download from the GitHub API when github.com's download links answer with an error (a 504 held up the

@@ -112,6 +112,9 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
         if (!await _gate.WaitAsync(0, ct)) return;
         try
         {
+            // the agent was just replaced and is restarting: this (old) process still sees the update as pending,
+            // and a second swap would trip over its own files
+            if (_state == "restarting") return;
             if (s.AppUpdate && adb.Connected) await UpdatePhoneAsync(ct);
             if (s.AgentUpdate && RunningInstalled) await UpdateAgentAsync(ct);
         }
