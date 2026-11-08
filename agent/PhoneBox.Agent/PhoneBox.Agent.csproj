@@ -51,4 +51,7 @@
     <EmbeddedResource Include="..\..\android\app\src\main\assets\www\widgets\*.*" LogicalName="www/widgets/%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PhoneBox.Agent.Tests" />
+  </ItemGroup>
 </Project>

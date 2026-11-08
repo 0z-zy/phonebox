@@ -20,7 +20,7 @@ public sealed partial class PushStore
     private const int MaxItems = 200;
     private const int MaxEvents = 50;
 
-    private static readonly string DataPath = Path.Combine(AppPaths.ConfigDir, "data.json");
+    private readonly string _dataPath;
     private readonly ConcurrentDictionary<string, PushItem> _items = new();
     private readonly Lock _evLock = new();
     private readonly LinkedList<PanelEvent> _events = new();
@@ -29,17 +29,19 @@ public sealed partial class PushStore
     private long _seq;
     private long _version = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-    public PushStore(ILogger<PushStore> log)
+    /// <param name="dataPath">Where values are kept (tests pass a temporary file); default: data.json next to config.json.</param>
+    public PushStore(ILogger<PushStore> log, string? dataPath = null)
     {
         _log = log;
+        _dataPath = dataPath ?? Path.Combine(AppPaths.ConfigDir, "data.json");
         _saveTimer = new System.Threading.Timer(_ => Persist(), null, Timeout.Infinite, Timeout.Infinite);
         try
         {
-            if (File.Exists(DataPath))
-                foreach (var (k, v) in JsonSerializer.Deserialize<Dictionary<string, PushItem>>(File.ReadAllText(DataPath)) ?? [])
+            if (File.Exists(_dataPath))
+                foreach (var (k, v) in JsonSerializer.Deserialize<Dictionary<string, PushItem>>(File.ReadAllText(_dataPath)) ?? [])
                     if (ValidKey(k)) _items[k] = v;
         }
-        catch (Exception ex) { log.LogWarning("could not read {Path}: {Msg}", DataPath, ex.Message); }
+        catch (Exception ex) { log.LogWarning("could not read {Path}: {Msg}", _dataPath, ex.Message); }
     }
 
     /// <summary>
@@ -135,10 +137,10 @@ public sealed partial class PushStore
     {
         try
         {
-            Directory.CreateDirectory(AppPaths.ConfigDir);
-            var tmp = DataPath + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(_dataPath)!);
+            var tmp = _dataPath + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(Snapshot()));
-            File.Move(tmp, DataPath, overwrite: true);
+            File.Move(tmp, _dataPath, overwrite: true);
         }
         catch (Exception ex) { _log.LogWarning("could not save pushed data: {Msg}", ex.Message); }
     }

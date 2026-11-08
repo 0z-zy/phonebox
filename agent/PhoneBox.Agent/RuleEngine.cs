@@ -61,7 +61,7 @@ public sealed class RuleEngine(ConfigStore config, PushStore push, SessionMonito
         }
     }
 
-    private void Evaluate()
+    internal void Evaluate() // internal: the tests drive it directly
     {
         var rules = config.Get().Rules.Where(r => r.Enabled).ToList();
         var keys = rules.ToDictionary(r => JsonSerializer.Serialize(r), r => r);

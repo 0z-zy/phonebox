@@ -1,0 +1,143 @@
+using System.Diagnostics;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using PhoneBox.Agent;
+using Xunit;
+
+/// <summary>
+/// Regression tests from the 2026-11-08 audit (F3/F4 pushed values, F5 rules, F8 command widgets). Every test works on
+/// its own temporary files; nothing touches the real config.json or data.json.
+/// </summary>
+public sealed class AuditRegressionTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "phonebox-tests-" + Guid.NewGuid().ToString("N"));
+
+    public AuditRegressionTests() => Directory.CreateDirectory(_dir);
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    private PushStore Push() => new(NullLogger<PushStore>.Instance, Path.Combine(_dir, "data.json"));
+    private static readonly JsonElement Open = JsonSerializer.SerializeToElement("open");
+
+    [Fact]
+    public void PushStoreStillComesFromTheAgentsServices()
+    {
+        using var sp = new ServiceCollection().AddLogging().AddSingleton<PushStore>().BuildServiceProvider();
+        Assert.NotNull(sp.GetRequiredService<PushStore>());
+    }
+
+    // ---------------------------------------------------------------- F3 / F4: pushed values with a TTL
+
+    [Fact]
+    public void AnExpiredValueChangesTheVersionOnceSoThePhoneDropsIt()
+    {
+        var s = Push();
+        s.Set("door", Open, 1);
+        s.Set("keep", Open, null);
+        s.Set("renewed", Open, 1);
+        Thread.Sleep(300);
+        s.Set("renewed", JsonSerializer.SerializeToElement("still here"), null);
+        var before = s.Version;
+        Thread.Sleep(1100);
+        var after = s.Version;
+        Assert.NotEqual(before, after);
+        Assert.Equal(after, s.Version);
+        var snap = s.Snapshot();
+        Assert.False(snap.ContainsKey("door"));
+        Assert.True(snap.ContainsKey("keep"));
+        Assert.Equal("still here", snap["renewed"].Data.GetString());
+    }
+
+    [Fact]
+    public void ExpiredValuesDoNotCountAgainstTheKeyLimit()
+    {
+        var s = Push();
+        for (var i = 0; i < 200; i++) Assert.Null(s.Set($"tmp-{i}", Open, 1));
+        Assert.NotNull(s.Set("new", Open, null));
+        Thread.Sleep(1100);
+        Assert.Null(s.Set("new", Open, null));
+    }
+
+    // ---------------------------------------------------------------- F5: rules after an edit or a pause
+
+    private (RuleEngine Engine, PushStore Push, Action<string> Write) Rules()
+    {
+        var path = Path.Combine(_dir, "config.json");
+        void Write(string rules) { File.WriteAllText(path, "{\"rules\":[" + rules + "]}"); File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddTicks(Random.Shared.Next(1, 1_000_000))); }
+        Write("");
+        var cfg = new ConfigStore(path);
+        var push = Push();
+        var engine = new RuleEngine(cfg, push, new SessionMonitor(NullLogger<SessionMonitor>.Instance), new MediaMonitor(NullLogger<MediaMonitor>.Instance),
+            new SystemMonitor(NullLogger<SystemMonitor>.Instance), new PrivacyMonitor(NullLogger<PrivacyMonitor>.Instance), new CalendarMonitor(cfg, NullLogger<CalendarMonitor>.Instance),
+            new ObsMonitor(cfg, NullLogger<ObsMonitor>.Instance), new QuotaMonitor(NullLogger<QuotaMonitor>.Instance), new GitHubMonitor(NullLogger<GitHubMonitor>.Instance),
+            new BatteryMonitor(NullLogger<BatteryMonitor>.Instance), new PingMonitor(), new AudioControl(), NullLogger<RuleEngine>.Instance);
+        return (engine, push, Write);
+    }
+
+    private static string OnAir(string name, string when = "always", string? match = null) =>
+        $$"""{"id":"meeting","name":"{{name}}","when":"{{when}}"{{(match is null ? "" : $",\"match\":\"{match}\"")}},"then":"push","key":"onair","pushValue":"live","whileActive":true,"cooldownMin":30}""";
+
+    [Fact]
+    public void AnEditOrAPauseDoesNotLeaveAWhileActiveRuleOffForItsRestTime()
+    {
+        var (engine, push, write) = Rules();
+        write(OnAir("Meeting"));
+        engine.Evaluate();
+        Assert.True(push.Snapshot().ContainsKey("onair"));
+        write(OnAir("Meeting (renamed)"));
+        engine.Evaluate();
+        Assert.True(push.Snapshot().ContainsKey("onair"));
+        engine.Pause(1); engine.Evaluate();
+        Assert.False(push.Snapshot().ContainsKey("onair"));
+        engine.Pause(0); engine.Evaluate();
+        Assert.True(push.Snapshot().ContainsKey("onair"));
+    }
+
+    [Fact]
+    public void TheRestTimeStillHoldsWhenTheConditionReallyEndsAndComesBack()
+    {
+        var (engine, push, write) = Rules();
+        write(OnAir("Meeting", "push", "trigger"));
+        var on = JsonSerializer.SerializeToElement(true);
+        push.Set("trigger", on, null); engine.Evaluate();
+        Assert.True(push.Snapshot().ContainsKey("onair"));
+        push.Remove("trigger"); engine.Evaluate();
+        Thread.Sleep(RuleEngine.ReleaseSec * 1000 + 300);
+        engine.Evaluate();
+        Assert.False(push.Snapshot().ContainsKey("onair"));
+        push.Set("trigger", on, null); engine.Evaluate();
+        Assert.False(push.Snapshot().ContainsKey("onair"));
+    }
+
+    // ---------------------------------------------------------------- F8: command widgets and background processes
+
+    [Fact]
+    public void ABackgroundProcessLeftByTheCommandDoesNotBlockTheWidget()
+    {
+        var path = Path.Combine(_dir, "config.json");
+        File.WriteAllText(path, """
+            {"pages":[{"id":"p","title":"P","widgets":[{"id":"bg","type":"command","x":0,"y":0,"w":6,"h":3,
+              "options":{"command":"cmd /c start /b ping -n 30 127.0.0.1","commandUnix":"sleep 30 & echo hi","interval":60}}]}]}
+            """);
+        var runner = new CommandRunner(new ConfigStore(path), NullLogger<CommandRunner>.Instance);
+        var sw = Stopwatch.StartNew();
+        runner.Get("p", "bg");
+        CommandResult? r = null;
+        while (sw.Elapsed < TimeSpan.FromSeconds(15))
+        {
+            r = runner.Get("p", "bg");
+            if (r is { At: > 0, Running: false }) break;
+            Thread.Sleep(100);
+        }
+        try
+        {
+            Assert.True(r is { At: > 0, Running: false }, $"no result after {sw.Elapsed.TotalSeconds:0.0} s (the background process holds the output pipe)");
+            Assert.True(sw.Elapsed < TimeSpan.FromSeconds(12), $"took {sw.Elapsed.TotalSeconds:0.0} s");
+        }
+        finally
+        {
+            foreach (var name in new[] { "PING", "sleep" })
+                foreach (var p in Process.GetProcessesByName(name)) using (p) try { if ((DateTime.Now - p.StartTime).TotalSeconds < 60) p.Kill(); } catch { }
+        }
+    }
+}
