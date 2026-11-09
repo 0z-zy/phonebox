@@ -48,7 +48,7 @@ These screenshots use made-up demo data. See the [changelog](CHANGELOG.md) for a
 
 ## Quick start
 
-**[Download PhoneBox 0.7.0](https://github.com/ersinkoc/phonebox/releases/tag/v0.7.0)** — signed Android APK and
+**[Download PhoneBox 0.7.1](https://github.com/ersinkoc/phonebox/releases/tag/v0.7.1)** — signed Android APK and
 agents for Windows x64, Linux x64/ARM64 and macOS Apple Silicon/Intel. Agent archives need the matching .NET 10
 runtime (Desktop Runtime on Windows). The release includes SHA-256 checksums and build provenance.
 Existing users can update from Settings; existing layouts and pairing settings are retained.

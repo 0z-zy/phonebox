@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.7.1 — 2026-11-09
+
+A compatibility and release-maintenance patch. Existing layouts and pairing settings are retained.
 
 - Update Playwright to 1.65.0, Microsoft.NET.Test.Sdk to 18.11.0 and the xUnit Visual Studio adapter to 4.0.1.
 - Update seven pinned GitHub Actions and verify release-artifact transfer and Pages archive compatibility in CI.
+- Limit public release assets to the signed APK, five agent archives, build provenance and SHA-256 checksums;
+  debug APKs and intermediate build files are excluded.
 - Fix `scripts/install.sh --apk` on Bash 3.2 when no device serial is specified. The empty target array was treated
   as unset under `set -u`, stopping the installer before ADB ran. Adapted from PR #2, with installer regressions
   for default device selection, explicit serials and failed updates that preserve the existing app.
