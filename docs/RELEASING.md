@@ -10,6 +10,9 @@
 The release workflow reuses the build checks, then tests and smoke-runs the agent on native Windows x64,
 Linux x64/ARM64, and macOS ARM64/Intel runners. It builds the signed APK, signs macOS apphosts ad hoc, creates
 provenance attestations and SHA-256 checksums, and publishes the release notes from the changelog.
+The reusable artifact contract also checks the real upload/download boundary with transfer fixtures: exact release
+filenames and hashes, exclusion of debug intermediates, and the actual demo's Pages tar format. It never publishes
+a release or deploys Pages. Changes to Pages deployment still need a successful Pages workflow on `main`.
 Published releases update the Scoop bucket and generate winget manifests in a follow-up commit.
 Winget manifests are prepared for submission; generation alone does not mean the package is accepted into winget-pkgs.
 

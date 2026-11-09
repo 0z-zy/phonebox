@@ -105,3 +105,7 @@ jobs:
         with:
           name: phonebox-agent-${{ matrix.rid }}
           path: out/
+
+  artifact-transfer:
+    name: Artifact transfer contract
+    uses: ./.github/workflows/artifact-contract.yml
