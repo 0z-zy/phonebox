@@ -2,8 +2,17 @@ using System.Text.Json;
 using PhoneBox.Agent;
 using Xunit;
 
+/// <summary>
+/// Unit tests for Antigravity endpoint discovery, quota parsing, and plan resolution.
+/// </summary>
 public sealed class AntigravityTests
 {
+    /// <summary>
+    /// Verifies that port and CSRF tokens are correctly extracted from various command-line flag styles.
+    /// </summary>
+    /// <param name="cmd">The command line to parse.</param>
+    /// <param name="expectedPort">The expected port number.</param>
+    /// <param name="expectedCsrf">The expected CSRF token string.</param>
     [Theory]
     [InlineData("agy.exe --hub --hub-port=13897 --csrf_token=token-12345", 13897, "token-12345")]
     [InlineData("language_server --port 8080 --csrfToken abc-xyz", 8080, "abc-xyz")]
@@ -16,6 +25,10 @@ public sealed class AntigravityTests
         Assert.Equal(expectedCsrf, ep.Value.CsrfToken);
     }
 
+    /// <summary>
+    /// Verifies that command lines missing required endpoint flags return <c>null</c>.
+    /// </summary>
+    /// <param name="cmd">The command line to evaluate.</param>
     [Theory]
     [InlineData("")]
     [InlineData("agy.exe --hub --hub-port=13897")]
@@ -27,6 +40,9 @@ public sealed class AntigravityTests
         Assert.Null(ep);
     }
 
+    /// <summary>
+    /// Verifies that multi-group quota buckets are mapped and ordered with session windows before weekly windows.
+    /// </summary>
     [Fact]
     public void ParseAntigravityLimits_MultiGroup_OrdersSessionBeforeWeekly()
     {
@@ -103,6 +119,9 @@ public sealed class AntigravityTests
         Assert.Equal("warning", limits[3].Severity);
     }
 
+    /// <summary>
+    /// Verifies that single-group quota responses use standard 5-hour session and weekly labels.
+    /// </summary>
     [Fact]
     public void ParseAntigravityLimits_SingleGroup_UsesSimpleLabels()
     {
@@ -145,6 +164,9 @@ public sealed class AntigravityTests
         Assert.Equal("normal", limits[1].Severity);
     }
 
+    /// <summary>
+    /// Verifies that empty or malformed JSON payloads return an empty list without throwing exceptions.
+    /// </summary>
     [Fact]
     public void ParseAntigravityLimits_MalformedOrEmpty_ReturnsEmptyList()
     {
@@ -153,6 +175,9 @@ public sealed class AntigravityTests
         Assert.Empty(limits);
     }
 
+    /// <summary>
+    /// Verifies that the plan name is parsed from planInfo or falls back to userTier.
+    /// </summary>
     [Fact]
     public void ParseAntigravityPlan_ExtractsPlanName_FallsBackToUserTier()
     {
@@ -186,5 +211,8 @@ public sealed class AntigravityTests
 
         using var doc2 = JsonDocument.Parse(jsonWithTierOnly);
         Assert.Equal("Google AI Ultra", QuotaMonitor.ParseAntigravityPlan(doc2.RootElement));
+
+        using var docEmpty = JsonDocument.Parse("{}");
+        Assert.Null(QuotaMonitor.ParseAntigravityPlan(docEmpty.RootElement));
     }
 }

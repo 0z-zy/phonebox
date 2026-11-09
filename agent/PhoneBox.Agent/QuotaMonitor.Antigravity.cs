@@ -15,6 +15,11 @@ public sealed partial class QuotaMonitor
         "language_server_macos", "language_server_macos_arm", "language_server_linux"
     ];
 
+    /// <summary>
+    /// Refreshes Antigravity quota and plan data by discovering the local language server process and querying its RPC endpoints.
+    /// </summary>
+    /// <param name="ct">Cancellation token for async operations.</param>
+    /// <returns><c>true</c> if quotas were successfully refreshed; otherwise, <c>false</c>.</returns>
     private async Task<bool> RefreshAntigravity(CancellationToken ct)
     {
         var ep = FindAntigravityEndpoint();
@@ -52,7 +57,7 @@ public sealed partial class QuotaMonitor
                 return false;
             }
 
-            var plan = await GetAntigravityPlanAsync(ep.Value.Port, ep.Value.CsrfToken, ct) ?? _antigravity?.Plan ?? "Pro";
+            var plan = await GetAntigravityPlanAsync(ep.Value.Port, ep.Value.CsrfToken, ct) ?? _antigravity?.Plan ?? "Antigravity";
 
             _antigravity = new QuotaProvider("antigravity", "Antigravity", plan, limits,
                 null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), null);
@@ -69,6 +74,13 @@ public sealed partial class QuotaMonitor
         }
     }
 
+    /// <summary>
+    /// Queries the user status RPC to retrieve the active Antigravity subscription plan name.
+    /// </summary>
+    /// <param name="port">The loopback port of the Antigravity service.</param>
+    /// <param name="csrfToken">The CSRF authentication token.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The resolved subscription plan name, or <c>null</c> if unavailable.</returns>
     private async Task<string?> GetAntigravityPlanAsync(int port, string csrfToken, CancellationToken ct)
     {
         try
@@ -87,6 +99,11 @@ public sealed partial class QuotaMonitor
         catch { return null; }
     }
 
+    /// <summary>
+    /// Extracts the subscription plan name from a GetUserStatus response JSON.
+    /// </summary>
+    /// <param name="root">Root JSON element of the user status response.</param>
+    /// <returns>The plan name, or <c>null</c> if not present.</returns>
     internal static string? ParseAntigravityPlan(JsonElement root)
     {
         var u = root.TryGetProperty("userStatus", out var us) ? us : root;
@@ -97,6 +114,11 @@ public sealed partial class QuotaMonitor
         return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
+    /// <summary>
+    /// Parses quota groups and bucket limits from a RetrieveUserQuotaSummary response JSON, converting remaining fractions to used percentages.
+    /// </summary>
+    /// <param name="root">Root JSON element of the quota summary response.</param>
+    /// <returns>A list of parsed quota limits ordered by window duration.</returns>
     internal static List<QuotaLimit> ParseAntigravityLimits(JsonElement root)
     {
         var list = new List<QuotaLimit>();
@@ -156,6 +178,11 @@ public sealed partial class QuotaMonitor
             .ToList();
     }
 
+    /// <summary>
+    /// Extracts the loopback port and CSRF token flags from a process command line.
+    /// </summary>
+    /// <param name="cmd">The command line string.</param>
+    /// <returns>A tuple containing the port and CSRF token, or <c>null</c> if not found.</returns>
     internal static (int Port, string CsrfToken)? ParseEndpointFromCommandLine(string cmd)
     {
         if (string.IsNullOrWhiteSpace(cmd)) return null;
@@ -166,6 +193,10 @@ public sealed partial class QuotaMonitor
         return null;
     }
 
+    /// <summary>
+    /// Scans running processes for an active Antigravity instance and extracts its port and CSRF token.
+    /// </summary>
+    /// <returns>The discovered endpoint tuple, or <c>null</c> if no active process was found.</returns>
     private static (int Port, string CsrfToken)? FindAntigravityEndpoint()
     {
         foreach (var name in AntigravityProcessNames)
@@ -192,6 +223,11 @@ public sealed partial class QuotaMonitor
         return null;
     }
 
+    /// <summary>
+    /// Retrieves the command-line arguments for a process across supported operating systems.
+    /// </summary>
+    /// <param name="pid">The process identifier.</param>
+    /// <returns>The command-line string, or <c>null</c> if unreadable.</returns>
     private static string? GetCommandLine(int pid)
     {
         if (OperatingSystem.IsWindows())
@@ -227,6 +263,11 @@ public sealed partial class QuotaMonitor
     [DllImport("kernel32.dll")]
     private static extern bool CloseHandle(nint h);
 
+    /// <summary>
+    /// Reads the process command line on Windows using NtQueryInformationProcess.
+    /// </summary>
+    /// <param name="pid">The target process identifier.</param>
+    /// <returns>The command line string, or <c>null</c> if query fails.</returns>
     private static string? GetWindowsCommandLine(int pid)
     {
         var h = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
@@ -248,9 +289,15 @@ public sealed partial class QuotaMonitor
         finally { CloseHandle(h); }
     }
 
+    /// <summary>
+    /// Matches port arguments such as --hub-port, --port, or --hub_port.
+    /// </summary>
     [GeneratedRegex(@"(?:--hub-port|--port|--hub_port)[=\s]+[""']?(?<port>\d+)[""']?", RegexOptions.IgnoreCase)]
     private static partial Regex AntigravityPortRegex();
 
+    /// <summary>
+    /// Matches CSRF token arguments such as --csrf_token or --csrfToken.
+    /// </summary>
     [GeneratedRegex(@"(?:--csrf_token|--csrfToken)[=\s]+[""']?(?<csrf>[^\s""']+)[""']?", RegexOptions.IgnoreCase)]
     private static partial Regex AntigravityCsrfRegex();
 }
