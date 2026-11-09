@@ -92,7 +92,7 @@ public sealed class DockerMonitor(ConfigStore config, ILogger<DockerMonitor> log
 
     /// <summary>Whether some Docker widget allows start / stop / restart from the phone.</summary>
     public bool ControlAllowed() =>
-        config.Get().Pages.SelectMany(p => p.Widgets ?? []).Any(w => w.Type == "docker" && w.Bool("control") == true);
+        config.Get().Widgets().Any(w => w.Type == "docker" && w.Bool("control") == true);
 
     public async Task<string?> ActAsync(string id, string action)
     {

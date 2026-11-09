@@ -22,6 +22,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
+. (Join-Path $PSScriptRoot 'install-apk.ps1')
 $app = Join-Path $env:LOCALAPPDATA 'PhoneBox\app'
 $exe = Join-Path $app 'PhoneBoxAgent.exe'
 
@@ -80,12 +81,7 @@ if ($Apk) {
     }
     Write-Host "==> Installing $($apkFile.Name) on $Serial"
     $target = @('-s', $Serial)
-    $out = & $adb @target install -r $apkFile.FullName 2>&1
-    if ($out -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE') {
-        Write-Host '    signature differs from the installed build: reinstalling'
-        & $adb @target uninstall net.oxog.phonebox.deskpanel | Out-Null
-        $out = & $adb @target install $apkFile.FullName 2>&1
-    }
+    $out = Install-PhoneBoxApk -Adb $adb -ApkPath $apkFile.FullName -Serial $Serial
     $out | Select-Object -Last 1
     & $adb @target shell am start -n net.oxog.phonebox.deskpanel/.MainActivity | Out-Null
 }

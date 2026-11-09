@@ -2,7 +2,8 @@ using System.Net;
 using System.Text.Json;
 using PhoneBox.Agent;
 
-const int Port = 8765;
+var endpoint = AgentEndpoint.FromArgs(args);
+var Port = endpoint.Port;
 string[] SameOrigins = [$"http://127.0.0.1:{Port}", $"http://localhost:{Port}"];
 
 // Install scripts ask where the agent belongs (it differs per OS), then copy it there.
@@ -10,7 +11,7 @@ if (args.Contains("--print-install-dir")) { Console.WriteLine(AppPaths.InstallDi
 
 // Single instance: a second launch opens the running instance's settings page and exits.
 // After a restart the previous instance may still be shutting down, so wait for it briefly.
-var single = new Mutex(false, @"Local\PhoneBox.Agent");
+var single = new Mutex(false, endpoint.MutexName);
 var waitMs = args.Contains("--restart") ? 15_000 : 0;
 bool firstInstance;
 try { firstInstance = single.WaitOne(waitMs); }
@@ -21,7 +22,7 @@ if (!firstInstance)
     return;
 }
 
-AppPaths.EnsureConfig();
+if (!args.Contains("--config")) AppPaths.EnsureConfig();
 var configPath = args.SkipWhile(a => a != "--config").Skip(1).FirstOrDefault() ?? AppPaths.ConfigPath;
 var configStore = new ConfigStore(configPath);
 configStore.PersistGenerated(); // keep the Wi-Fi token stable across restarts
@@ -46,6 +47,7 @@ builder.Logging.AddSimpleConsole(o => { o.SingleLine = true; o.TimestampFormat =
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
 
 builder.Services.AddSingleton(configStore);
+builder.Services.AddSingleton(endpoint);
 builder.Services.AddSingleton<AudioControl>();
 builder.Services.AddSingleton<PushStore>();
 builder.Services.AddSingleton<CommandRunner>();
@@ -59,6 +61,7 @@ AddMonitor<SessionMonitor>(builder.Services);
 AddMonitor<GitHubMonitor>(builder.Services);
 AddMonitor<PingMonitor>(builder.Services);
 AddMonitor<AdbReverse>(builder.Services);
+AddMonitor<SessionLockMonitor>(builder.Services);
 AddMonitor<UpdateService>(builder.Services);
 AddMonitor<PrivacyMonitor>(builder.Services);
 AddMonitor<CalendarMonitor>(builder.Services);
@@ -324,7 +327,7 @@ app.MapGet("/api/obs", (ObsMonitor obs, ConfigStore cfg) => Results.Json(new
 {
     enabled = cfg.Get().Obs.Enabled,
     snapshot = obs.Snapshot(),
-    control = cfg.Get().Pages.SelectMany(p => p.Widgets ?? []).Any(w => w.Type == "obs" && w.Bool("control") == true),
+    control = cfg.Get().Widgets().Any(w => w.Type == "obs" && w.Bool("control") == true),
 }));
 app.MapPost("/api/obs/{action}", async (string action, string? scene, ObsMonitor obs) =>
     await obs.ActAsync(action, scene) is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));
@@ -514,7 +517,7 @@ app.Run();
 single.ReleaseMutex();
 single.Dispose();
 if (AppRestart.Requested && Environment.ProcessPath is { } exe)
-    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, "--restart") { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory });
+    System.Diagnostics.Process.Start(AppRestart.StartInfo(exe, args));
 
 static void AddMonitor<T>(IServiceCollection s) where T : class, IHostedService
 {

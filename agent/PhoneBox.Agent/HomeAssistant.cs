@@ -19,7 +19,7 @@ public sealed class HomeAssistant(ConfigStore config, ILogger<HomeAssistant> log
     private string? _error;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    private IEnumerable<WidgetConfig> Widgets => config.Get().Pages.SelectMany(p => p.Widgets ?? []).Where(w => w.Type == "ha");
+    private IEnumerable<WidgetConfig> Widgets => config.Get().Widgets().Where(w => w.Type == "ha");
 
     public static IEnumerable<string> EntitiesOf(WidgetConfig w) =>
         (w.Str("entities") ?? "").Split([',', '\n', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

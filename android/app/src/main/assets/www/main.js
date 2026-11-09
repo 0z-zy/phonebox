@@ -4,6 +4,7 @@
 import { W } from './registry.js';
 import { cached } from './widgets/helpers.js';
 import './widgets/basic.js';
+import './widgets/stack.js';
 import './widgets/time.js';
 import './widgets/pc.js';
 import './widgets/sky.js';
@@ -224,7 +225,12 @@ export const METRICS = {
   ping: { label: 'PING', name: 'Ping', color: '#38bdf8', unit: 'ms', max: () => Math.max(50, ...hist.ping) * 1.2, val: (s) => s.ping?.ms,
     sub: (s) => (s.ping ? `avg ${s.ping.avgMs ?? '—'} ms · loss ${s.ping.lossPct}%` : '') },
   gputemp: { label: 'GPU TEMP', name: 'GPU temperature', color: '#f97316', unit: '°C', max: () => 100, val: (s) => gpuOf(s)?.temp,
-    sub: (s) => (gpuOf(s)?.fan != null && gpuOf(s)?.clock != null ? `Fan ${Math.round(gpuOf(s).fan)}% · ${Math.round(gpuOf(s).clock)} MHz` : 'No GPU data') },
+    sub: (s) => {
+      const g = gpuOf(s);
+      if (!g) return 'No GPU data';
+      const detail = [g.fan != null ? `Fan ${Math.round(g.fan)}%` : null, g.clock != null ? `${Math.round(g.clock)} MHz` : null].filter(Boolean);
+      return detail.length ? detail.join(' · ') : (g.temp != null ? 'Temperature' : 'No GPU data');
+    } },
   cputemp: { label: 'CPU TEMP', name: 'CPU temperature', color: '#fb7185', unit: '°C', max: () => 100, val: (s) => s.pc?.cpuTemp,
     sub: (s) => (s.pc?.cpuTemp == null ? 'needs LibreHardwareMonitor' : shortCpu(s.pc?.cpuName)) },
 };
@@ -383,7 +389,7 @@ export const setAmbient = (rgb) => document.documentElement.style.setProperty('-
 export const MEDIA_HTML = `
   <div class="m-top">
     <div class="art-wrap"><img class="art" alt=""><div class="art-ph">♪</div></div>
-    <div class="m-text"><div class="m-app">Media</div><div class="m-title">Nothing playing</div><div class="m-artist">Start something on the PC</div></div>
+    <div class="m-text"><div class="m-app"><span class="m-source-icon" aria-hidden="true"></span><span class="m-app-name">Media</span></div><div class="m-title">Nothing playing</div><div class="m-artist">Start something on the PC</div></div>
   </div>
   <div class="m-progress"><div class="bar"><div class="fill"></div></div><div class="times"><span class="m-pos">0:00</span><span class="m-dur">0:00</span></div></div>
   <div class="m-controls">
@@ -405,7 +411,7 @@ export const MEDIA_HTML = `
     <span>Is the PhoneBox agent running? Plug in the USB cable, or turn on Wi-Fi in the PhoneBox settings and pair once over USB.</span></div>`;
 
 // ---------------------------------------------------------------- quotas
-export const Q_STYLE = { claude: { color: '#d97757', logo: '✳' }, codex: { color: '#e5e7eb', logo: '◎' } };
+export const Q_STYLE = { antigravity: { color: '#38bdf8', logo: '✦' }, claude: { color: '#d97757', logo: '✳' }, codex: { color: '#e5e7eb', logo: '◎' } };
 
 export function fmtReset(ts) {
   if (!ts) return '';
@@ -758,7 +764,7 @@ export function buildLayout() {
       const ctx = { page: p, w, o: w.options || {}, box };
       let inst;
       try { inst = def.create(box, ctx) || {}; } catch (e) { box.replaceChildren(h('div', 'empty', `${w.type}: ${e.message}`)); inst = {}; }
-      mounted.push({ pi, def, inst, ctx, dirty: true });
+      mounted.push({ pi, def: inst.needs ? { ...def, needs: inst.needs } : def, inst, ctx, dirty: true });
     }
     const sec = h('section', 'page', grid);
     sec.dataset.id = p.id;

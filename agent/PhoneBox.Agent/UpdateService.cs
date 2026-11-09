@@ -327,4 +327,14 @@ public sealed class UpdateService(ConfigStore cfg, AdbReverse adb, IHostApplicat
 public static class AppRestart
 {
     public static volatile bool Requested;
+
+    internal static ProcessStartInfo StartInfo(string executable, string[] args)
+    {
+        var start = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory };
+        if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
+            start.ArgumentList.Add(typeof(AppRestart).Assembly.Location);
+        foreach (var arg in args.Where(a => a != "--restart")) start.ArgumentList.Add(arg);
+        start.ArgumentList.Add("--restart");
+        return start;
+    }
 }

@@ -5,14 +5,25 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
+  metadata:
+    name: Release metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: python3 tools/check-release.py
+
   android:
     name: Android panel (APK)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: 17
@@ -22,7 +33,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --console=plain
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: phonebox-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
@@ -31,8 +42,8 @@ jobs:
     name: UI tests (panel and settings in a browser)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - name: Install Playwright
@@ -43,7 +54,7 @@ jobs:
         run: npx playwright test
         env:
           CI: '1'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
           name: ui-test-report
@@ -62,12 +73,16 @@ jobs:
           - { os: macos-latest, rid: osx-arm64, tfm: net10.0 }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: 10.0.x
       - name: Unit tests
         run: dotnet test agent/PhoneBox.Agent.Tests --nologo
+      - name: Windows installer regression checks
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: ./tools/test-install-apk.ps1
       - name: Publish agent
         run: dotnet publish agent/PhoneBox.Agent -c Release -f ${{ matrix.tfm }} -r ${{ matrix.rid }} --self-contained false -o out --nologo
       - name: Smoke test (starts, serves the API)
@@ -86,7 +101,7 @@ jobs:
           curl -sf http://127.0.0.1:8765/api/info; echo
           # the system and process readings must work on this platform
           python3 -c "import json; s=json.load(open('state.json')); p=json.load(open('procs.json')); assert s['pc'] and s['pc']['cpu'] is not None and s['pc']['ramTotalGb'] > 0, s['pc']; assert p['groups'], p; print('cpu', s['pc']['cpu'], 'ram', s['pc']['ramUsedGb'], '/', s['pc']['ramTotalGb'], 'procs', p['total'])"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: phonebox-agent-${{ matrix.rid }}
           path: out/

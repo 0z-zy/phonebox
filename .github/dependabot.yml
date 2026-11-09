@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+  - package-ecosystem: npm
+    directory: /tools/ui-tests
+    schedule:
+      interval: weekly
+    groups:
+      browser-tests:
+        patterns: ['*']
+  - package-ecosystem: nuget
+    directory: /agent/PhoneBox.Agent.Tests
+    schedule:
+      interval: weekly
+    groups:
+      tests:
+        patterns: ['*']

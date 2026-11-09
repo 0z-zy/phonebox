@@ -7,6 +7,7 @@ namespace PhoneBox.Agent;
 
 public sealed class AgentConfig
 {
+    public CodexBarConfig CodexBar { get; set; } = new();
     public string? DeviceSerial { get; set; }
     public string? AdbPath { get; set; }
     public WeatherConfig Weather { get; set; } = new();
@@ -41,6 +42,7 @@ public sealed class AgentConfig
     public object ToPublic(string? deviceId = null) => new
     {
         weather = Weather,
+        codexBar = CodexBar,
         night = Night,
         display = Display,
         pages = PagesFor(deviceId).Select(p => new
@@ -50,7 +52,7 @@ public sealed class AgentConfig
             {
                 w.Id, w.Type, w.X, w.Y, w.W, w.H,
                 // command widgets: only what the panel shows; the scripts (command, commandUnix, …) stay on this computer
-                options = w.Type == "command" ? w.Options?.Where(o => o.Key is "title" or "interval").ToDictionary() : w.Options,
+                options = StackWidgets.PublicOptions(w),
             }),
         }),
         shortcuts = Shortcuts.Select(s => new { s.Id, s.Label, s.Icon, s.Color, toggle = s.Toggle || s.Cmd == "builtin:mute" }),
@@ -60,7 +62,11 @@ public sealed class AgentConfig
     };
 
     /// <summary>Ending processes is allowed when an enabled page has a processes widget that allows it.</summary>
-    public bool AllowKill() => Pages.Where(p => p.Enabled).SelectMany(p => p.Widgets ?? [])
+    public IEnumerable<WidgetConfig> Widgets(bool enabledPagesOnly = false) => Pages.Where(p => !enabledPagesOnly || p.Enabled)
+        .SelectMany(p => p.Widgets ?? []).SelectMany(w => new[] { w }.Concat(StackWidgets.Children(w).Where(c => c.Enabled)
+            .Select(c => new WidgetConfig { Type = c.Type, Options = c.Options })));
+
+    public bool AllowKill() => Widgets(enabledPagesOnly: true)
         .Any(w => w.Type == "processes" && w.Bool("allowKill") != false);
 }
 
@@ -109,6 +115,8 @@ public sealed class DisplayConfig
 
     /// <summary>Over USB, turn off Android's screen saver (it starts on the dock / charger) and keep the phone awake while it is plugged in.</summary>
     public bool KeepAwake { get; set; } = true;
+    /// <summary>On macOS, sleep the connected phone when the computer locks; wake it and open PhoneBox after unlock.</summary>
+    public bool FollowComputerLock { get; set; }
     /// <summary>The page the panel returns to (idle return, Back); null = the first page.</summary>
     public string? HomePage { get; set; }
     /// <summary>Seconds the panel counts down ("Switching to … in 3") before a rule or the idle return changes the page; 0 = at once.</summary>
@@ -386,6 +394,10 @@ public sealed partial class ConfigStore(string path)
     private static AgentConfig Normalize(AgentConfig c)
     {
         c.Weather ??= new();
+        c.CodexBar ??= new();
+        c.CodexBar.Providers = (c.CodexBar.Providers ?? []).Where(p => p is "claude" or "codex" or "antigravity").Distinct().ToArray();
+        c.CodexBar.PageSize = Math.Clamp(c.CodexBar.PageSize, 0, 6);
+        c.CodexBar.RotateInterval = Math.Clamp(c.CodexBar.RotateInterval, 2, 300);
         c.Night ??= new();
         c.Display ??= new();
         c.Display.IdleReturnSec = Math.Clamp(c.Display.IdleReturnSec, 0, 3600);
@@ -581,4 +593,12 @@ public sealed partial class ConfigStore(string path)
 
     [GeneratedRegex(@"^([01]\d|2[0-3]):[0-5]\d$")]
     private static partial Regex HhMm();
+}
+
+public sealed class CodexBarConfig
+{
+    public string[] Providers { get; set; } = ["claude", "codex", "antigravity"];
+    public bool Rotate { get; set; } = true;
+    public int PageSize { get; set; } = 2;
+    public int RotateInterval { get; set; } = 8;
 }

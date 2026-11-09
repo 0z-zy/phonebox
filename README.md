@@ -18,10 +18,10 @@ Widgets for your PC, AI coding sessions, music, weather and anything you push to
 
 PhoneBox has two parts: a small **Android app** that runs full screen on the phone, and an **agent** on the computer
 (Windows, Linux or macOS) that feeds it over the USB cable (or over Wi-Fi / Tailscale after pairing once). You design
-the pages in a visual editor on the PC: **53 widgets**, **23 templates**, as many pages as you like.
+the pages in a visual editor on the PC: **55 widgets**, **24 templates**, as many pages as you like.
 
 - **Your PC at a glance**: CPU, GPU, RAM, disks, network and ping; the heaviest apps, with "end one instance / end all".
-- **AI coding**: Claude and Codex quotas with a burn-rate forecast; every Claude Code / Codex session — the phone
+- **AI coding**: Claude and Codex quotas with a burn-rate forecast; Codex remaining allowance and local session token details; tap a session to see its model, timing, tokens, context window and recent tool — the phone
   buzzes when one finishes or needs you, and Claude Code's permission prompts show up with **Allow** / **Deny**.
   GitHub review requests and your pull requests with CI status.
 - **Desk companion**: now playing with controls and volume, clocks, weather, sun & moon, air quality, calendar,
@@ -38,7 +38,20 @@ the pages in a visual editor on the PC: **53 widgets**, **23 templates**, as man
 [Updates](#updates) · [How it works](#how-it-works) · [Security](#security--privacy) · [FAQ](#faq--troubleshooting) ·
 [Development](#development)
 
+## New in 0.7.0
+
+| Smart Stack and quotas | Codex session details |
+|---|---|
+| ![Smart Stack with clock, quotas and sessions](docs/screenshots/smart-stack.png) | ![Codex model, token counters and recent tool](docs/screenshots/session-details.png) |
+
+These screenshots use made-up demo data. See the [changelog](CHANGELOG.md) for all changes.
+
 ## Quick start
+
+**[Download PhoneBox 0.7.0](https://github.com/ersinkoc/phonebox/releases/tag/v0.7.0)** — signed Android APK and
+agents for Windows x64, Linux x64/ARM64 and macOS Apple Silicon/Intel. Agent archives need the matching .NET 10
+runtime (Desktop Runtime on Windows). The release includes SHA-256 checksums and build provenance.
+Existing users can update from Settings; existing layouts and pairing settings are retained.
 
 You need an Android 9+ phone with [USB debugging](https://developer.android.com/studio/debug/dev-options) turned on,
 the [.NET 10 SDK](https://dotnet.microsoft.com/download) and `adb`.
@@ -66,7 +79,7 @@ winget-pkgs; once accepted it installs with `winget install ersinkoc.PhoneBox`.
 **Linux** (Ubuntu, Debian, Fedora, Arch…) **and macOS**
 
 ```sh
-sudo apt install adb playerctl          # Fedora: android-tools playerctl · macOS: brew install android-platform-tools
+sudo apt install adb playerctl          # Fedora: android-tools playerctl · macOS: brew install android-platform-tools nowplaying-cli
 git clone https://github.com/ersinkoc/phonebox
 cd phonebox
 ./scripts/install.sh --apk --autostart  # agent + phone app; systemd user service (Linux) or launchd agent (macOS)
@@ -82,8 +95,8 @@ everything again.
 |---|---|---|---|
 | CPU, RAM, network, disks, ping | ✓ | ✓ | ✓ |
 | CPU temperature | LibreHardwareMonitor | ✓ (hwmon) | — |
-| NVIDIA GPU | ✓ | ✓ | — |
-| Now playing + controls | ✓ (any app) | ✓ (MPRIS via `playerctl`) | Spotify, Music |
+| GPU usage | NVIDIA (`nvidia-smi`) | NVIDIA (`nvidia-smi`) | Apple silicon (`ioreg`) |
+| Now playing + controls | ✓ (any app) | ✓ (MPRIS via `playerctl`) | System media, including browser video, with `nowplaying-cli`; Spotify and Music fallback |
 | Volume | ✓ | ✓ (`wpctl` / `pactl`) | ✓ |
 | Processes, end one / all | ✓ | ✓ (your own) | ✓ (your own) |
 | App icons | ✓ | ✓ (icon theme) | ✓ (app bundles) |
@@ -93,6 +106,8 @@ everything again.
 | Tray icon | ✓ | — (settings in the browser) | — |
 | Start at login | Startup folder | systemd user service | launchd agent |
 
+On macOS, `nowplaying-cli` supplies system media metadata and cover art. The agent labels matching Safari or Chrome tabs as YouTube or YouTube Music. The progress bar advances from the last position supplied by macOS; Safari may report an outdated starting position. Volume follows the selected system output. When macOS does not expose its volume, an optional `m1ddc` installation can read it from a compatible display; display volume is read only in PhoneBox. Unsupported outputs show `n/a`. Apple silicon GPU usage comes from IORegistry when macOS exposes it; temperature, power and VRAM figures may remain unavailable.
+
 </details>
 
 Optional extras that light up more widgets: an NVIDIA GPU (`nvidia-smi`), the [GitHub CLI](https://cli.github.com)
@@ -101,7 +116,7 @@ with its web server on port 8085 for the CPU temperature.
 
 ## Pages & templates
 
-Every page is a 12 × 6 grid. Start a page from one of the 23 templates (or from scratch) and change anything.
+Every page is a 12 × 6 grid. Start a page from one of the 24 templates (or from scratch) and change anything.
 
 | | |
 |---|---|
@@ -150,6 +165,20 @@ Widgets scale to the size you give them. Weather, air quality, rates, crypto and
 public APIs ([Open-Meteo](https://open-meteo.com), [Frankfurter](https://frankfurter.dev), [CoinGecko](https://www.coingecko.com),
 [HN](https://github.com/HackerNews/API)) on the phone, without API keys, and keep their last data when offline.
 
+**Smart Stack** combines up to 12 widgets in one slot. Add it from the Layout category, then drag widgets into it or
+use its picker. Reorder cards, open their settings, or disable individual cards. Tap the dots or swipe vertically to
+change cards; horizontal swipes still change pages. Focused controls pause rotation. Command widgets belong directly
+on a page rather than inside a stack.
+
+**CodexBar** is an optional source: install its `codexbar` CLI on the computer and the agent reads `usage --json`.
+The CodexBar template and quota widget can show Claude, Codex and Antigravity with configurable provider rotation.
+Local Claude/Codex sources keep refreshing when CodexBar is absent, fails, or reports stale data. General settings
+provide defaults; a widget's own options override them, including an empty provider selection.
+The checked [CodexBar 0.84.0 release](https://github.com/steipete/CodexBar/releases/tag/v0.84.0) supplies macOS and Linux
+CLI binaries. Windows continues to use the native local Claude/Codex sources when no compatible CLI is installed.
+Tap an AI session to see its model, timing and token details. Token counters describe the local session rather than
+the account allowance. Prompt/response text and tool arguments are not included in this panel data.
+
 ## Layout editor & settings
 
 Double-click the tray icon on Windows (or open <http://127.0.0.1:8765>):
@@ -170,7 +199,10 @@ Double-click the tray icon on Windows (or open <http://127.0.0.1:8765>):
   vibration, volume-key paging and the phone's sensors (brightness that follows the room, the night screen when the
   room goes dark, wave to wake it); [page switching](#rules) (home page, countdown, back home after);
   kiosk options (screen pinning, the panel as the phone's home screen so it starts after a reboot, keep the phone
-  awake on the charger; no root needed); [battery care](#rules); [Claude Code permission prompts](#claude-code-permission-prompts);
+  awake on the charger; no root needed); on macOS, optionally follow the computer lock (sleep the phone on lock,
+  wake it and open PhoneBox on unlock, with an ADB connection; phones secured by a PIN or password must be unlocked
+  manually). Lock sync needs the agent to run in the macOS GUI session; [battery care](#rules);
+  [Claude Code permission prompts](#claude-code-permission-prompts);
   phones (several at once, each with its own pages); Wi-Fi & Tailscale; updates.
 - **Advanced**: the raw JSON.
 
@@ -346,7 +378,7 @@ cable, or a port straight on the computer instead of a hub or a front-panel port
 
 <details><summary><b>Some widgets show "—" or "No data".</b></summary>
 
-GPU values need an NVIDIA GPU (`nvidia-smi`), CPU temperature needs LibreHardwareMonitor's web server on port 8085,
+GPU values need an NVIDIA GPU (`nvidia-smi`) on Windows or Linux, or an Apple silicon Mac exposing GPU utilization through IORegistry. CPU temperature needs LibreHardwareMonitor's web server on port 8085,
 GitHub needs `gh auth login`, quotas and sessions need Claude Code / Codex to have been used on this PC.
 </details>
 
@@ -391,10 +423,17 @@ from the agent) and the widgets in [`widgets/`](android/app/src/main/assets/www/
 (name, size, options) in [`widgets.json`](agent/PhoneBox.Agent/widgets.json), which drives the settings editor.
 Templates live in [`templates.json`](agent/PhoneBox.Agent/templates.json).
 
+To check a development agent beside an installed one, run it with an isolated settings file and port, for example
+`PhoneBoxAgent.exe --config "D:\test folder\config.json" --port 18765`. Settings and browser checks use
+`http://127.0.0.1:18765/`; restarts preserve these arguments. The ordinary port remains 8765. Set `deviceSerial`
+explicitly in the test settings (an unmatched serial disables USB attachment) and turn off automatic updates.
+USB clients still use phone port 8765; do not assign the same phone to two agents at once.
+
 Release APKs are signed with your own key when `PHONEBOX_STORE_FILE`, `PHONEBOX_STORE_PASSWORD`, `PHONEBOX_KEY_ALIAS`
 and `PHONEBOX_KEY_PASSWORD` are set (in `~/.gradle/gradle.properties` or the environment); otherwise the debug key
 is used. Debug builds make the WebView debuggable through `chrome://inspect`. To publish a release: bump the
 version in `PhoneBox.Agent.csproj` and `android/app/build.gradle.kts`, commit, then run `.\scripts\release.ps1`.
+The script dispatches the gated GitHub release workflow; see [the release checklist](docs/RELEASING.md).
 
 ## Extras
 

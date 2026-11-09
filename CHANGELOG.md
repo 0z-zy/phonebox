@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.7.0 — 2026-11-09
+
+Smart Stack, richer AI session details and native macOS desk features. Existing layouts and pairing settings are
+preserved. Add the new widgets or the CodexBar template from the editor when you want them.
+
+- `--port` and `--config` can run an isolated development agent beside the installed instance. The local URL,
+  singleton mutex and USB reverse target follow the selected port, and restarts preserve the launch arguments.
+
+- Smart Stack: combine up to 12 widgets in one grid slot, reorder and configure them in the editor, disable individual
+  cards, and switch with dots or a vertical swipe. Rotation follows the visible panel's clock. Command widgets stay
+  directly on a page; their scripts are never included in the stack's public configuration.
+- Optional CodexBar quota source for Claude, Codex and Antigravity. Primary, secondary and additional measured limits
+  are retained; unavailable and synthetic windows are distinguished from real zero usage. Local Claude/Codex refresh
+  continues independently and takes over when a CodexBar provider fails or becomes stale.
+- CodexBar partial failures retain other providers' successful payloads even when the CLI exits nonzero. Tertiary
+  quota windows are included alongside primary, secondary and supplemental windows.
+- The background-command regression fixture now terminates only its own recorded process, preserving unrelated
+  processes and allowing the timeout tests to run concurrently on macOS.
+- The Windows installer refuses an APK with a different signing key and reports failed installs. It no longer
+  uninstalls the existing app as a fallback, preserving pairing and widget data.
+- Codex session details show model, reasoning effort, token counters, context window, lifecycle and recent tool name.
+  Resumed sessions are discovered in older directories; malformed counters and partially appended records do not hide
+  the session. Prompt text, responses and tool arguments are not sent to the phone.
+- macOS system media and artwork through optional `nowplaying-cli`, with Spotify/Music fallback; selected-output
+  volume capability reporting and optional read-only display volume through `m1ddc`.
+- Opt-in macOS lock sync over ADB. Commands have deadlines, unsuccessful devices are retried, and setup and polling
+  share a serialized state reconciler. Secure phone keyguards still require a manual unlock.
+
+Contributions adapted from [PR #1](https://github.com/ersinkoc/phonebox/pull/1) by
+[blx10](https://github.com/blx10) and [PR #2](https://github.com/ersinkoc/phonebox/pull/2) by
+[akpinarserdar](https://github.com/akpinarserdar), preserving the 0.6.9 fixes.
+
+Validated on Windows and an Apple M4 MacBook Air: 175 agent tests per platform, 29 browser tests, signed Android
+update with application data preserved, real USB lock/wake, media metadata/artwork and pause/resume, audio control,
+Apple GPU/RAM readings and live quota fallback. Secure phone keyguards still need a manual unlock.
+
 ## 0.6.9 — 2026-11-09
 
 - A question from Claude Code (the "ask the user" tool) no longer shows up on the phone as an Allow / Deny prompt with

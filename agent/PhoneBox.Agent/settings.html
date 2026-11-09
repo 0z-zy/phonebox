@@ -182,6 +182,105 @@ table.items td.val { font-family: Consolas, monospace; font-size: 12px; max-widt
 input[type=color] { width: 42px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); padding: 2px; }
 .icon-input { width: 70px; text-align: center; font-size: 20px; }
 
+/* smart stack builder in inspector */
+.stack-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.stack-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  user-select: none;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, opacity .15s ease;
+}
+.stack-row:hover { background: color-mix(in srgb, var(--panel-2) 80%, var(--line)); }
+.stack-row.off { opacity: .5; }
+.stack-row.off .stack-row-name { text-decoration: line-through; }
+.stack-row.dragging { opacity: .35; }
+.stack-row.over { outline: 2px dashed var(--accent); outline-offset: 1px; }
+.stack-row.has-config-open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+}
+.stack-row-handle {
+  cursor: grab;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.stack-row-handle:active { cursor: grabbing; }
+.stack-row-check { cursor: pointer; }
+.stack-row-ico { font-size: 17px; width: 22px; text-align: center; }
+.stack-row-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stack-row-chevron { font-size: 11px; color: var(--muted); padding: 0 4px; }
+.stack-row:hover .stack-row-chevron { color: var(--text); }
+.stack-row-actions { display: flex; align-items: center; gap: 4px; }
+.stack-btn-sm {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1;
+}
+.stack-btn-sm:hover:not(:disabled) { background: var(--line); color: var(--text); }
+.stack-btn-sm:disabled { opacity: 0.3; cursor: default; }
+.stack-btn-del:hover { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.stack-sub-config {
+  margin: -6px 0 4px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-top: none;
+  border-bottom-left-radius: 9px;
+  border-bottom-right-radius: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+.stack-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.stack-dropzone {
+  border: 2px dashed var(--line);
+  border-radius: 10px;
+  padding: 12px 10px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: default;
+  transition: all .2s ease;
+  background: rgba(255, 255, 255, 0.015);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.stack-dropzone.over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+.pal[draggable="true"] { cursor: grab; }
+.pal[draggable="true"]:active { cursor: grabbing; }
+.wb.stack-canvas-over {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent) !important;
+}
+
 /* city search */
 .results { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-top: 6px; }
 .results button { text-align: left; border: 0; background: var(--panel); padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--line); }
@@ -385,6 +484,7 @@ dd { margin: 0; word-break: break-all; }
         <label class="check"><input type="checkbox" data-bind="display.pin"> Pin the panel: Home and Recents stay on it (Android asks once; hold Back and Overview together to unpin)</label>
         <label class="check"><input type="checkbox" data-bind="display.homeScreen"> Use the panel as the phone's home screen: it starts after a reboot and Home returns to it (turn off to get your launcher back)</label>
         <label class="check"><input type="checkbox" data-bind="display.keepAwake"> Keep the phone awake: turn off Android's screen saver (it starts on the charger) and keep the screen on while plugged in (set over USB)</label>
+        <label class="check" id="followComputerLockOption" style="display:none"><input type="checkbox" data-bind="display.followComputerLock"> Follow the computer lock: turn the phone screen off when macOS locks; wake it and open PhoneBox when macOS unlocks (ADB required; unlock phones secured by a PIN or password manually)</label>
       </div>
 
       <div class="card">
@@ -415,6 +515,25 @@ dd { margin: 0; word-break: break-all; }
         <div class="row" style="margin-bottom:8px"><label class="switch"><input type="checkbox" data-bind="claude.phoneApprovals"><span></span></label> Ask on the phone</div>
         <label class="check"><input type="checkbox" data-bind="claude.onlyWhenAway"> Only when I am away from the PC (no keyboard or mouse for a minute)</label>
         <div class="field" style="max-width:260px;margin-top:12px"><label>Seconds to answer before the terminal takes over</label><input type="number" min="10" max="3600" data-bind="claude.timeoutSec" data-type="int"></div>
+      </div>
+
+      <div class="card">
+        <h3>AI quotas &amp; CodexBar</h3>
+        <p class="hint" style="margin:0 0 12px">Choose which AI coding services to track and show on the panel, and configure rotation.</p>
+        <div class="field"><label>Tracked AI services</label>
+          <div class="opts">
+            <label class="check"><input type="checkbox" id="cb_claude"> Claude</label>
+            <label class="check"><input type="checkbox" id="cb_codex"> Codex</label>
+            <label class="check"><input type="checkbox" id="cb_antigravity"> Antigravity</label>
+          </div>
+        </div>
+        <div class="field" style="margin-top:10px">
+          <label class="check"><input type="checkbox" data-bind="codexBar.rotate"> Rotate providers automatically</label>
+        </div>
+        <div class="row" style="gap:12px;margin-top:10px">
+          <div class="field" style="max-width:180px"><label>Cards at a time</label><input type="number" min="0" max="6" data-bind="codexBar.pageSize" data-type="int"><span class="hint">0 = show all</span></div>
+          <div class="field" style="max-width:240px"><label>Rotate every (seconds)</label><input type="number" min="2" max="300" data-bind="codexBar.rotateInterval" data-type="int"><span class="hint">e.g. 5, 8, 15 seconds</span></div>
+        </div>
       </div>
 
       <div class="card">
@@ -592,6 +711,7 @@ function changed() {
 let catalog = { cols: 12, rows: 6, widgets: [], templates: [] };
 let selPage = 0;
 let selWidget = -1;
+let activeStackSubIdx = -1;
 const widgetDef = (type) => catalog.widgets.find((w) => w.type === type) || { type, name: type, icon: '▫️', options: [], minW: 1, minH: 1, w: 2, h: 2 };
 const curPage = () => cfg.pages[selPage];
 
@@ -602,6 +722,40 @@ function deckCols() {
 
 function optVal(w, o) { return w.options && o.key in w.options ? w.options[o.key] : o.default; }
 function setWOpt(w, key, val) { w.options = { ...(w.options || {}), [key]: val }; changed(); renderCanvas(); }
+
+function getStackItems(w, o) {
+  const raw = optVal(w, o);
+  let list = [];
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (s.startsWith('[') && s.endsWith(']')) {
+      try { list = JSON.parse(s); } catch (_) { list = s.split('\n'); }
+    } else {
+      list = s.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
+    }
+  }
+  return list.slice(0, 12).map((item, index) => {
+    if (!item) return null;
+    if (typeof item === 'object') {
+      return {
+        id: String(item.id || `card-${index}`),
+        type: String(item.type || '').trim(),
+        enabled: item.enabled !== false && item.active !== false,
+        options: item.options || {}
+      };
+    }
+    const str = String(item).trim();
+    if (str.startsWith('{') && str.endsWith('}')) {
+      try {
+        const obj = JSON.parse(str);
+        if (obj.type) return { id: String(obj.id || `card-${index}`), type: String(obj.type).trim(), enabled: obj.enabled !== false && obj.active !== false, options: obj.options || {} };
+      } catch (_) {}
+    }
+    return { id: `card-${index}`, type: str, enabled: true, options: {} };
+  }).filter((x) => x && x.type && !['stack', 'command'].includes(x.type));
+}
 
 /** One-line description of a widget for the canvas. */
 function widgetSummary(w) {
@@ -619,7 +773,7 @@ function widgetSummary(w) {
     case 'button': return cfg.shortcuts.find((s) => s.id === o.id)?.label || 'pick a shortcut';
     case 'shortcuts': return (o.ids?.length ? `${o.ids.length} keys` : 'all keys') + ` · ${o.columns || 4} columns`;
     case 'worldclock': return (o.zones || d.options[0]?.default || []).map((z) => z.split('=')[0]).join(' · ');
-    case 'quotas': return (o.providers || ['claude', 'codex']).join(' + ');
+    case 'quotas': case 'codexbar': return (o.providers || ['claude', 'codex', 'antigravity']).join(' + ');
     case 'quotaring': return `${choice('provider')} · ${choice('limit').split(' (')[0]}`;
     case 'analog': return o.label || o.zone || '';
     case 'topprocs': case 'breathe': return choice(w.type === 'topprocs' ? 'sort' : 'pattern');
@@ -628,6 +782,12 @@ function widgetSummary(w) {
     case 'exchange': return `${o.base || 'EUR'} → ${(o.symbols || d.options[1].default).join(', ')}`;
     case 'crypto': return (o.coins || d.options[0].default).join(', ');
     case 'image': return o.caption || (o.url || 'no address').replace(/^https?:\/\//, '').slice(0, 40);
+    case 'stack': {
+      const list = getStackItems(w, { key: 'widgets', default: d.options?.find((x) => x.key === 'widgets')?.default });
+      const activeCount = list.filter((item) => item.enabled !== false).length;
+      const names = list.map((item) => widgetDef(item.type)?.name || item.type).filter(Boolean);
+      return `${activeCount}/${list.length} active (${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}) · ${o.interval ?? 10}s`;
+    }
     default: return '';
   }
 }
@@ -784,6 +944,32 @@ function renderCanvas() {
       h('span', { class: 'rz', title: 'Resize' }));
     el.style.gridArea = `${w.y + 1} / ${w.x + 1} / span ${w.h} / span ${w.w}`;
     el.addEventListener('pointerdown', (e) => startDrag(e, w, i, e.target.classList.contains('rz') ? 'resize' : 'move'));
+
+    if (w.type === 'stack') {
+      el.addEventListener('dragover', (e) => {
+        if (e.dataTransfer.types.includes('application/phonebox-widget-type') || e.dataTransfer.types.includes('text/plain')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          el.classList.add('stack-canvas-over');
+        }
+      });
+      el.addEventListener('dragleave', () => el.classList.remove('stack-canvas-over'));
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.classList.remove('stack-canvas-over');
+        const type = e.dataTransfer.getData('application/phonebox-widget-type') || e.dataTransfer.getData('text/plain');
+        if (type && !['stack', 'command'].includes(type) && !type.startsWith('stack:') && catalog.widgets.some((cw) => cw.type === type)) {
+          const list = getStackItems(w, { key: 'widgets', default: d.options?.find((x) => x.key === 'widgets')?.default });
+          list.push({ type, enabled: true, options: {} });
+          setWOpt(w, 'widgets', list);
+          selWidget = i;
+          renderCanvas();
+          renderInspector();
+          toast(`${widgetDef(type).name} Smart Stack'e eklendi`);
+        }
+      });
+    }
+
     canvas.appendChild(el);
   });
 }
@@ -824,7 +1010,17 @@ function renderPalette() {
   const list = catalog.widgets.filter((d) => !q || `${d.name} ${d.desc} ${d.type} ${d.category}`.toLowerCase().includes(q));
   const groups = [...new Set(list.map((d) => d.category || 'Other'))];
   $('palette').replaceChildren(...(list.length ? groups.flatMap((g) => [h('div', { class: 'pal-cat' }, g),
-    ...list.filter((d) => (d.category || 'Other') === g).map((d) => h('button', { class: 'pal', title: d.desc, onclick: () => addWidget(d) },
+    ...list.filter((d) => (d.category || 'Other') === g).map((d) => h('button', {
+      class: 'pal',
+      title: d.desc,
+      draggable: 'true',
+      ondragstart: (e) => {
+        e.dataTransfer.setData('application/phonebox-widget-type', d.type);
+        e.dataTransfer.setData('text/plain', d.type);
+        e.dataTransfer.effectAllowed = 'copy';
+      },
+      onclick: () => addWidget(d)
+    },
       h('span', { class: 'pal-ico' }, d.icon), h('span', {}, h('b', {}, d.name), h('small', {}, d.desc))))]) : [h('p', { class: 'hint' }, 'No widget matches.')]));
 }
 
@@ -869,44 +1065,237 @@ function renderInspector() {
       num('w', 'Width', d.minW, catalog.cols), num('h', 'Height', d.minH, catalog.rows)));
 }
 
-function optionField(w, o) {
+function renderStackWidgetsOption(w, o) {
+  const items = getStackItems(w, o);
+  const save = () => {
+    setWOpt(w, o.key, items.map((it) => ({ id: it.id, type: it.type, enabled: it.enabled !== false, options: it.options || {} })));
+    renderInspector();
+  };
+
+  const move = (from, to) => {
+    if (from < 0 || from >= items.length || to < 0 || to >= items.length || from === to) return;
+    const [moved] = items.splice(from, 1);
+    items.splice(to, 0, moved);
+    if (activeStackSubIdx === from) activeStackSubIdx = to;
+    else if (activeStackSubIdx > from && activeStackSubIdx <= to) activeStackSubIdx--;
+    else if (activeStackSubIdx < from && activeStackSubIdx >= to) activeStackSubIdx++;
+    save();
+  };
+
+  const remove = (idx) => {
+    items.splice(idx, 1);
+    if (activeStackSubIdx === idx) activeStackSubIdx = -1;
+    else if (activeStackSubIdx > idx) activeStackSubIdx--;
+    save();
+  };
+
+  const add = (type, atIdx = -1) => {
+    if (items.length >= 12) { toast('A stack can contain up to 12 widgets', true); return; }
+    if (!type || ['stack', 'command'].includes(type) || !catalog.widgets.some((cw) => cw.type === type)) return;
+    const newItem = { id: `card-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, type, enabled: true, options: {} };
+    let newIdx;
+    if (atIdx >= 0 && atIdx <= items.length) {
+      items.splice(atIdx, 0, newItem);
+      newIdx = atIdx;
+    } else {
+      items.push(newItem);
+      newIdx = items.length - 1;
+    }
+    activeStackSubIdx = newIdx;
+    save();
+    toast(`${widgetDef(type).name} added to Smart Stack`);
+  };
+
+  const rowsAndConfigs = [];
+  items.forEach((item, i) => {
+    const d = widgetDef(item.type);
+    const isOpen = activeStackSubIdx === i;
+    const row = h('div', {
+      class: 'stack-row' + (item.enabled ? '' : ' off') + (isOpen ? ' selected has-config-open' : ''),
+      draggable: 'true',
+      'data-idx': i,
+      onclick: (e) => {
+        if (e.target.closest('input, button, .stack-row-handle')) return;
+        activeStackSubIdx = isOpen ? -1 : i;
+        renderInspector();
+      },
+      ondragstart: (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') {
+          e.preventDefault();
+          return;
+        }
+        row.classList.add('dragging');
+        e.dataTransfer.setData('application/phonebox-stack-idx', String(i));
+        e.dataTransfer.setData('text/plain', 'stack:' + i);
+        e.dataTransfer.effectAllowed = 'move';
+      },
+      ondragend: () => {
+        row.classList.remove('dragging');
+        document.querySelectorAll('.stack-row.over, .stack-dropzone.over').forEach((el) => el.classList.remove('over'));
+      },
+      ondragover: (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/phonebox-stack-idx') ? 'move' : 'copy';
+        row.classList.add('over');
+      },
+      ondragleave: () => row.classList.remove('over'),
+      ondrop: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        row.classList.remove('over');
+        const fromIdxStr = e.dataTransfer.getData('application/phonebox-stack-idx');
+        if (fromIdxStr !== '' && fromIdxStr != null) {
+          const fromIdx = parseInt(fromIdxStr, 10);
+          if (!isNaN(fromIdx) && fromIdx !== i) move(fromIdx, i);
+          return;
+        }
+        const type = e.dataTransfer.getData('application/phonebox-widget-type') || e.dataTransfer.getData('text/plain');
+        if (type && !['stack', 'command'].includes(type) && !type.startsWith('stack:')) {
+          add(type, i);
+        }
+      }
+    },
+      h('span', { class: 'stack-row-handle', title: 'Drag to reorder' }, '⋮⋮'),
+      h('input', {
+        type: 'checkbox',
+        class: 'stack-row-check',
+        title: item.enabled ? 'Enabled (shown in rotation)' : 'Disabled (hidden)',
+        checked: item.enabled,
+        onchange: (e) => { e.stopPropagation(); item.enabled = e.target.checked; save(); }
+      }),
+      h('span', { class: 'stack-row-ico' }, d.icon),
+      h('span', { class: 'stack-row-name', title: 'Click to edit settings' }, d.name),
+      h('span', { class: 'stack-row-chevron', title: isOpen ? 'Close settings' : 'Open settings' }, isOpen ? '▾' : '▸'),
+      h('div', { class: 'stack-row-actions' },
+        h('button', { type: 'button', class: 'stack-btn-sm', title: 'Move up', disabled: i === 0, onclick: (e) => { e.stopPropagation(); move(i, i - 1); } }, '▲'),
+        h('button', { type: 'button', class: 'stack-btn-sm', title: 'Move down', disabled: i === items.length - 1, onclick: (e) => { e.stopPropagation(); move(i, i + 1); } }, '▼'),
+        h('button', { type: 'button', class: 'stack-btn-sm stack-btn-del', title: 'Remove', onclick: (e) => { e.stopPropagation(); remove(i); } }, '✕')
+      )
+    );
+    rowsAndConfigs.push(row);
+
+    if (isOpen) {
+      const subW = { type: item.type, options: item.options || {} };
+      const subOptions = (d.options || []).filter((opt) => opt.key !== 'widgets');
+      const configBox = h('div', { class: 'stack-sub-config' },
+        h('div', { class: 'stack-sub-header' },
+          h('span', { style: { fontWeight: '600', fontSize: '12px', color: 'var(--accent)' } }, `⚙️ ${d.icon} ${d.name} settings`),
+          h('button', { type: 'button', class: 'stack-btn-sm', title: 'Close', onclick: (e) => { e.stopPropagation(); activeStackSubIdx = -1; renderInspector(); } }, '✕')
+        ),
+        ...(subOptions.length > 0
+          ? subOptions.map((subO) => optionField(subW, subO, (key, val) => {
+              item.options = item.options || {};
+              item.options[key] = val;
+              save();
+            }))
+          : [h('p', { class: 'hint', style: { margin: '2px 0 0', fontSize: '12px' } }, 'This widget has no additional settings.')])
+      );
+      rowsAndConfigs.push(configBox);
+    }
+  });
+
+  const dropzone = h('div', {
+    class: 'stack-dropzone',
+    ondragover: (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      dropzone.classList.add('over');
+    },
+    ondragleave: () => dropzone.classList.remove('over'),
+    ondrop: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove('over');
+      const fromIdxStr = e.dataTransfer.getData('application/phonebox-stack-idx');
+      if (fromIdxStr !== '' && fromIdxStr != null) {
+        const fromIdx = parseInt(fromIdxStr, 10);
+        if (!isNaN(fromIdx)) move(fromIdx, items.length - 1);
+        return;
+      }
+      const type = e.dataTransfer.getData('application/phonebox-widget-type') || e.dataTransfer.getData('text/plain');
+      if (type && !['stack', 'command'].includes(type) && !type.startsWith('stack:')) {
+        add(type);
+      }
+    }
+  },
+    h('span', { style: { fontSize: '18px' } }, '＋'),
+    h('span', {}, items.length ? 'Drag a widget here from the palette' : 'Stack is empty. Drag a widget here from the palette')
+  );
+
+  const quickSelect = h('div', { class: 'row', style: { gap: '6px', marginTop: '8px' } },
+    h('select', { id: 'stackQuickAdd', style: { flex: '1' } },
+      ...catalog.widgets.filter((cw) => !['stack', 'command'].includes(cw.type)).map((cw) => h('option', { value: cw.type }, `${cw.icon} ${cw.name}`))
+    ),
+    h('button', { type: 'button', class: 'btn sm', onclick: () => {
+      const sel = $('stackQuickAdd');
+      if (sel?.value) add(sel.value);
+    } }, '＋ Ekle')
+  );
+
+  return h('div', { class: 'field' },
+    h('label', {}, o.label || 'Widgets in stack'),
+    h('span', { class: 'hint', style: { margin: '2px 0 8px', display: 'block' } },
+      'Click a widget row to edit its settings. Drag rows or use the arrows to reorder.'),
+    h('div', {
+      class: 'stack-list',
+      ondragover: (e) => e.preventDefault(),
+      ondrop: (e) => {
+        if (e.target.closest('.stack-row, .stack-sub-config')) return;
+        e.preventDefault();
+        const type = e.dataTransfer.getData('application/phonebox-widget-type') || e.dataTransfer.getData('text/plain');
+        if (type && !['stack', 'command'].includes(type) && !type.startsWith('stack:')) add(type);
+      }
+    }, ...rowsAndConfigs),
+    dropzone,
+    quickSelect
+  );
+}
+
+function optionField(w, o, onValChange) {
+  if (o.type === 'stack-widgets' || (w.type === 'stack' && o.key === 'widgets')) {
+    return renderStackWidgetsOption(w, o);
+  }
   const v = optVal(w, o);
+  const set = (key, val) => {
+    if (onValChange) onValChange(key, val);
+    else setWOpt(w, key, val);
+  };
   const field = (...kids) => h('div', { class: 'field' }, h('label', {}, o.label), ...kids);
   switch (o.type) {
     case 'bool':
-      return h('label', { class: 'check', style: { marginBottom: '10px' } }, h('input', { type: 'checkbox', checked: v !== false, onchange: (e) => setWOpt(w, o.key, e.target.checked) }), o.label);
+      return h('label', { class: 'check', style: { marginBottom: '10px' } }, h('input', { type: 'checkbox', checked: v !== false, onchange: (e) => set(o.key, e.target.checked) }), o.label);
     case 'select':
-      return field(h('select', { onchange: (e) => setWOpt(w, o.key, e.target.value) }, ...o.choices.map(([k, l]) => h('option', { value: k, selected: k === v }, l))));
+      return field(h('select', { onchange: (e) => set(o.key, e.target.value) }, ...o.choices.map(([k, l]) => h('option', { value: k, selected: k === v }, l))));
     case 'multi': {
       const cur = Array.isArray(v) ? v : [];
       return field(h('div', { class: 'opts' }, ...o.choices.map(([k, l]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: cur.includes(k), onchange: (e) => {
         const next = o.choices.map((c) => c[0]).filter((x) => (x === k ? e.target.checked : cur.includes(x)));
-        setWOpt(w, o.key, next.length ? next : cur);
+        set(o.key, next.length ? next : cur);
         if (!next.length) { e.target.checked = true; toast('Keep at least one', true); }
       } }), l))));
     }
     case 'number':
-      return field(h('input', { type: 'number', min: o.min, max: o.max, value: v ?? '', style: { maxWidth: '140px' }, onchange: (e) => setWOpt(w, o.key, e.target.value === '' ? o.default : Number(e.target.value)) }));
+      return field(h('input', { type: 'number', min: o.min, max: o.max, value: v ?? '', style: { maxWidth: '140px' }, onchange: (e) => set(o.key, e.target.value === '' ? o.default : Number(e.target.value)) }));
     case 'textarea':
-      return field(h('textarea', { rows: o.key === 'command' ? 3 : 4, style: o.key === 'command' ? { fontFamily: 'Consolas, monospace', fontSize: '12.5px' } : {}, oninput: (e) => setWOpt(w, o.key, e.target.value) }, v ?? ''),
+      return field(h('textarea', { rows: o.key === 'command' ? 3 : 4, style: o.key === 'command' ? { fontFamily: 'Consolas, monospace', fontSize: '12.5px' } : {}, oninput: (e) => set(o.key, e.target.value) }, v ?? ''),
         o.key === 'command' ? h('span', { class: 'hint' }, 'Runs with PowerShell on this PC. The phone never sees the command, only its output. Tap the widget on the phone to run it now.') : null);
     case 'lines':
-      return field(h('textarea', { rows: 5, oninput: (e) => setWOpt(w, o.key, e.target.value.split('\n').map((x) => x.trim()).filter(Boolean)) }, (Array.isArray(v) ? v : []).join('\n')));
+      return field(h('textarea', { rows: 5, oninput: (e) => set(o.key, e.target.value.split('\n').map((x) => x.trim()).filter(Boolean)) }, (Array.isArray(v) ? v : []).join('\n')));
     case 'color':
-      return field(h('div', { class: 'row', style: { gap: '8px' } }, h('input', { type: 'color', value: v || '#fbbf24', oninput: (e) => setWOpt(w, o.key, e.target.value) }),
-        h('div', { class: 'swatches' }, ...COLORS.map((c) => h('button', { style: { background: c }, onclick: () => { setWOpt(w, o.key, c); renderInspector(); } })))));
+      return field(h('div', { class: 'row', style: { gap: '8px' } }, h('input', { type: 'color', value: v || '#fbbf24', oninput: (e) => set(o.key, e.target.value) }),
+        h('div', { class: 'swatches' }, ...COLORS.map((c) => h('button', { style: { background: c }, onclick: () => { set(o.key, c); renderInspector(); } })))));
     case 'shortcut':
-      return field(h('select', { onchange: (e) => setWOpt(w, o.key, e.target.value) }, h('option', { value: '' }, '(first shortcut)'),
+      return field(h('select', { onchange: (e) => set(o.key, e.target.value) }, h('option', { value: '' }, '(first shortcut)'),
         ...cfg.shortcuts.map((s) => h('option', { value: s.id, selected: s.id === v }, `${s.icon} ${s.label}`))),
         h('span', { class: 'hint' }, 'New shortcuts get their id when you save.'));
     case 'shortcuts': {
       const cur = Array.isArray(v) ? v : [];
       return field(h('div', { class: 'opts' }, ...cfg.shortcuts.map((s) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: cur.includes(s.id), onchange: (e) => {
-        setWOpt(w, o.key, cfg.shortcuts.map((x) => x.id).filter((id) => (id === s.id ? e.target.checked : cur.includes(id))));
+        set(o.key, cfg.shortcuts.map((x) => x.id).filter((id) => (id === s.id ? e.target.checked : cur.includes(id))));
       } }), `${s.icon} ${s.label}`))));
     }
     default:
-      return field(h('input', { type: 'text', value: v ?? '', oninput: (e) => setWOpt(w, o.key, e.target.value) }),
+      return field(h('input', { type: 'text', value: v ?? '', oninput: (e) => set(o.key, e.target.value) }),
         w.type === 'push' && o.key === 'key' ? h('span', { class: 'hint' }, 'Send data with POST /api/push/<key> — see the Webhooks section.') : null);
   }
 }
@@ -1463,7 +1852,26 @@ function bindForm() {
       changed();
     };
   });
+  bindCodexBar();
   $('nbv').textContent = Math.round(cfg.night.brightness * 100) + '%';
+}
+
+function bindCodexBar() {
+  cfg.codexBar ??= { providers: ['claude', 'codex', 'antigravity'], rotate: true, pageSize: 2, rotateInterval: 8 };
+  if (cfg.codexBar.rotate === undefined) cfg.codexBar.rotate = true;
+  const provs = Array.isArray(cfg.codexBar.providers) ? cfg.codexBar.providers : ['claude', 'codex', 'antigravity'];
+  ['claude', 'codex', 'antigravity'].forEach((id) => {
+    const el = $('cb_' + id);
+    if (!el) return;
+    el.checked = provs.includes(id);
+    el.onchange = () => {
+      const cur = Array.isArray(cfg.codexBar.providers) ? cfg.codexBar.providers : [];
+      const next = ['claude', 'codex', 'antigravity'].filter((x) => x === id ? el.checked : cur.includes(x));
+      if (!next.length) { el.checked = true; toast('Keep at least one AI service', true); return; }
+      cfg.codexBar.providers = next;
+      changed();
+    };
+  });
 }
 
 async function searchCity() {
@@ -1491,6 +1899,7 @@ async function loadInfo() {
     pill.className = 'pill' + (i.connected ? ' on' : '');
     pill.querySelector('span').textContent = i.connected ? 'Phone connected' : 'No phone connected';
     osName = i.os || 'windows';
+    $('followComputerLockOption').style.display = osName === 'macos' ? '' : 'none';
     $('adbFound').textContent = i.adb ? 'Found: ' + i.adb : 'adb not found — ' + ({ linux: 'sudo apt install adb', macos: 'brew install android-platform-tools' }[osName] || 'winget install Google.PlatformTools');
     $('appMissing').hidden = !(i.appMissing && i.appMissing.length);
     $('usbProblem').hidden = !i.usbProblem;
@@ -1529,6 +1938,7 @@ async function load() {
   cfgVersion = res.headers.get('X-Config-Version');
   cfg = await res.json();
   cfg.pages ??= []; cfg.shortcuts ??= []; cfg.rules ??= []; cfg.display ??= {}; cfg.night ??= {}; cfg.weather ??= {}; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false };
+  cfg.codexBar ??= { providers: ['claude', 'codex', 'antigravity'], rotate: true, pageSize: 2, rotateInterval: 8 };
   for (const [k, v] of Object.entries({ idleReturnSec: 90, switchCountdownSec: 3, touchGraceSec: 20, minDwellSec: 15, holdMaxMin: 30, keepAwake: true })) cfg.display[k] ??= v;
   cfg.charge ??= { enabled: false, min: 50, max: 80, method: 'ha' };
   saved = JSON.stringify(cfg);

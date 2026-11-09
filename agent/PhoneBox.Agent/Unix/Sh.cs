@@ -13,7 +13,7 @@ public static class Sh
     {
         lock (Found)
         {
-            if (Found.TryGetValue(tool, out var hit)) return hit;
+            if (Found.TryGetValue(tool, out var hit) && hit is not null && File.Exists(hit)) return hit;
             var dirs = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(':', StringSplitOptions.RemoveEmptyEntries)
                 .Concat(["/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin", "/usr/sbin", "/sbin", "/snap/bin"]);
             hit = dirs.Select(d => Path.Combine(d, tool)).FirstOrDefault(File.Exists);

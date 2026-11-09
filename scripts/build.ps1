@@ -14,6 +14,7 @@ $version = ([xml](Get-Content (Join-Path $root 'agent\PhoneBox.Agent\PhoneBox.Ag
 Write-Host "==> Android APK ($version)"
 Push-Location (Join-Path $root 'android')
 try { .\gradlew.bat assembleRelease --console=plain -q } finally { Pop-Location }
+if ($LASTEXITCODE) { throw 'Android release build failed' }
 Copy-Item (Join-Path $root 'android\app\build\outputs\apk\release\app-release.apk') (Join-Path $dist "PhoneBox-$version.apk") -Force
 
 # Framework-dependent builds for every supported system. Zip files lose the Unix executable bit; install.sh and
@@ -25,13 +26,11 @@ $targets = [ordered]@{
 }
 foreach ($rid in $targets.Keys) {
     Write-Host "==> Agent $rid ($version)"
-    $out = Join-Path $env:TEMP "phonebox-agent-$version-$rid"
-    Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
+    $out = Join-Path ([IO.Path]::GetTempPath()) ("phonebox-agent-$version-$rid-" + [guid]::NewGuid().ToString('N'))
     dotnet publish (Join-Path $root 'agent\PhoneBox.Agent') -c Release -f $targets[$rid] -r $rid --self-contained false -o $out --nologo -v q --disable-build-servers
     if ($LASTEXITCODE) { throw "publish failed for $rid" }
     $zip = Join-Path $dist "PhoneBoxAgent-$version-$rid.zip"
-    Remove-Item $zip -ErrorAction SilentlyContinue
-    Compress-Archive -Path "$out\*" -DestinationPath $zip
+    Compress-Archive -Path "$out\*" -DestinationPath $zip -Force
 }
 
 Get-ChildItem $dist | Select-Object Name, @{ n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } }

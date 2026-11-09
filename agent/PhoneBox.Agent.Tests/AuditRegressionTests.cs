@@ -115,10 +115,14 @@ public sealed class AuditRegressionTests : IDisposable
     public void ABackgroundProcessLeftByTheCommandDoesNotBlockTheWidget()
     {
         var path = Path.Combine(_dir, "config.json");
-        File.WriteAllText(path, """
-            {"pages":[{"id":"p","title":"P","widgets":[{"id":"bg","type":"command","x":0,"y":0,"w":6,"h":3,
-              "options":{"command":"cmd /c start /b ping -n 30 127.0.0.1","commandUnix":"sleep 30 & echo hi","interval":60}}]}]}
-            """);
+        var pidPath = Path.Combine(_dir, "background.pid");
+        var workerPath = Path.Combine(_dir, "background.ps1");
+        File.WriteAllText(workerPath, $"[IO.File]::WriteAllText('{pidPath.Replace("'", "''")}', [string]$PID); Start-Sleep -Seconds 30");
+        var command = $"cmd /c start /b powershell.exe -NoProfile -NonInteractive -File \"{workerPath}\"";
+        var commandUnix = $"/bin/sleep 30 & printf '%s' $! > '{pidPath.Replace("'", "'\\''")}'; echo hi";
+        File.WriteAllText(path, JsonSerializer.Serialize(new { pages = new[] { new { id = "p", title = "P", widgets = new[] {
+            new { id = "bg", type = "command", x = 0, y = 0, w = 6, h = 3, options = new { command, commandUnix, interval = 60 } }
+        } } } }));
         var runner = new CommandRunner(new ConfigStore(path), NullLogger<CommandRunner>.Instance);
         var sw = Stopwatch.StartNew();
         runner.Get("p", "bg");
@@ -136,8 +140,13 @@ public sealed class AuditRegressionTests : IDisposable
         }
         finally
         {
-            foreach (var name in new[] { "PING", "sleep" })
-                foreach (var p in Process.GetProcessesByName(name)) using (p) try { if ((DateTime.Now - p.StartTime).TotalSeconds < 60) p.Kill(); } catch { }
+            if (File.Exists(pidPath) && int.TryParse(File.ReadAllText(pidPath).Trim(), out var ownedPid))
+                try
+                {
+                    using var child = Process.GetProcessById(ownedPid);
+                    if (!child.HasExited) { child.Kill(entireProcessTree: true); child.WaitForExit(5000); }
+                }
+                catch (ArgumentException) { /* the fixture already exited */ }
         }
     }
 }

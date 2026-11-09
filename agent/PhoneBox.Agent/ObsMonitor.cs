@@ -134,7 +134,7 @@ public sealed class ObsMonitor(ConfigStore config, ILogger<ObsMonitor> log) : Ba
     /// <summary>The OBS widget's buttons: record, pause, stream, scene, mic.</summary>
     public async Task<string?> ActAsync(string action, string? scene)
     {
-        if (!config.Get().Pages.SelectMany(p => p.Widgets ?? []).Any(w => w.Type == "obs" && w.Bool("control") == true))
+        if (!config.Get().Widgets().Any(w => w.Type == "obs" && w.Bool("control") == true))
             return "controlling OBS is turned off in the widget's settings";
         try
         {

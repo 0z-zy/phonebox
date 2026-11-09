@@ -6,7 +6,7 @@ namespace PhoneBox.Agent;
 /// While a phone is connected over USB, keeps an "adb reverse tcp:8765 tcp:8765" rule in place so that
 /// 127.0.0.1:8765 on the phone reaches this agent. When a phone is newly plugged in, wakes it and opens the panel.
 /// </summary>
-public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : BackgroundService
+public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log, AgentEndpoint? endpoint = null) : BackgroundService
 {
     public const string PanelActivity = "net.oxog.phonebox.deskpanel/.MainActivity";
     private const string HomeAlias = "net.oxog.phonebox.deskpanel/.HomeAlias";
@@ -17,6 +17,7 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
     /// <summary>Connected phones that do not have the PhoneBox app yet (installed from Settings, e.g. after winget / Scoop).</summary>
     public string[] MissingApp => _missingApp;
     private const string Rule = "tcp:8765";
+    private string TargetRule => $"tcp:{endpoint?.Port ?? 8765}";
 
     private string _lastState = "";
     private volatile string[] _devices = [];
@@ -51,6 +52,28 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
             await Adb(adb, $"-s {d} shell input keyevent KEYCODE_WAKEUP", CancellationToken.None);
             await Adb(adb, $"-s {d} shell am start -n {PanelActivity}", CancellationToken.None);
         }
+    }
+
+    private ScreenSynchronizer? _screenSync;
+    private ScreenSynchronizer ScreenSync => LazyInitializer.EnsureInitialized(ref _screenSync,
+        () => new ScreenSynchronizer(MacSessionLock.IsLocked, ApplyScreenAsync));
+
+    public Task<bool> SyncSessionAsync(CancellationToken ct, bool force = false) => ScreenSync.ReconcileAsync(_devices, ct, force);
+    public Task ResetSessionAsync(CancellationToken ct) => ScreenSync.ResetAsync(ct);
+
+    private async Task ApplyScreenAsync(string device, bool locked, CancellationToken ct)
+    {
+        var adb = FindAdb(cfg.Get().AdbPath);
+        if (adb is null) throw new IOException("ADB is not available");
+        if (locked) await Adb(adb, $"-s {device} shell input keyevent KEYCODE_SLEEP", ct);
+        else
+        {
+            await Adb(adb, $"-s {device} shell input keyevent KEYCODE_WAKEUP", ct);
+            // A secure PIN/password keyguard still needs the user's unlock.
+            await Adb(adb, $"-s {device} shell wm dismiss-keyguard", ct);
+            await Adb(adb, $"-s {device} shell am start -n {PanelActivity}", ct);
+        }
+        log.LogInformation("{Device}: phone screen {State}", device, locked ? "asleep" : "awake");
     }
 
     private async Task Ensure(CancellationToken ct)
@@ -94,11 +117,18 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
             _missingApp = installed ? _missingApp.Where(x => x != d).ToArray() : _missingApp.Union([d]).ToArray();
             if (!installed) { Report($"{d}: the PhoneBox app is not installed (Settings › General › Install the phone app)"); continue; }
             if (list.Contains(Rule)) continue;
-            await Adb(adb, $"-s {d} reverse {Rule} {Rule}", ct);
-            // Newly plugged in: wake the screen and open the panel.
-            await Adb(adb, $"-s {d} shell input keyevent KEYCODE_WAKEUP", ct);
-            await Adb(adb, $"-s {d} shell am start -n {PanelActivity}", ct);
-            log.LogInformation("{Device}: adb reverse set up, panel opened", d);
+            await Adb(adb, $"-s {d} reverse {Rule} {TargetRule}", ct);
+            // A newly plugged-in phone must not light up while the computer is locked.
+            if (cfg.Get().Display.FollowComputerLock && OperatingSystem.IsMacOS())
+            {
+                await SyncSessionAsync(ct, force: true);
+            }
+            else
+            {
+                await Adb(adb, $"-s {d} shell input keyevent KEYCODE_WAKEUP", ct);
+                await Adb(adb, $"-s {d} shell am start -n {PanelActivity}", ct);
+                log.LogInformation("{Device}: adb reverse set up, panel opened", d);
+            }
         }
         // Settings › Display › home screen: the app offers itself as a home app; make it the default one (no root needed).
         if (cfg.Get().Display.HomeScreen)
@@ -169,16 +199,15 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log) : Backg
         return candidates.FirstOrDefault(File.Exists);
     }
 
-    private static async Task<string> Adb(string adb, string args, CancellationToken ct)
+    internal static async Task<string> Adb(string adb, string args, CancellationToken ct)
     {
         var psi = new ProcessStartInfo(adb, args)
         {
             RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true,
             WorkingDirectory = AppPaths.NeutralCwd,
         };
-        using var p = Process.Start(psi)!;
-        var output = await p.StandardOutput.ReadToEndAsync(ct);
-        await p.WaitForExitAsync(ct);
-        return output;
+        var result = await ToolProcess.RunAsync(psi, TimeSpan.FromSeconds(8), ct);
+        if (result.ExitCode != 0) throw new IOException($"ADB exited with code {result.ExitCode}");
+        return result.Output;
     }
 }

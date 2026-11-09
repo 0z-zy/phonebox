@@ -22,6 +22,7 @@ android/.kotlin/
 dist/
 
 # Local tooling / personal data
+.temp_files/
 .playwright-mcp/
 .claude/
 extras/**/backup/

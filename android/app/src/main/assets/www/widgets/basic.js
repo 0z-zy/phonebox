@@ -89,6 +89,11 @@ W.media = {
     box.innerHTML = MEDIA_HTML;
     const q = (s) => box.querySelector(s);
     const img = q('.art'), vol = q('.volr');
+    const sourceIcon = q('.m-source-icon');
+    const sourceIcons = {
+      YouTube: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="5" fill="#ff0033"/><path d="m10 8 6 4-6 4z" fill="#fff"/></svg>',
+      'YouTube Music': '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#ff0033"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="#fff" stroke-width="1.4"/><path d="m10 8.5 5.5 3.5-5.5 3.5z" fill="#fff"/></svg>',
+    };
     let artId = -1, volTimer = 0;
     img.addEventListener('load', () => { img.classList.add('on'); setArtColor(averageColor(img)); });
     img.addEventListener('error', () => img.classList.remove('on'));
@@ -120,7 +125,8 @@ W.media = {
     vol.addEventListener('change', () => setTimeout(() => setVolDragging(false), 600));
     q('.mute').addEventListener('click', async () => {
       haptic();
-      try { const a = await api('/volume?op=mute', 'POST'); D.state && (D.state.audio = a); emit('state'); } catch (_) {}
+      if ((!D.state?.audio || D.state.audio.canControl === false)) return;
+      try { const a = await api('/volume?op=mute', 'POST'); D.state.audio = a; emit('state'); } catch (_) {}
     });
 
     return {
@@ -133,14 +139,18 @@ W.media = {
           return;
         }
         const m = D.state?.media, a = D.state?.audio;
+        vol.disabled = (!a || a.canControl === false);
+        box.classList.toggle('volume-unavailable', (!a || a.canControl === false));
+        q('.mute').disabled = (!a || a.canControl === false);
+        box.classList.toggle('muted-on', !!a?.muted);
         if (a) {
-          box.classList.toggle('muted-on', !!a.muted);
           if (!volDragging) { vol.value = a.volume; paintVol(a.volume); }
-        }
+        } else q('.vol-val').textContent = 'n/a';
         box.classList.toggle('idle', !m);
         if (!m) {
           box.classList.remove('playing');
-          q('.m-app').textContent = 'Media';
+          q('.m-app-name').textContent = 'Media';
+          sourceIcon.replaceChildren();
           q('.m-title').textContent = 'Nothing playing';
           q('.m-artist').textContent = 'Press ▶ to resume';
           q('.fill').style.width = '0';
@@ -149,7 +159,8 @@ W.media = {
           return;
         }
         box.classList.toggle('playing', m.playing);
-        q('.m-app').textContent = m.app || 'Media';
+        q('.m-app-name').textContent = m.app || 'Media';
+        sourceIcon.innerHTML = sourceIcons[m.app] || '';
         q('.m-title').textContent = m.title || 'Unknown track';
         q('.m-artist').textContent = [m.artist, m.album].filter(Boolean).join(' · ') || '—';
         q('.m-dur').textContent = fmtTime(m.durMs);
@@ -272,7 +283,7 @@ W.meters = {
         const rows = [meter('RAM', `${r1(pc.ramUsedGb)} / ${Math.round(pc.ramTotalGb)} GB`, (pc.ramUsedGb / pc.ramTotalGb) * 100)];
         const g = pc.gpu;
         if (g && g.vramTotal) rows.push(meter('VRAM', `${r1(g.vramUsed)} / ${Math.round(g.vramTotal)} GB`, (g.vramUsed / g.vramTotal) * 100, cssVar('--gpu')));
-        const disks = h('div', 'disks', ...(pc.disks || []).map((dk) => meter(dk.name, Math.round((dk.usedGb / dk.totalGb) * 100) + '%', (dk.usedGb / dk.totalGb) * 100, '#94a3b8')));
+        const disks = h('div', 'disks', ...(pc.disks || []).map((dk) => meter(dk.name === '/' ? 'DISK' : dk.name, Math.round((dk.usedGb / dk.totalGb) * 100) + '%', (dk.usedGb / dk.totalGb) * 100, '#94a3b8')));
         list.replaceChildren(...rows, disks);
       },
     };
@@ -282,41 +293,148 @@ W.meters = {
 W.quotas = {
   needs: ['quotas', 'tick'],
   create(box, { o }) {
-    const want = Array.isArray(o.providers) ? o.providers : ['claude', 'codex'];
+    const tokens = (n) => n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
     const grid = h('div', 'q-grid', h('div', 'empty', 'Quota data arrives once the computer is connected.'));
     box.append(grid);
     let last = 0;
+    let offset = 0;
+    let lastRotate = Date.now();
+
+    const isRotateEnabled = () => {
+      if (o.rotate !== undefined && o.rotate !== null) return !!o.rotate;
+      if (cfg.codexBar?.rotate !== undefined && cfg.codexBar?.rotate !== null) return !!cfg.codexBar.rotate;
+      return true;
+    };
+
+    const getPageSize = () => {
+      if (o.pageSize !== undefined && o.pageSize !== null && o.pageSize !== '') {
+        const n = Number(o.pageSize);
+        return Number.isFinite(n) ? Math.max(0, Math.min(6, Math.floor(n))) : 2;
+      }
+      return cfg.codexBar?.pageSize ?? 2;
+    };
+
+    const getRotateInterval = () => {
+      if (!isRotateEnabled()) return 0;
+      if (o.rotateInterval !== undefined && o.rotateInterval !== null && o.rotateInterval !== '') {
+        const n = Number(o.rotateInterval);
+        return Number.isFinite(n) ? Math.max(2, Math.min(300, n)) : 8;
+      }
+      return cfg.codexBar?.rotateInterval ?? 8;
+    };
+
+    const getProviders = () => {
+      if (Array.isArray(o.providers)) return o.providers;
+      if (Array.isArray(cfg.codexBar?.providers)) return cfg.codexBar.providers;
+      return ['claude', 'codex', 'antigravity'];
+    };
+
     const render = () => {
       if (!D.quotas) return;
+      const want = getProviders();
       const list = quotaProviders().filter((p) => want.includes(p.id));
       grid.replaceChildren();
-      if (!list.length) { grid.appendChild(h('div', 'empty', 'No quota providers enabled')); return; }
-      for (const p of list) {
+      if (!list.length) { grid.appendChild(h('div', 'empty', want.length ? 'Quota data is unavailable for the selected providers' : 'No quota providers enabled')); return; }
+
+      const ps = getPageSize();
+      const needsPaging = isRotateEnabled() && ps > 0 && list.length > ps;
+      if (offset >= list.length) offset = 0;
+
+      let visible = list;
+      if (needsPaging) {
+        visible = [];
+        for (let i = 0; i < ps; i++) {
+          visible.push(list[(offset + i) % list.length]);
+        }
+      }
+
+      for (const p of visible) {
         const st = Q_STYLE[p.id] || { color: '#94a3b8', logo: '●' };
-        const card = h('div', 'q-card');
+        const card = h('div', 'q-card' + (p.limits.length >= 4 ? ' q-card-compact' : ''));
         card.style.setProperty('--q', st.color);
-        card.style.flex = String(Math.max(1, p.limits.length) + 0.3);
+        card.style.flex = needsPaging && ps === 2 ? '1 1 0' : String(Math.max(1, p.limits.length) + 0.3);
         card.appendChild(h('div', 'q-head', h('span', 'q-logo', st.logo), h('span', 'q-name', p.name), h('span', 'q-plan', p.plan),
           p.updatedAt ? h('span', 'q-upd', fmtDur(Date.now() - p.updatedAt) + ' ago') : null));
-        const rings = h('div', 'q-rings');
+        const compact = p.limits.length >= 4;
+        const rings = h('div', 'q-rings' + (compact ? ' q-rings-grid' : ''));
         for (const l of p.limits) {
           const pace = paceInfo(l);
           const dial = h('div', 'q-dial');
+          if (compact) {
+            dial.style.width = '86px';
+            dial.style.height = '86px';
+          }
           if (l.percent >= 95 || l.severity === 'critical') dial.style.setProperty('--qc', '#ef4444');
           else if (l.percent >= 80 || l.severity === 'warning') dial.style.setProperty('--qc', '#f59e0b');
           dial.innerHTML = ringSvg(l.percent, pace?.elapsed); // numbers only
-          dial.appendChild(h('div', 'q-pct', String(Math.round(l.percent)), h('small', null, '%')));
-          rings.appendChild(h('div', 'q-ring', dial, h('div', 'q-label', l.label), h('div', 'q-reset', fmtReset(l.resetsAt)),
+          const pctEl = h('div', 'q-pct', String(Math.round(l.percent)), h('small', null, '%'));
+          if (compact) pctEl.style.fontSize = '22px';
+          dial.appendChild(pctEl);
+          rings.appendChild(h('div', 'q-ring', dial, h('div', 'q-label', l.label), p.id === 'codex' ? h('div', 'q-left', `${Math.max(0, Math.round(100 - l.percent))}% left`) : null, h('div', 'q-reset', fmtReset(l.resetsAt)),
             pace ? h('div', 'q-pace ' + pace.cls, pace.text) : null));
         }
         if (!p.limits.length) rings.appendChild(h('div', 'q-reset', 'No data'));
-        card.append(rings, h('div', 'q-foot', h('span', null, p.extra || ''), p.error ? h('span', 'q-err', p.error) : h('span')));
+        card.append(rings);
+        if (p.id === 'codex' && p.codex) {
+          const c = p.codex;
+          const details = h('div', 'q-details');
+          if (c.model) details.append(h('div', 'q-detail', h('span', null, 'Latest local session'), h('strong', null, c.model + (c.effort ? ` · ${c.effort}` : ''))));
+          if (c.totalTokens != null) details.append(h('div', 'q-detail', h('span', null, 'Session tokens'), h('strong', null, tokens(c.totalTokens))));
+          if (c.totalInput != null || c.totalOutput != null) details.append(h('div', 'q-detail q-breakdown', `In ${tokens(c.totalInput)} · Out ${tokens(c.totalOutput)} · Cached ${tokens(c.totalCached)} · Reasoning ${tokens(c.totalReasoning)}`));
+          if (c.lastInput != null && c.contextWindow) details.append(h('div', 'q-detail q-breakdown', `Last input ${tokens(c.lastInput)} / ${tokens(c.contextWindow)} context window`));
+          if (details.childNodes.length) card.append(details);
+        }
+        card.append(h('div', 'q-foot', h('span', p.extra?.startsWith('Limit reached') ? 'q-alert' : null, p.extra || ''), p.error ? h('span', 'q-err', p.error) : h('span')));
+
         grid.appendChild(card);
       }
+
+      if (needsPaging) {
+        const dots = h('div', 'q-dots');
+        for (let i = 0; i < list.length; i++) {
+          const dot = h('span', 'q-dot' + (i === offset ? ' active' : ''));
+          dot.onclick = (e) => {
+            e.stopPropagation();
+            offset = i;
+            lastRotate = Date.now();
+            render();
+            haptic();
+          };
+          dots.appendChild(dot);
+        }
+        grid.appendChild(dots);
+      }
     };
+
+    grid.onclick = () => {
+      const ps = getPageSize();
+      const want = getProviders();
+      const list = quotaProviders().filter((p) => want.includes(p.id));
+      if (ps > 0 && list.length > ps) {
+        offset = (offset + 1) % list.length;
+        lastRotate = Date.now();
+        render();
+        haptic();
+      }
+    };
+
     return {
       update(kind) {
-        if (kind === 'tick') { if (Date.now() - last > 30_000) { last = Date.now(); render(); } return; }
+        if (kind === 'tick') {
+          const sec = getRotateInterval();
+          if (sec > 0 && Date.now() - lastRotate >= sec * 1000) {
+            const ps = getPageSize();
+            const want = getProviders();
+            const list = quotaProviders().filter((p) => want.includes(p.id));
+            if (ps > 0 && list.length > ps) {
+              offset = (offset + 1) % list.length;
+              lastRotate = Date.now();
+              render();
+            }
+          }
+          if (Date.now() - last > 30_000) { last = Date.now(); render(); }
+          return;
+        }
         last = Date.now();
         render();
       },
@@ -324,13 +442,52 @@ W.quotas = {
   },
 };
 
+W.codexbar = W.quotas;
+
 W.sessions = {
-  needs: ['work'],
+  needs: ['work', 'tick'],
   create(box) {
     const sum = h('span', 'w-sum');
     const list = h('div', 's-list', h('div', 'empty', 'Waiting for session data…'));
     box.append(h('div', 'w-head', h('span', 's-label', 'Sessions'), sum), list);
     box.style.setProperty('--c', '#d97757');
+    const tokens = (n) => n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
+    const statusText = (s) => s.status === 'busy' ? 'Working' : s.status === 'waiting' ? 'Waiting' : s.status === 'shell' ? 'Running a command' : s.outcome === 'completed' ? 'Completed' : s.outcome === 'aborted' ? 'Aborted' : 'Idle';
+    const ageText = (since) => Date.now() - since < 60_000 ? 'just now' : shortDur(Date.now() - since) + ' ago';
+    const openDetails = (s) => {
+      haptic();
+      const backdrop = h('div', 'session-backdrop');
+      const panel = h('div', 'session-panel');
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-modal', 'true');
+      const title = h('h2', null, s.project || s.name);
+      const close = h('button', 'session-close', '✕');
+      close.setAttribute('aria-label', 'Close session details');
+      const onKey = (e) => { if (e.key === 'Escape') dismiss(); };
+      const dismiss = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+      close.addEventListener('click', dismiss);
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) dismiss(); });
+      panel.append(h('div', 'session-panel-head', h('span', null, s.tool === 'codex' ? '◎ Codex' : '✳ Claude Code'), close), title);
+      const rows = [
+        ['Status', statusText(s)],
+        ['Started', s.startedAt ? ageText(s.startedAt) : null],
+        ['Last activity', s.since ? ageText(s.since) : null],
+        ['Current turn', s.status === 'busy' && s.turnStartedAt ? shortDur(Date.now() - s.turnStartedAt) : null],
+        ['Model', s.model], ['Reasoning', s.effort],
+        ['Session tokens', s.totalTokens != null ? tokens(s.totalTokens) : null],
+        ['Input / output', s.inputTokens != null || s.outputTokens != null ? `${tokens(s.inputTokens)} / ${tokens(s.outputTokens)}` : null],
+        ['Cached input', s.cachedInputTokens != null ? tokens(s.cachedInputTokens) : null],
+        ['Reasoning output', s.reasoningTokens != null ? tokens(s.reasoningTokens) : null],
+        ['Last input / context window', s.lastInputTokens != null && s.contextWindow ? `${tokens(s.lastInputTokens)} / ${tokens(s.contextWindow)}` : null],
+        ['Recent tool', s.lastTool],
+      ];
+      for (const [label, value] of rows) if (value != null) panel.append(h('div', 'session-detail-row', h('span', null, label), h('strong', null, value)));
+      if (s.tool === 'codex') panel.append(h('p', 'session-note', 'Token totals are for this local session, not your account allowance.'));
+      backdrop.append(panel);
+      document.body.append(backdrop);
+      close.focus();
+      document.addEventListener('keydown', onKey);
+    };
     return {
       update() {
         const sessions = D.work?.sessions;
@@ -343,10 +500,16 @@ W.sessions = {
           counts.idle ? `${counts.idle} idle` : '',
         ].filter(Boolean).join(' · ') || 'No open sessions';
         const sorted = [...sessions].sort((a, b) => (S_ORDER[a.status] ?? 9) - (S_ORDER[b.status] ?? 9) || b.since - a.since);
-        list.replaceChildren(...(sorted.length ? sorted.map((s) => h('div', 'sess ' + s.status,
-          h('span', 'st'), h('span', 'tl ' + s.tool, s.tool === 'claude' ? '✳' : '◎'), h('span', 'nm', s.name),
-          h('span', 'ds', (s.status === 'waiting' ? 'waiting · ' : '') + shortDur(Date.now() - s.since))))
-          : [h('div', 'empty', 'No Claude Code / Codex sessions open')]));
+        const rows = sorted.length ? sorted.map((s) => {
+          const row = h('button', 'sess ' + s.status,
+            h('span', 'st'), h('span', 'tl ' + s.tool, s.tool === 'claude' ? '✳' : '◎'),
+            h('span', 'sess-main', h('span', 'nm', s.project || s.name), h('span', 'sess-meta', [s.model, s.effort].filter(Boolean).join(' · ') || statusText(s))),
+            h('span', 'ds', shortDur(Date.now() - s.since)));
+          row.type = 'button';
+          row.addEventListener('click', () => openDetails(s));
+          return row;
+        }) : [h('div', 'empty', 'No Claude Code / Codex sessions open')];
+        list.replaceChildren(...rows);
       },
     };
   },
