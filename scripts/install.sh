@@ -121,11 +121,15 @@ if [ "$apk" = 1 ]; then
     (cd "$root/android" && chmod +x gradlew && ./gradlew assembleRelease --console=plain -q)
     apkfile="$root/android/app/build/outputs/apk/release/app-release.apk"
   fi
-  target=()
-  [ -n "$serial" ] && target=(-s "$serial")
   echo "==> Installing $(basename "$apkfile") on the phone"
-  "$adb" "${target[@]}" install -r "$apkfile"
-  "$adb" "${target[@]}" shell am start -n net.oxog.phonebox.deskpanel/.MainActivity >/dev/null
+  # Bash 3.2 treats an empty array as unset under nounset (the macOS system shell).
+  if [ -n "$serial" ]; then
+    "$adb" -s "$serial" install -r "$apkfile"
+    "$adb" -s "$serial" shell am start -n net.oxog.phonebox.deskpanel/.MainActivity >/dev/null
+  else
+    "$adb" install -r "$apkfile"
+    "$adb" shell am start -n net.oxog.phonebox.deskpanel/.MainActivity >/dev/null
+  fi
 fi
 
 echo "PhoneBox is running. Settings: http://127.0.0.1:8765"

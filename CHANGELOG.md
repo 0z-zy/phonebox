@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Update Playwright to 1.65.0, Microsoft.NET.Test.Sdk to 18.11.0 and the xUnit Visual Studio adapter to 4.0.1.
+- Update seven pinned GitHub Actions and verify release-artifact transfer and Pages archive compatibility in CI.
+- Fix `scripts/install.sh --apk` on Bash 3.2 when no device serial is specified. The empty target array was treated
+  as unset under `set -u`, stopping the installer before ADB ran. Adapted from PR #2, with installer regressions
+  for default device selection, explicit serials and failed updates that preserve the existing app.
+
 ## 0.7.0 — 2026-11-09
 
 Smart Stack, richer AI session details and native macOS desk features. Existing layouts and pairing settings are

@@ -83,6 +83,9 @@ jobs:
         if: matrix.rid == 'win-x64'
         shell: pwsh
         run: ./tools/test-install-apk.ps1
+      - name: Unix installer regression checks with the system Bash
+        if: matrix.rid != 'win-x64'
+        run: python3 tools/test-unix-installer.py --bash /bin/bash
       - name: Publish agent
         run: dotnet publish agent/PhoneBox.Agent -c Release -f ${{ matrix.tfm }} -r ${{ matrix.rid }} --self-contained false -o out --nologo
       - name: Smoke test (starts, serves the API)
