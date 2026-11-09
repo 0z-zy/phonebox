@@ -172,10 +172,10 @@ on a page rather than inside a stack.
 
 **CodexBar** is an optional source: install its `codexbar` CLI on the computer and the agent reads `usage --json`.
 The CodexBar template and quota widget can show Claude, Codex and Antigravity with configurable provider rotation.
-Local Claude/Codex sources keep refreshing when CodexBar is absent, fails, or reports stale data. General settings
+Local Claude, Codex and Antigravity sources keep refreshing when CodexBar is absent, fails, or reports stale data. General settings
 provide defaults; a widget's own options override them, including an empty provider selection.
 The checked [CodexBar 0.84.0 release](https://github.com/steipete/CodexBar/releases/tag/v0.84.0) supplies macOS and Linux
-CLI binaries. Windows continues to use the native local Claude/Codex sources when no compatible CLI is installed.
+CLI binaries. Windows continues to use native local sources when no compatible CLI is installed.
 Tap an AI session to see its model, timing and token details. Token counters describe the local session rather than
 the account allowance. Prompt/response text and tool arguments are not included in this panel data.
 

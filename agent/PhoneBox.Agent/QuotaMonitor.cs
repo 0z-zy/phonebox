@@ -29,12 +29,14 @@ public sealed partial class QuotaMonitor(ILogger<QuotaMonitor> log) : Background
 
     private volatile QuotaProvider? _claude;
     private volatile QuotaProvider? _codex;
+    private volatile QuotaProvider? _antigravity;
     private long _nextClaude;
     private long _nextCodexBar;
+    private long _nextAntigravity;
     private volatile IReadOnlyList<QuotaProvider> _external = [];
 
     public IReadOnlyList<QuotaProvider> Snapshot() => new[] { "claude", "codex", "antigravity" }
-        .Select(id => CodexBar.Select(id == "claude" ? _claude : id == "codex" ? _codex : null,
+        .Select(id => CodexBar.Select(id == "claude" ? _claude : id == "codex" ? _codex : _antigravity,
             _external.FirstOrDefault(p => p.Id == id), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()))
         .OfType<QuotaProvider>().ToList();
 
@@ -68,6 +70,12 @@ public sealed partial class QuotaMonitor(ILogger<QuotaMonitor> log) : Background
             }
             try { _codex = ReadCodex(); }
             catch (Exception ex) { _codex = Fail("codex", "Codex", ex.Message); }
+
+            if (Environment.TickCount64 >= _nextAntigravity)
+            {
+                var ok = await RefreshAntigravity(ct);
+                _nextAntigravity = Environment.TickCount64 + (ok ? 60_000 : 30_000);
+            }
 
             if (Environment.TickCount64 >= _nextClaude)
             {
