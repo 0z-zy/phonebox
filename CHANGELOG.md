@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.2 — 2026-11-10
+
+Native Antigravity quotas on Windows, Linux and macOS. Existing layouts and pairing settings are retained.
+
+- Add native Antigravity quota and plan monitoring, adapted from [PR #7](https://github.com/ersinkoc/phonebox/pull/7)
+  by [Biswajit9609](https://github.com/Biswajit9609). Support flat and nested measured quota fractions; skip unknown
+  or invalid values instead of showing unused quota. Preserve measured zero/full usage.
+- Discover legacy Windows/Linux language-server names and extension-server ports with the matching CSRF token.
+  Reject unrelated editor processes, try other candidates after a failed probe, bound local requests and macOS
+  process reads, and fall back to measured model quotas from older IDE servers without inventing weekly limits.
+- Add a version-gated `agy -p /usage --output-format json` fallback for signed-in CLI installations, including the
+  standard per-user Windows path. Parse its snake-case group/window fields, disable CLI auto-updates during probes,
+  and keep conversation identifiers and token counters out of the panel. Live Windows validation with agy 1.5.3
+  returned all four Gemini/Claude-GPT quota windows through the agent API without a model turn.
+- Preserve the dependency updates from 0.7.1 when adapting the contribution.
+- Make the widget integration fixture independent of the local night schedule; late-night test runs no longer
+  activate the night overlay over controls being tested.
+- Wait for the demo layout before calendar-test navigation and use delete-on-close smoke-test logs so a transient
+  inherited Windows handle cannot fail otherwise successful artifact checks.
+
 ## 0.7.1 — 2026-11-09
 
 A compatibility and release-maintenance patch. Existing layouts and pairing settings are retained.

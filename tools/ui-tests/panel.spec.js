@@ -274,6 +274,9 @@ for (const [zone, noon] of [['America/New_York', '2026-11-09T12:00:00-05:00'], [
     await page.clock.setFixedTime(new Date(noon));
     await page.goto('/panel/');
     await expect(page.locator('.w').first()).toBeVisible();
+    // The first widgets belong to built-in defaults; wait for the demo's full page list before navigating.
+    await expect.poll(() => page.locator('#dots i').count()).toBeGreaterThan(10);
+    await expect(page.locator('body')).not.toHaveClass(/night/);
     const planner = await page.locator('#dots i').count() - 4; // Planner is the 5th page from the end of the demo
     for (let i = 0; i < planner; i++) await page.keyboard.press('ArrowRight');
     const heading = page.locator('.ag-day, .ag-row').filter({ hasText: /Release day|^(Today|Tomorrow)$/ });

@@ -38,7 +38,13 @@ the pages in a visual editor on the PC: **55 widgets**, **24 templates**, as man
 [Updates](#updates) · [How it works](#how-it-works) · [Security](#security--privacy) · [FAQ](#faq--troubleshooting) ·
 [Development](#development)
 
-## New in 0.7.0
+## New in 0.7.2
+
+Native Antigravity quota monitoring now works without CodexBar, including signed-in `agy` CLI installations on
+Windows. Session and weekly usage come from measured quota data; missing readings are not shown as unused quota.
+See [native Antigravity quotas](#widgets) and the [changelog](CHANGELOG.md) for setup and compatibility details.
+
+### Smart Stack and session details (0.7.0)
 
 | Smart Stack and quotas | Codex session details |
 |---|---|
@@ -48,13 +54,17 @@ These screenshots use made-up demo data. See the [changelog](CHANGELOG.md) for a
 
 ## Quick start
 
-**[Download PhoneBox 0.7.1](https://github.com/ersinkoc/phonebox/releases/tag/v0.7.1)** — signed Android APK and
+**[Download PhoneBox 0.7.2](https://github.com/ersinkoc/phonebox/releases/tag/v0.7.2)** — signed Android APK and
 agents for Windows x64, Linux x64/ARM64 and macOS Apple Silicon/Intel. Agent archives need the matching .NET 10
 runtime (Desktop Runtime on Windows). The release includes SHA-256 checksums and build provenance.
 Existing users can update from Settings; existing layouts and pairing settings are retained.
 
 You need an Android 9+ phone with [USB debugging](https://developer.android.com/studio/debug/dev-options) turned on,
 the [.NET 10 SDK](https://dotnet.microsoft.com/download) and `adb`.
+The source installers below build the agent locally. To build the phone app, also install **JDK 17** and
+**Android SDK Platform 35** (for example through Android Studio), set `JAVA_HOME`, and point `ANDROID_HOME` or
+`android/local.properties` (`sdk.dir`) at the SDK. The installers can use a release APK from `dist/`; the Windows
+installer rebuilds it when Android sources are newer, or when `-BuildApk` is supplied.
 
 **Windows 10/11**
 
@@ -172,10 +182,19 @@ on a page rather than inside a stack.
 
 **CodexBar** is an optional source: install its `codexbar` CLI on the computer and the agent reads `usage --json`.
 The CodexBar template and quota widget can show Claude, Codex and Antigravity with configurable provider rotation.
-Local Claude/Codex sources keep refreshing when CodexBar is absent, fails, or reports stale data. General settings
+Local Claude, Codex and Antigravity sources keep refreshing when CodexBar is absent, fails, or reports stale data. General settings
 provide defaults; a widget's own options override them, including an empty provider selection.
 The checked [CodexBar 0.84.0 release](https://github.com/steipete/CodexBar/releases/tag/v0.84.0) supplies macOS and Linux
-CLI binaries. Windows continues to use the native local Claude/Codex sources when no compatible CLI is installed.
+CLI binaries. Windows continues to use native local sources when no compatible CLI is installed.
+
+**Native Antigravity quotas** use a running app/hub's advertised HTTP port and CSRF token, or a signed-in
+`agy` CLI (1.1.11 or later). The CLI fallback runs `agy -p /usage --output-format json`, without a model prompt,
+and also finds the standard Windows installation in `%LOCALAPPDATA%\agy\bin`. Run `agy` in your terminal to sign
+in if needed. The agent reads measured session and weekly buckets, plus the plan when the local server provides it;
+CLI reports without plan metadata keep the neutral Antigravity title. Older IDE servers can supply model quotas
+through `GetUserStatus`; unavailable measurements are skipped, and weekly limits are never invented. Refresh
+failures retain the last measurements with an error. HTTPS-only endpoints without a compatible CLI can use CodexBar.
+
 Tap an AI session to see its model, timing and token details. Token counters describe the local session rather than
 the account allowance. Prompt/response text and tool arguments are not included in this panel data.
 
@@ -359,6 +378,11 @@ flowchart LR
   never refreshes it, so it can't interfere with Claude Code. This endpoint is undocumented and may change.
 - **Codex quota and sessions** are read from local files in `~/.codex/sessions`; Claude Code sessions from
   `~/.claude/sessions`. Nothing leaves your machine except the requests listed above.
+- **Native Antigravity quota:** the agent reads the running Antigravity server's port and CSRF token from its
+  process arguments and queries its loopback quota/status API, or invokes the signed-in CLI's structured usage
+  command. Only measured quota fields reach the panel; CLI conversation identifiers and token counters are omitted.
+  PhoneBox does not manage Google OAuth credentials; the CLI uses its own authentication. CLI auto-updates are
+  disabled for these probes.
 
 ## FAQ & troubleshooting
 
@@ -400,16 +424,28 @@ Yes. PhoneBox needs no root on the phone and no admin rights on the PC.
 
 ## Development
 
+Use the .NET 10 SDK for the agent, JDK 17 and Android SDK Platform 35 for Android builds, and Python 3 plus
+Node.js 22 for the browser tooling. The Gradle wrapper downloads Gradle automatically.
+
 ```powershell
 python tools/demo-server.py                  # the web demo from source: http://127.0.0.1:8790/panel/ and /settings/
+python tools/check-release.py                # release versions and widget/template catalog consistency
 dotnet test agent/PhoneBox.Agent.Tests       # agent unit tests
-cd tools/ui-tests; npm ci; npx playwright test; cd ../..   # browser tests of the panel and settings (against the demo)
+cd tools/ui-tests
+npm ci
+npx playwright install chromium             # first run; on Linux CI use --with-deps chromium
+npx playwright test                         # builds and serves its own demo on port 8781
+cd ../..
 cd tools/ui-tests; node media.js tour; cd ../..         # README media from the running demo: shots <page>… | tour | hero
-.\scripts\build.ps1                          # dist\PhoneBox-<v>.apk + dist\PhoneBoxAgent-<v>-win-x64.zip
-cd android; .\gradlew.bat assembleDebug      # APK only
-dotnet run --project agent/PhoneBox.Agent    # agent from source
+.\scripts\build.ps1                          # APK + five agent archives (Windows, Linux and macOS) in dist/
+cd android; .\gradlew.bat assembleDebug; cd .. # APK only
+dotnet run --project agent/PhoneBox.Agent -f net10.0-windows10.0.19041.0 # Windows agent from source
 pwsh tools/make-icon.ps1                     # regenerate the .ico
 ```
+
+On Linux or macOS, run the agent with `dotnet run --project agent/PhoneBox.Agent -f net10.0` and build the APK
+with `cd android && ./gradlew assembleDebug`. On Windows, the explicit `-f` selects one of the project's two
+target frameworks.
 
 The demo server needs only Python. It serves the same demo as the [live one](https://ersinkoc.github.io/phonebox/)
 (made-up data in [`tools/pages/demo.js`](tools/pages/demo.js)) straight from the sources, so a reload shows your

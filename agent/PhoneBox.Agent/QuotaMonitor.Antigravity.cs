@@ -1,0 +1,377 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
+namespace PhoneBox.Agent;
+
+public sealed partial class QuotaMonitor
+{
+    private static readonly string[] AntigravityProcessNames =
+    [
+        "agy", "language_server", "language-server", "Antigravity", "Antigravity IDE",
+        "language_server_macos", "language_server_macos_arm", "language_server_linux",
+        "language_server_windows_x64", "language_server_linux_x64", "language_server_linux_arm"
+    ];
+
+    /// <summary>
+    /// Refreshes Antigravity quota and plan data by discovering the local language server process and querying its RPC endpoints.
+    /// </summary>
+    /// <param name="ct">Cancellation token for async operations.</param>
+    /// <returns><c>true</c> if quotas were successfully refreshed; otherwise, <c>false</c>.</returns>
+    private async Task<bool> RefreshAntigravity(CancellationToken ct)
+    {
+        var endpoints = FindAntigravityEndpoints().Distinct().Take(8).ToArray();
+        var provider = endpoints.Length > 0 ? await ReadAntigravityAsync(_http, endpoints, ct) : null;
+        var cli = FindAntigravityCli();
+        if (provider is null && cli is not null)
+        {
+            try { provider = await ReadAntigravityCliAsync(cli, ct); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is IOException or TimeoutException or JsonException or System.ComponentModel.Win32Exception)
+            { log.LogDebug("Antigravity CLI quota refresh failed ({Kind})", ex.GetType().Name); }
+        }
+        if (endpoints.Length == 0 && cli is null)
+        {
+            _antigravity = _antigravity is { Limits.Count: > 0 } prev
+                ? prev with { Error = "Antigravity process not running" }
+                : null;
+            return false;
+        }
+
+        if (provider is not null)
+        {
+            _antigravity = provider;
+            return true;
+        }
+        const string error = "Could not read local Antigravity quotas";
+        _antigravity = _antigravity is { Limits.Count: > 0 } cached
+            ? cached with { Error = error } : Fail("antigravity", "Antigravity", error);
+        return false;
+    }
+
+    /// <summary>Finds the CLI on PATH or in its standard per-user Windows installation.</summary>
+    private static string? FindAntigravityCli()
+    {
+        var path = ToolProcess.Find("agy");
+        if (path is not null) return path;
+        if (!OperatingSystem.IsWindows()) return null;
+        path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "agy", "bin", "agy.exe");
+        return File.Exists(path) ? path : null;
+    }
+
+    /// <summary>Reads the CLI's structured usage command; older versions must never interpret it as a model prompt.</summary>
+    internal static async Task<QuotaProvider?> ReadAntigravityCliAsync(string path, CancellationToken ct,
+        Func<ProcessStartInfo, TimeSpan, CancellationToken, Task<ToolProcess.Result>>? run = null)
+    {
+        run ??= ToolProcess.RunAsync;
+        ProcessStartInfo Start(params string[] args)
+        {
+            var start = new ProcessStartInfo(path);
+            foreach (var arg in args) start.ArgumentList.Add(arg);
+            start.Environment["AGY_CLI_DISABLE_AUTO_UPDATE"] = "true";
+            start.Environment["BROWSER"] = "false";
+            return start;
+        }
+        var version = await run(Start("--version"), TimeSpan.FromSeconds(3), ct);
+        if (version.ExitCode != 0 || !Version.TryParse(version.Output.Trim().TrimStart('v'), out var parsed)
+            || parsed < new Version(1, 1, 11)) return null;
+        var result = await run(Start("-p", "/usage", "--output-format", "json", "--print-timeout", "15s"), TimeSpan.FromSeconds(20), ct);
+        if (result.ExitCode != 0 || result.Output.Length > 1 << 20) return null;
+        using var doc = JsonDocument.Parse(result.Output);
+        if (Str(doc.RootElement, "status") != "SUCCESS" || Str(AntigravityProp(doc.RootElement, "command"), "name") != "usage")
+            return null;
+        var limits = ParseAntigravityLimits(doc.RootElement);
+        return limits.Count == 0 ? null : new QuotaProvider("antigravity", "Antigravity", "Antigravity", limits,
+            null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), null);
+    }
+
+    /// <summary>Tries bounded loopback candidates; an unavailable server must not hide a healthy one.</summary>
+    internal static async Task<QuotaProvider?> ReadAntigravityAsync(HttpClient http,
+        IEnumerable<(int Port, string CsrfToken)> endpoints, CancellationToken ct)
+    {
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(TimeSpan.FromSeconds(10));
+        foreach (var ep in endpoints.Distinct().Take(8))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (budget.IsCancellationRequested) break;
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(budget.Token);
+            deadline.CancelAfter(TimeSpan.FromSeconds(3));
+            var limits = new List<QuotaLimit>();
+            string? plan = null;
+            try
+            {
+                using var summary = await Post("RetrieveUserQuotaSummary");
+                if (summary is not null) limits = ParseAntigravityLimits(summary.RootElement);
+                try
+                {
+                    using var status = await Post("GetUserStatus");
+                    if (status is not null)
+                    {
+                        plan = ParseAntigravityPlan(status.RootElement);
+                        if (limits.Count == 0) limits = ParseAntigravityLegacyLimits(status.RootElement);
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException) { }
+                if (limits.Count > 0)
+                    return new QuotaProvider("antigravity", "Antigravity", plan ?? "Antigravity", limits,
+                        null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), null);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException) { }
+
+            async Task<JsonDocument?> Post(string method)
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post,
+                    $"http://127.0.0.1:{ep.Port}/exa.language_server_pb.LanguageServerService/{method}");
+                req.Headers.Add("X-Codeium-Csrf-Token", ep.CsrfToken);
+                req.Headers.Add("Connect-Protocol-Version", "1");
+                req.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+                using var response = await http.SendAsync(req, deadline.Token);
+                if (!response.IsSuccessStatusCode) return null;
+                return JsonDocument.Parse(await response.Content.ReadAsStringAsync(deadline.Token));
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts the subscription plan name from a GetUserStatus response JSON.
+    /// </summary>
+    /// <param name="root">Root JSON element of the user status response.</param>
+    /// <returns>The plan name, or <c>null</c> if not present.</returns>
+    internal static string? ParseAntigravityPlan(JsonElement root)
+    {
+        var u = AntigravityProp(root, "userStatus") is { ValueKind: JsonValueKind.Object } us ? us : root;
+        var planInfo = AntigravityProp(AntigravityProp(u, "planStatus"), "planInfo");
+        var name = Str(planInfo, "planName");
+        if (string.IsNullOrWhiteSpace(name))
+            name = Str(AntigravityProp(u, "userTier"), "name");
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    /// <summary>
+    /// Parses quota groups and bucket limits from a RetrieveUserQuotaSummary response JSON, converting remaining fractions to used percentages.
+    /// </summary>
+    /// <param name="root">Root JSON element of the quota summary response.</param>
+    /// <returns>A list of parsed quota limits ordered by window duration.</returns>
+    internal static List<QuotaLimit> ParseAntigravityLimits(JsonElement root)
+    {
+        var list = new List<QuotaLimit>();
+        var resp = AntigravityProp(root, "response") is { ValueKind: JsonValueKind.Object } r ? r : root;
+        if (AntigravityProp(root, "command") is { ValueKind: not JsonValueKind.Undefined } command)
+        {
+            if (Str(root, "status") != "SUCCESS" || Str(command, "name") != "usage") return list;
+            resp = AntigravityProp(command, "data");
+        }
+        var groups = AntigravityProp(resp, "groups");
+        if (groups.ValueKind != JsonValueKind.Array)
+            return list;
+
+        var groupCount = groups.GetArrayLength();
+        foreach (var g in groups.EnumerateArray())
+        {
+            var groupName = Str(g, "displayName") ?? Str(g, "name") ?? "";
+            var isGemini = groupName.Contains("Gemini", StringComparison.OrdinalIgnoreCase);
+            var isClaudeOrGpt = groupName.Contains("Claude", StringComparison.OrdinalIgnoreCase)
+                || groupName.Contains("GPT", StringComparison.OrdinalIgnoreCase);
+            var groupPrefix = isGemini ? "Gemini" : isClaudeOrGpt ? "Claude/GPT" : groupName;
+
+            var buckets = AntigravityProp(g, "buckets");
+            if (buckets.ValueKind != JsonValueKind.Array)
+                continue;
+
+            foreach (var b in buckets.EnumerateArray())
+            {
+                var bucketId = Str(b, "bucketId") ?? Str(b, "id") ?? "";
+                var window = Str(b, "window") ?? "";
+                var is5h = window == "5h" || bucketId.Contains("5h", StringComparison.OrdinalIgnoreCase);
+                var isWeekly = window == "weekly" || bucketId.Contains("weekly", StringComparison.OrdinalIgnoreCase);
+
+                string label;
+                long? windowSec;
+                if (is5h)
+                {
+                    label = groupCount > 1 ? $"5-hour ({groupPrefix})" : "5-hour session";
+                    windowSec = 5 * 3600L;
+                }
+                else if (isWeekly)
+                {
+                    label = groupCount > 1 ? $"Weekly ({groupPrefix})" : "Weekly";
+                    windowSec = 7 * 86400L;
+                }
+                else
+                {
+                    label = Str(b, "displayName") ?? Str(b, "name") ?? bucketId;
+                    windowSec = null;
+                }
+
+                // Current servers nest the measured fraction; older servers put it on the bucket.
+                // Unknown usage must not become a healthy, unused quota.
+                var fraction = Num(AntigravityProp(b, "remaining"), "remainingFraction") ?? Num(b, "remainingFraction")
+                    ?? Num(b, "remaining_fraction");
+                if (fraction is not { } rem || rem < 0 || rem > 1) continue;
+                var usedPct = Math.Round((1.0 - rem) * 100.0, 1);
+                var resetsAt = Iso(Str(b, "resetTime") ?? Str(b, "reset_time"));
+                var severity = usedPct >= 95 ? "critical" : usedPct >= 80 ? "warning" : "normal";
+
+                list.Add(new QuotaLimit(label, usedPct, resetsAt, windowSec, severity));
+            }
+        }
+
+        return list
+            .OrderBy(l => l.Label.Contains("Claude", StringComparison.OrdinalIgnoreCase) || l.Label.Contains("GPT", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            .ThenBy(l => l.WindowSec ?? long.MaxValue)
+            .ToList();
+    }
+
+    /// <summary>Reads measured model quotas from older IDE servers without inventing weekly limits.</summary>
+    internal static List<QuotaLimit> ParseAntigravityLegacyLimits(JsonElement root)
+    {
+        var status = AntigravityProp(root, "userStatus");
+        var models = AntigravityProp(AntigravityProp(status, "cascadeModelConfigData"), "clientModelConfigs");
+        var list = new List<QuotaLimit>();
+        if (models.ValueKind != JsonValueKind.Array) return list;
+        foreach (var model in models.EnumerateArray())
+        {
+            var quota = AntigravityProp(model, "quotaInfo");
+            var label = Str(model, "label");
+            if (string.IsNullOrWhiteSpace(label) || Num(quota, "remainingFraction") is not { } rem || rem < 0 || rem > 1) continue;
+            var percent = Math.Round((1 - rem) * 100, 1);
+            list.Add(new QuotaLimit(label, percent, Iso(Str(quota, "resetTime")), null,
+                percent >= 95 ? "critical" : percent >= 80 ? "warning" : "normal"));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Extracts the loopback port and CSRF token flags from a process command line.
+    /// </summary>
+    /// <param name="cmd">The command line string.</param>
+    /// <returns>A tuple containing the port and CSRF token, or <c>null</c> if not found.</returns>
+    internal static (int Port, string CsrfToken)? ParseEndpointFromCommandLine(string cmd)
+    {
+        if (string.IsNullOrWhiteSpace(cmd)) return null;
+        string? Flag(params string[] names)
+        {
+            foreach (var name in names)
+            {
+                var match = AntigravityFlagRegex().Matches(cmd).Cast<Match>()
+                    .LastOrDefault(m => string.Equals(m.Groups["name"].Value, name, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                    return match.Groups["double"].Success ? match.Groups["double"].Value
+                        : match.Groups["single"].Success ? match.Groups["single"].Value : match.Groups["bare"].Value;
+            }
+            return null;
+        }
+        var hubPort = Flag("hub-port", "hub_port", "port");
+        var csrf = hubPort is null
+            ? Flag("extension_server_csrf_token", "csrf_token", "csrfToken") : Flag("csrf_token", "csrfToken");
+        var portValue = hubPort ?? Flag("extension_server_port");
+        if (int.TryParse(portValue, out var port) && port is > 0 and <= 65535 && !string.IsNullOrWhiteSpace(csrf))
+            return (port, csrf);
+        return null;
+    }
+
+    private static JsonElement AntigravityProp(JsonElement element, string key) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(key, out var value) ? value : default;
+
+    /// <summary>Enumerates only Antigravity-marked candidates, including legacy server names.</summary>
+    internal static IEnumerable<(int Port, string CsrfToken)> FindAntigravityEndpoints(
+        Func<string, IEnumerable<string>>? readCommands = null)
+    {
+        foreach (var name in AntigravityProcessNames)
+        foreach (var cmd in (readCommands ?? ReadAntigravityCommands)(name))
+        {
+            if (name != "agy" && !cmd.Contains("antigravity", StringComparison.OrdinalIgnoreCase)) continue;
+            if (ParseEndpointFromCommandLine(cmd) is { } ep) yield return ep;
+        }
+    }
+
+    private static IEnumerable<string> ReadAntigravityCommands(string name)
+    {
+        Process[] procs;
+        try { procs = Process.GetProcessesByName(name); }
+        catch { yield break; }
+        try
+        {
+            foreach (var p in procs)
+            {
+                string? cmd = null;
+                try { cmd = GetCommandLine(p.Id); } catch { }
+                if (!string.IsNullOrEmpty(cmd)) yield return cmd;
+            }
+        }
+        finally { foreach (var p in procs) p.Dispose(); }
+    }
+
+    /// <summary>
+    /// Retrieves the command-line arguments for a process across supported operating systems.
+    /// </summary>
+    /// <param name="pid">The process identifier.</param>
+    /// <returns>The command-line string, or <c>null</c> if unreadable.</returns>
+    private static string? GetCommandLine(int pid)
+    {
+        if (OperatingSystem.IsWindows())
+            return GetWindowsCommandLine(pid);
+        if (OperatingSystem.IsLinux())
+        {
+            try { return File.Exists($"/proc/{pid}/cmdline") ? File.ReadAllText($"/proc/{pid}/cmdline").Replace('\0', ' ').Trim() : null; }
+            catch { return null; }
+        }
+        if (OperatingSystem.IsMacOS())
+        {
+            try
+            {
+                return ToolProcess.RunAsync(new ProcessStartInfo("/bin/ps", $"-ww -p {pid} -o args="),
+                    TimeSpan.FromSeconds(2), CancellationToken.None).GetAwaiter().GetResult().Output.Trim();
+            }
+            catch { return null; }
+        }
+        return null;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint OpenProcess(uint access, bool inherit, int pid);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(nint h, int infoClass, nint info, int length, out int returnLength);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(nint h);
+
+    /// <summary>
+    /// Reads the process command line on Windows using NtQueryInformationProcess.
+    /// </summary>
+    /// <param name="pid">The target process identifier.</param>
+    /// <returns>The command line string, or <c>null</c> if query fails.</returns>
+    private static string? GetWindowsCommandLine(int pid)
+    {
+        var h = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+        if (h == 0) return null;
+        try
+        {
+            NtQueryInformationProcess(h, 60 /* ProcessCommandLineInformation */, 0, 0, out var len);
+            if (len <= 0 || len > 1 << 20) return null;
+            var buf = Marshal.AllocHGlobal(len);
+            try
+            {
+                if (NtQueryInformationProcess(h, 60, buf, len, out _) != 0) return null;
+                var chars = (ushort)Marshal.ReadInt16(buf) / 2;
+                return Marshal.PtrToStringUni(Marshal.ReadIntPtr(buf, IntPtr.Size), chars);
+            }
+            finally { Marshal.FreeHGlobal(buf); }
+        }
+        catch { return null; }
+        finally { CloseHandle(h); }
+    }
+
+    /// <summary>
+    /// Reads complete flag values, including quoted tokens, without accepting numeric prefixes.
+    /// </summary>
+    [GeneratedRegex("(?:^|\\s)--(?<name>[a-zA-Z_-]+)(?:=|\\s+)(?:\"(?<double>[^\"]*)\"|'(?<single>[^']*)'|(?<bare>(?!--)[^\\s\"']+))(?=\\s|$)")]
+    private static partial Regex AntigravityFlagRegex();
+}

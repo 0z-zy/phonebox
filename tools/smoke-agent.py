@@ -7,7 +7,9 @@ base=f'http://127.0.0.1:{args.port}'
 with tempfile.TemporaryDirectory(prefix='phonebox-smoke-') as work:
  config=pathlib.Path(work)/'config.json'
  config.write_text(json.dumps({'deviceSerial':'__smoke_no_device__','updates':{'auto':False},'lan':{'enabled':False},'claude':{'phoneApprovals':False},'pages':[{'template':'home'}],'rules':[],'shortcuts':[]}))
- with (pathlib.Path(work)/'agent.log').open('wb') as log:
+ # A Windows helper may briefly inherit the agent's log handle. Keep capture outside the config directory
+ # and let the temporary file's delete-on-close semantics handle it without masking configuration cleanup errors.
+ with tempfile.TemporaryFile(mode='w+b') as log:
   proc=subprocess.Popen([str(exe),'--config',str(config),'--port',str(args.port)],stdout=log,stderr=log,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
   def get(path):return json.load(urllib.request.urlopen(base+path,timeout=3))
   try:
@@ -29,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='phonebox-smoke-') as work:
    else:raise AssertionError('Foreign browser origin was accepted')
    print(json.dumps({'version':args.version,'os':get('/api/info')['os'],'cpu':state['pc']['cpu'],'ramTotalGb':state['pc']['ramTotalGb'],'processGroups':len(procs['groups']),'widgets':len(catalog['widgets']),'foreignOrigin':403}))
   except BaseException:
-   print((pathlib.Path(work)/'agent.log').read_text(errors='replace'))
+   log.seek(0);print(log.read().decode(errors='replace'))
    raise
   finally:
    proc.terminate()

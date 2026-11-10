@@ -12,6 +12,31 @@ it does not mean the original branch can be merged unchanged over newer fixes.
   round trip passed. The merged build and the actual Pages deployment passed on commit `9844a56`.
   The artifact contract now runs in the build workflow and, through the reusable build, the release gates.
 
+## PR #7: native Antigravity quotas
+
+[PR #7](https://github.com/ersinkoc/phonebox/pull/7), head `c62b6a1`, is integrated into 0.7.2. Its native
+quota/plan reader is supplemented with nested-fraction parsing, unknown-measurement rejection, legacy process/port
+discovery, candidate retries, deadlines and an older IDE model-quota fallback. Current release metadata and newer
+test dependencies are preserved. The merge retains these adaptations alongside the original contributor history.
+
+The native probe uses a running server advertising a local HTTP port and CSRF token, then falls back to a signed-in
+agy CLI version 1.1.11 or later. The CLI path reads only the structured `/usage` command, with CLI auto-updates
+disabled and bounded execution. It supports the standard Windows per-user installation. HTTPS-only servers without
+a compatible CLI can use CodexBar. Physical-phone and native Linux/macOS validation remain separate release checks.
+
+Local validation: 12 newly added regression cases failed on the original implementation; the adapted reader passes
+42 Antigravity cases and all 217 agent tests. Both Windows and cross-platform .NET Release builds complete with no
+warnings or errors. The Windows Release agent starts with an isolated config, an unmatched device serial and
+automatic updates disabled; `/api/info`, `/api/quotas` and `/api/settings` return valid responses. This verifies API
+startup. A subsequent live run with the installed Windows agy 1.5.3 confirms that `/usage` completes with zero model
+turns and all four measured Gemini/Claude-GPT windows reach `/api/quotas`. The CLI response has no plan metadata;
+the panel retains the neutral Antigravity title. Physical-phone display, hosted CI and release remain unverified.
+
+The pre-release Windows test build was subsequently checked against the live account again: all four quota windows
+were healthy through `/api/quotas`, and `/api/settings` confirmed the isolated serial and disabled automatic updates.
+Its agent DLL SHA-256 was `1CB6F4A296D92E8961160B48DDF0954375DFF1623924BD241718DEDD66AB2A03`.
+The isolated test agent was stopped after validation; the installed agent and phone configuration were preserved.
+
 ## PR #1: remaining independent scope
 
 [PR #1](https://github.com/ersinkoc/phonebox/pull/1) supplied the Smart Stack and CodexBar work adapted into 0.7.0.

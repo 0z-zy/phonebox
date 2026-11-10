@@ -21,6 +21,7 @@ public sealed record QuotaProvider(string Id, string Name, string Plan, IReadOnl
 ///    (the endpoint behind Claude Code's /usage command). The token is only read and NEVER refreshed;
 ///    Claude Code refreshes it itself (refreshing it here could break Claude Code's session).
 ///  - Codex: the last "rate_limits" record in the newest rollout file under ~/.codex/sessions (fully local).
+///  - Antigravity: a running local server, or the signed-in agy CLI's structured /usage command.
 /// </summary>
 public sealed partial class QuotaMonitor(ILogger<QuotaMonitor> log) : BackgroundService
 {
@@ -29,12 +30,14 @@ public sealed partial class QuotaMonitor(ILogger<QuotaMonitor> log) : Background
 
     private volatile QuotaProvider? _claude;
     private volatile QuotaProvider? _codex;
+    private volatile QuotaProvider? _antigravity;
     private long _nextClaude;
     private long _nextCodexBar;
+    private long _nextAntigravity;
     private volatile IReadOnlyList<QuotaProvider> _external = [];
 
     public IReadOnlyList<QuotaProvider> Snapshot() => new[] { "claude", "codex", "antigravity" }
-        .Select(id => CodexBar.Select(id == "claude" ? _claude : id == "codex" ? _codex : null,
+        .Select(id => CodexBar.Select(id == "claude" ? _claude : id == "codex" ? _codex : _antigravity,
             _external.FirstOrDefault(p => p.Id == id), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()))
         .OfType<QuotaProvider>().ToList();
 
@@ -68,6 +71,12 @@ public sealed partial class QuotaMonitor(ILogger<QuotaMonitor> log) : Background
             }
             try { _codex = ReadCodex(); }
             catch (Exception ex) { _codex = Fail("codex", "Codex", ex.Message); }
+
+            if (Environment.TickCount64 >= _nextAntigravity)
+            {
+                var ok = await RefreshAntigravity(ct);
+                _nextAntigravity = Environment.TickCount64 + (ok ? 60_000 : 30_000);
+            }
 
             if (Environment.TickCount64 >= _nextClaude)
             {
